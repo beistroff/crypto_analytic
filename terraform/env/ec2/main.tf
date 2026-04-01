@@ -1,16 +1,28 @@
+# Get latest Amazon Linux 2023 arm64 AMI (free tier eligible)
+data "aws_ami" "amazon_linux_2023" {
+  most_recent = true
+  owners      = ["amazon"]
+
+  filter {
+    name   = "name"
+    values = ["al2023-ami-*-${var.architecture}"]
+  }
+
+  filter {
+    name   = "root-device-type"
+    values = ["ebs"]
+  }
+}
+
 resource "aws_instance" "sentinel_agent" {
-  ami                    = var.ami_id != "" ? var.ami_id : data.aws_ami.amazon_linux_2023.id
-  instance_type          = var.instance_type
-  iam_instance_profile   = aws_iam_instance_profile.sentinel_profile.name
-  user_data              = base64encode(local.user_data_script)
+  ami                  = var.ami_id != "" ? var.ami_id : data.aws_ami.amazon_linux_2023.id
+  instance_type        = var.instance_type
+  iam_instance_profile = var.iam_instance_profile_name
+  user_data            = base64encode(local.user_data_script)
 
   tags = {
     Name = var.instance_name
   }
-
-  depends_on = [
-    aws_iam_role_policy.sentinel_permissions
-  ]
 }
 
 locals {

@@ -42,7 +42,7 @@ resource "aws_iam_role_policy" "sentinel_permissions" {
           "dynamodb:Scan"
         ]
         Effect   = "Allow"
-        Resource = aws_dynamodb_table.sentinel_state.arn
+        Resource = var.dynamodb_table_arn
       },
       {
         Sid      = "SSMParameterAccess"
@@ -56,6 +56,6 @@ resource "aws_iam_role_policy" "sentinel_permissions" {
 
 # IAM instance profile
 resource "aws_iam_instance_profile" "sentinel_profile" {
-  name = "SentinelProfile"
+  name = var.instance_profile_name
   role = aws_iam_role.sentinel_role.name
 }
