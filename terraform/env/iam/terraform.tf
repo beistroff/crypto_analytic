@@ -8,10 +8,10 @@ terraform {
     }
   }
 
-  # Uncomment to use remote state storage (S3 + DynamoDB)
+  # Uncomment to use remote state storage
   # backend "s3" {
   #   bucket         = "your-terraform-state-bucket"
-  #   key            = "crypto-sentinel/terraform.tfstate"
+  #   key            = "crypto-sentinel/iam/terraform.tfstate"
   #   region         = "us-east-1"
   #   encrypt        = true
   #   dynamodb_table = "terraform-locks"

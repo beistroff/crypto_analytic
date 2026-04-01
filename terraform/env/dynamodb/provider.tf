@@ -5,6 +5,7 @@ provider "aws" {
     tags = {
       Project     = var.project_name
       Environment = var.environment
+      Component   = "DynamoDB"
       ManagedBy   = "Terraform"
     }
   }
