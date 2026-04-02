@@ -1,27 +1,33 @@
-# Skill: Market Analyzer
-# Action: gather_info
+---
+name: crypto_sentinel
+description: Portfolio tracker with DCA logic and market analysis.
+metadata:
+  openclaw:
+    requires:
+      bins: ["python3"]
+---
 
-## Step 1: Cooldown Check
-- Command: `aws dynamodb get-item --table CryptoSentinel_State --key '{"PK": {"S": "USER_1"}}'`
-- Logic: If `now - LastGatherTimestamp < 10800` (3 hours):
-    - Reply: "⚠️ Cooldown Active. Wait {{hours_remaining}} hours."
-    - Stop execution.
+# Crypto Sentinel
 
-## Step 2: Intelligence Gathering
-- Fetch: Top 15 Coins via CoinMarketCap API.
-- Search: "Latest crypto news impacting [CoinNames] in the last 12 hours" using Google Search.
-- Analyze: Fear & Greed Index, Buy/Sell Volumes.
+## Commands & Logic
 
-## Step 3: Reasoning (Gemini)
-- Compare current prices with `ActiveTrades` in DynamoDB.
-- Logic:
-    - IF `Price > EntryPrice + 1%` -> Recommend "TAKE PROFIT".
-    - IF `Price < EntryPrice - 5%` -> Analyze Support Levels (Recovery Mode).
-    - IF `Balance > 0` -> Identify 1-5% breakout opportunities.
+### 1. "Analyse [Token]" (e.g. PAXG)
+- **Action:** Run `/home/ubuntu/sentinel/venv/bin/python3 /home/ubuntu/sentinel/scripts/market_intelligence.py --symbol {{token}}`
+- **Logic:** Compare price to Fear & Greed. If PAXG, emphasize it's a "Safe Haven" asset.
 
-## Step 4: UI Update
-- Send Telegram Message with current balance and analysis summary.
-- Display Buttons: [BUY 10% SOL], [SELL ALL BTC], [GATHER INFO].
+### 2. "I bought [Qty] [Symbol] at [Price]"
+- **Action:** Extract `price` and `total_spend`.
+- **Tool:** Run the Python memory script to save the trade.
+- **Confirmation:** Calculate the new Average Price for the user immediately.
 
-## Step 5: Update State
-- Reset `LastGatherTimestamp` to `now` in DynamoDB.
+### 3. "Show my balance"
+- **Logic:** 1. Fetch Portfolio Summary (Average Prices).
+  2. Fetch Current Prices (CMC).
+  3. Calculate ROI for each asset:
+     $$ROI = \frac{\text{Current Price} - \text{Avg Price}}{\text{Avg Price}} \times 100$$
+- **Strategy Advice:** - If $ROI > 3\%$: Suggest "Taking initial investment out."
+  - If $ROI < -5\%$: Check market sentiment. If "Extreme Fear," suggest "DCA more."
+
+## UI Requirements
+- Use Markdown tables for the portfolio.
+- Show [GATHER INFO] and [REBALANCING ADVICE] buttons.

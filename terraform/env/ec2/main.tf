@@ -1,11 +1,16 @@
-# Get latest Amazon Linux 2023 arm64 AMI (free tier eligible)
-data "aws_ami" "amazon_linux_2023" {
+# Get latest Ubuntu 22.04 LTS ARM64 AMI (free tier eligible with t4g)
+data "aws_ami" "ubuntu_22_04" {
   most_recent = true
-  owners      = ["amazon"]
+  owners      = ["099720109477"] # Canonical (Ubuntu)
 
   filter {
     name   = "name"
-    values = ["al2023-ami-*-${var.architecture}"]
+    values = ["ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-arm64-server-*"]
+  }
+
+  filter {
+    name   = "architecture"
+    values = ["arm64"]
   }
 
   filter {
@@ -15,7 +20,7 @@ data "aws_ami" "amazon_linux_2023" {
 }
 
 resource "aws_instance" "sentinel_agent" {
-  ami                  = var.ami_id != "" ? var.ami_id : data.aws_ami.amazon_linux_2023.id
+  ami                  = data.aws_ami.ubuntu_22_04.id
   instance_type        = var.instance_type
   iam_instance_profile = var.iam_instance_profile_name
   user_data            = base64encode(local.user_data_script)
@@ -25,25 +30,3 @@ resource "aws_instance" "sentinel_agent" {
   }
 }
 
-locals {
-  user_data_script = <<-EOF
-              #!/bin/bash
-              set -e
-
-              # Update system
-              dnf update -y
-
-              # Install dependencies
-              dnf install -y nodejs npm git jq aws-cli
-
-              # Create 2GB swap for stability
-              dd if=/dev/zero of=/swapfile bs=1M count=2048
-              chmod 600 /swapfile
-              mkswap /swapfile
-              swapon /swapfile
-              echo '/swapfile swap swap defaults 0 0' >> /etc/fstab
-
-              # Install global CLI tool
-              npm install -g @openclaw/cli
-              EOF
-}
