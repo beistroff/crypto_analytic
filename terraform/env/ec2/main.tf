@@ -80,6 +80,16 @@ resource "aws_instance" "sentinel_agent" {
   user_data            = local.user_data_script
   vpc_security_group_ids = [aws_security_group.sentinel_sg.id]
 
+  # Enforce IMDSv2
+  metadata_options {
+    http_tokens = "required"
+  }
+
+  # encrtypted root volume (EBS) free tier, requires restart of instance
+  #  root_block_device {
+  #   encrypted = true
+  # }
+
   tags = {
     Name = var.instance_name
   }
