@@ -38,6 +38,9 @@ resource "aws_iam_role_policy" "sentinel_permissions" {
           "dynamodb:GetItem",
           "dynamodb:PutItem",
           "dynamodb:UpdateItem",
+          "dynamodb:DeleteItem",
+          "dynamodb:BatchGetItem",
+          "dynamodb:BatchWriteItem",
           "dynamodb:Query",
           "dynamodb:Scan"
         ]
@@ -49,6 +52,17 @@ resource "aws_iam_role_policy" "sentinel_permissions" {
         Action   = ["ssm:GetParameter", "ssm:GetParameters"]
         Effect   = "Allow"
         Resource = "arn:aws:ssm:${var.aws_region}:*:parameter/sentinel/*"
+      },
+      {
+        Sid      = "S3BucketAccess"
+        Action   = [
+          "s3:PutObject",
+          "s3:GetObject",
+          "s3:ListBucket",
+          "s3:DeleteObject"
+        ]
+        Effect   = "Allow"
+        Resource = ["arn:aws:s3:::*", "arn:aws:s3:::*/*"]
       }
     ]
   })

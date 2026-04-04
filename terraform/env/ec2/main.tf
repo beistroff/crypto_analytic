@@ -23,7 +23,7 @@ resource "aws_instance" "sentinel_agent" {
   ami                  = data.aws_ami.ubuntu_22_04.id
   instance_type        = var.instance_type
   iam_instance_profile = var.iam_instance_profile_name
-  user_data            = base64encode(local.user_data_script)
+  user_data            = local.user_data_script
 
   tags = {
     Name = var.instance_name
