@@ -1,3 +1,5 @@
+data "aws_caller_identity" "current" {}
+
 # IAM Role for EC2 instance
 resource "aws_iam_role" "sentinel_role" {
   name = var.iam_role_name
@@ -51,7 +53,7 @@ resource "aws_iam_role_policy" "sentinel_permissions" {
         Sid      = "SSMParameterAccess"
         Action   = ["ssm:GetParameter", "ssm:GetParameters"]
         Effect   = "Allow"
-        Resource = "arn:aws:ssm:${var.aws_region}:*:parameter/sentinel/*"
+        Resource = "arn:aws:ssm:${var.aws_region}:${data.aws_caller_identity.current.account_id}:parameter/sentinel/*"
       },
       {
         Sid      = "S3BucketAccess"
@@ -62,7 +64,10 @@ resource "aws_iam_role_policy" "sentinel_permissions" {
           "s3:DeleteObject"
         ]
         Effect   = "Allow"
-        Resource = ["arn:aws:s3:::*", "arn:aws:s3:::*/*"]
+        Resource = [
+          "arn:aws:s3:::openclaw-files",
+          "arn:aws:s3:::openclaw-files/*"
+        ]
       }
     ]
   })
