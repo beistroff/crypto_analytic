@@ -17,5 +17,6 @@ locals {
   user_data_script = templatefile("${path.module}/../../../openclaw/bootstrap.sh", {
     market_intelligence = file("${path.module}/../../../openclaw/market_intelligence.py")
     sentinel_memory     = file("${path.module}/../../../openclaw/sentinel_memory.py")
+    s3_bucket_name      = "openclaw-files" # Or use a variable: var.s3_bucket_name
   })
 }
