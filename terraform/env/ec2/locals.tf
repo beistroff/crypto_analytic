@@ -19,6 +19,6 @@ locals {
     "export OPENCLAW_VERSION='${var.openclaw_version}'",
     "export OPENCLAW_S3_BUCKET='${var.backup_bucket_name}'",
     "export AWS_REGION='${var.aws_region}'",
-    file("${path.module}/../../../openclaw/bootstrap.sh"),
+    replace(file("${path.module}/../../../openclaw/bootstrap.sh"), "\r\n", "\n"),
   ])
 }
