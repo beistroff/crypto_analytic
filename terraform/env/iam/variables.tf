@@ -28,7 +28,22 @@ variable "instance_profile_name" {
   default     = "SentinelProfile"
 }
 
-variable "dynamodb_table_arn" {
-  description = "ARN of the DynamoDB table (from dynamodb output)"
+# Defaults match terraform/env/dynamodb. ARNs are built from these names, so there is
+# no manual copy of ARNs between envs.
+variable "real_table_name" {
+  description = "Name of the real-trades DynamoDB table"
   type        = string
+  default     = "sentinel-real"
+}
+
+variable "sim_table_name" {
+  description = "Name of the simulation DynamoDB table"
+  type        = string
+  default     = "sentinel-sim"
+}
+
+variable "backup_bucket_name" {
+  description = "S3 bucket holding agent backups and shareable strategy files"
+  type        = string
+  default     = "openclaw-files"
 }

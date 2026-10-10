@@ -16,14 +16,43 @@ variable "environment" {
   default     = "dev"
 }
 
-variable "dynamodb_table_name" {
-  description = "DynamoDB table name for state storage"
+variable "real_table_name" {
+  description = "Table for real trades, positions, lessons and bids"
   type        = string
-  default     = "CryptoSentinel_State"
+  default     = "sentinel-real"
+}
+
+variable "sim_table_name" {
+  description = "Table for snapshots, predictions, votes, alerts and reports"
+  type        = string
+  default     = "sentinel-sim"
 }
 
 variable "dynamodb_billing_mode" {
-  description = "DynamoDB billing mode (PAY_PER_REQUEST or PROVISIONED)"
+  description = "PROVISIONED stays inside the always-free tier; PAY_PER_REQUEST bills per request from the first one"
   type        = string
-  default     = "PAY_PER_REQUEST"
+  default     = "PROVISIONED"
+
+  validation {
+    condition     = contains(["PROVISIONED", "PAY_PER_REQUEST"], var.dynamodb_billing_mode)
+    error_message = "dynamodb_billing_mode must be PROVISIONED or PAY_PER_REQUEST."
+  }
+}
+
+variable "read_capacity" {
+  description = "RCU per table and per index (PROVISIONED only). 5 resources x 2 = 10 of the 25 free units."
+  type        = number
+  default     = 2
+}
+
+variable "write_capacity" {
+  description = "WCU per table and per index (PROVISIONED only). 5 resources x 2 = 10 of the 25 free units."
+  type        = number
+  default     = 2
+}
+
+variable "enable_point_in_time_recovery" {
+  description = "Continuous backups (PITR, $0.20 per GB-month). Off: the nightly JSON export to S3 is the backup."
+  type        = bool
+  default     = false
 }
