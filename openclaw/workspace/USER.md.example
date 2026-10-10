@@ -1,0 +1,12 @@
+# USER.md - About Your Human
+
+_Copy this file to USER.md (gitignored) and fill it in. Keep real names and amounts out of git._
+
+- **Name:** <your name>
+- **What to call them:** <nickname>
+- **Timezone:** UTC
+
+## Rules & Preferences
+- **Default Exit:** All crypto sales are into **USDT** unless otherwise specified.
+- **Baseline:** Initial budget in USDT is stored in DynamoDB (`META#BASELINE`), not in this file.
+- **Formatting:** Use bullet lists for portfolio tables to avoid Telegram Markdown issues.

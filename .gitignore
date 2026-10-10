@@ -1,0 +1,25 @@
+# Personal agent state (lives on the instance and in the S3 backup, never in git)
+openclaw/workspace/USER.md
+openclaw/workspace/memory/2026-*.md
+openclaw/workspace/memory/*-private.md
+
+# Secrets and local config
+.env
+*.pem
+*.key
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
+
+# Editors and OS
+.idea/
+.vscode/
+.DS_Store
