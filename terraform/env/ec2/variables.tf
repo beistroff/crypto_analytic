@@ -4,11 +4,6 @@ variable "aws_region" {
   default     = "us-east-1"
 }
 
-/*
-  Best Practice (Tagging Strategy):
-  This variable, along with `environment`, should be used to consistently tag all resources.
-  Proper tagging is crucial for cost allocation, automation, and access control.
-*/
 variable "project_name" {
   description = "Project name for tagging"
   type        = string
@@ -22,9 +17,9 @@ variable "environment" {
 }
 
 variable "instance_type" {
-  description = "EC2 instance type (t2.micro is free tier eligible)"
+  description = "EC2 instance type, arm64 or x86_64. The AMI architecture follows from it."
   type        = string
-  default     = "t2.micro"
+  default     = "t4g.small"
 }
 
 variable "instance_name" {
@@ -33,29 +28,49 @@ variable "instance_name" {
   default     = "sentinel-agent"
 }
 
-/*
-  Future Improvement (AMI Management):
-  For production environments, it's a best practice to pin to a specific AMI ID instead of using a dynamic lookup for the latest one.
-  This ensures that deployments are repeatable and not affected by upstream AMI updates.
-*/
+variable "root_volume_size_gb" {
+  description = "Root EBS volume size in GB (gp3, encrypted)"
+  type        = number
+  default     = 20
+}
+
+# Pin the AMI for repeatable deployments once a known-good one is chosen.
 variable "ami_id" {
-  description = "AMI ID (leave empty to use latest Amazon Linux 2023 x86_64 - free tier eligible)"
+  description = "AMI ID matching the instance architecture. Leave empty to use the latest Ubuntu 24.04 AMI."
   type        = string
   default     = ""
 }
 
-/*
-  Future Improvement (Dependency Management):
-  Instead of passing the IAM profile name as a string, this could be sourced directly from the `iam` module's output
-  using a `terraform_remote_state` data source. This creates an explicit dependency and avoids using "magic strings".
-*/
 variable "iam_instance_profile_name" {
   description = "IAM instance profile name (from iam output)"
   type        = string
 }
 
-variable "architecture" {
-  description = "The CPU architecture (x86_64 or arm64)"
+variable "openclaw_version" {
+  description = "OpenClaw version for the installer (--version): an exact version such as 2026.5.1, or latest/next. Pin an exact version after the first bring-up."
   type        = string
-  default     = "x86_64" 
+  default     = "latest"
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9._-]+$", var.openclaw_version))
+    error_message = "openclaw_version may only contain letters, digits, dots, dashes and underscores."
+  }
+}
+
+variable "backup_bucket_name" {
+  description = "S3 bucket for agent backups (exported to the instance as OPENCLAW_S3_BUCKET)"
+  type        = string
+  default     = "openclaw-files"
+
+  validation {
+    condition     = can(regex("^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$", var.backup_bucket_name))
+    error_message = "backup_bucket_name must be a valid S3 bucket name."
+  }
+}
+
+check "openclaw_version_pinned" {
+  assert {
+    condition     = !contains(["latest", "next"], var.openclaw_version)
+    error_message = "openclaw_version is not pinned. Record the installed version after the first bring-up and set it in terraform.tfvars."
+  }
 }
