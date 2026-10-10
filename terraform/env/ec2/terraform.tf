@@ -1,5 +1,5 @@
 terraform {
-  required_version = ">= 1.5"
+  required_version = ">= 1.10"
 
   required_providers {
     aws = {
@@ -8,12 +8,13 @@ terraform {
     }
   }
 
-  # Uncomment to use remote state storage
-  # backend "s3" {
-  #   bucket         = "your-terraform-state-bucket"
-  #   key            = "crypto-sentinel/ec2/terraform.tfstate"
-  #   region         = "us-east-1"
-  #   encrypt        = true
-  #   dynamodb_table = "terraform-locks"
-  # }
+  # Remote state in S3 with native lock files (no DynamoDB lock table needed).
+  # The bucket is created by env/bootstrap; bucket names are not secret, access is via IAM.
+  backend "s3" {
+    bucket       = "sentinel-tfstate-6c1ff0ad"
+    region       = "us-east-1"
+    key          = "crypto-sentinel/ec2/terraform.tfstate"
+    encrypt      = true
+    use_lockfile = true
+  }
 }

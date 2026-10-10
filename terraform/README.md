@@ -1,101 +1,61 @@
-# CryptoSentinel Terraform - Separate Deployments
+# CryptoSentinel Terraform
 
-This directory contains independent Terraform configurations for each component of the CryptoSentinel infrastructure.
-
-## Directory Structure
+Independent configurations, one per component, each with its own state in S3.
 
 ```
 env/
-├── dynamodb/     # DynamoDB state table
-├── iam/          # IAM roles and policies
-└── ec2/          # EC2 instance
+├── bootstrap/    # S3 bucket for Terraform state (local state, run once)
+├── dynamodb/     # sentinel-real and sentinel-sim tables
+├── iam/          # EC2 role, instance profile, least-privilege policy
+└── ec2/          # the agent instance (outbound-only security group)
 ```
 
-## Deployment Order
+Requires Terraform >= 1.10 (S3 native state locking, no DynamoDB lock table).
+Credentials are used through `aws-vault exec <profile> -- ...` in the examples.
 
-Deploy in this order due to dependencies:
+## Deployment order
 
-### 1. Deploy DynamoDB
+### 0. State bucket (once)
 ```bash
-cd env/dynamodb
+cd env/bootstrap
+terraform init
+terraform apply
+```
+Creates the bucket named in the `backend "s3"` blocks of the other envs (versioning,
+encryption, public access blocked, TLS-only). Its own small state stays local in
+`env/bootstrap/`; keep that file.
+
+### 1. DynamoDB, 2. IAM, 3. EC2
+```bash
+cd env/dynamodb   # then env/iam, then env/ec2
 terraform init
 terraform plan
 terraform apply
-terraform output table_arn          # Save this for IAM step
 ```
+- `iam` builds the DynamoDB ARNs from the table names, so nothing is copied by hand.
+- `ec2` needs `iam_instance_profile_name` in `terraform.tfvars` (default profile: `SentinelProfile`).
+- `terraform.tfvars` is gitignored.
 
-### 2. Deploy IAM
+## Cost notes
+- DynamoDB uses provisioned capacity (2 RCU/WCU per table and index), inside the always-free tier.
+  Continuous backups (PITR) are off; the nightly JSON export to S3 is the backup.
+- The instance type decides the architecture, and the AMI (Ubuntu 24.04) follows it, so
+  switching to another free-tier type is a one-line change in `terraform.tfvars`.
+
+## First bring-up of the instance
+`openclaw/bootstrap.sh` runs once as user data. Connect with Session Manager (no SSH, no inbound ports):
 ```bash
-cd ../iam
-terraform init
-# Edit terraform.tfvars and set dynamodb_table_arn from previous output
-terraform plan
-terraform apply
-terraform output instance_profile_name  # Save this for EC2 step
+aws-vault exec <profile> -- aws ssm start-session --target <instance-id>
 ```
+Then follow `openclaw/README.md`: `openclaw onboard`, pin the installed version in
+`ec2/terraform.tfvars` (`openclaw_version = "..."`), deploy the sentinel package.
 
-### 3. Deploy EC2
+## Checks (same as CI)
 ```bash
-cd ../ec2
-terraform init
-# Edit terraform.tfvars and set iam_instance_profile_name from previous output
-terraform plan
-terraform apply
+terraform fmt -recursive -check
+cd env/<name> && terraform init -backend=false && terraform validate
 ```
 
-## Each Configuration is Independent
-
-- **Separate state files** per component
-- **No module dependencies** within Terraform
-- **Manual coordination** via outputs/inputs
-- **Individual lifecycle management**
-
-## Free Tier Setup
-
-All configurations default to free tier eligible resources:
-- **EC2:** t2.micro (750 hrs/month)
-- **DynamoDB:** PAY_PER_REQUEST (25 GB included)
-- **Data Transfer:** First 100 GB/month free
-
-## Managing Each Component
-
-### Update only DynamoDB
-```bash
-cd env/dynamodb
-terraform apply
-```
-
-### Update only IAM
-```bash
-cd ../iam
-terraform apply
-```
-
-### Destroy individual components
-```bash
-cd env/ec2
-terraform destroy
-
-cd ../iam
-terraform destroy
-
-cd ../dynamodb
-terraform destroy
-```
-
-## Remote State (Optional)
-
-To use S3 backend for each component, uncomment the backend block in each `terraform.tf` file.
-
-## Troubleshooting
-
-If you forgot an output value:
-```bash
-cd env/dynamodb
-terraform output table_arn
-
-cd ../iam
-terraform output instance_profile_name
-```
-
-Then update the dependent terraform.tfvars files with those values.
+## Destroy
+`sentinel-real` has deletion protection on; disable it deliberately before destroying.
+The state bucket has `prevent_destroy`.
