@@ -22,14 +22,14 @@ Version 1, 10 October 2026.
 | Gateway | OpenClaw stays. Pin the version, gateway on localhost, no ClawHub skills. Hermes Agent is out of scope (possible later comparison). |
 | Agent | By default one agent, one model, with the existing SOUL / IDENTITY persona ("the best crypto analyst"). Default model: Gemini Flash (free tier). |
 | Claude models | Sonnet 5.5 (`claude-sonnet-5-5`) and Haiku 5.5 (`claude-haiku-5-5`) through an **Anthropic API key** with a prepaid limit ($5 to $10), **created later, before Phase 3.5**. A Claude Pro subscription does not include API usage, and subscription use inside third-party agents like OpenClaw changed three times in 2026 and is still unclear, so do not depend on it. |
-| Data store | DynamoDB is the source of truth: `sentinel-real` (real trades) and `sentinel-sim` (predictions, snapshots, outcomes). The existing daily S3 backups stay as a fallback. |
+| Data store | DynamoDB is the source of truth: `sentinel-real` (real trades) and `sentinel-sim` (predictions, snapshots, outcomes). Provisioned capacity (2 RCU/WCU per table and index) stays inside the always-free tier; point-in-time recovery is off. Backup is the nightly JSON export to S3 (plus a `portfolio.json` fallback on the instance); the existing daily S3 backups stay as well. Keep S3 under 5 GB with a lifecycle rule on `backups/`. |
 | Lambda | Only for jobs that need no LLM: market scans and alerts, prediction scoring, Naive Bayes retraining. Cost is effectively $0. All LLM calls run on EC2. |
 | Alerts | Lambda puts alerts on SQS; a small poller on EC2 posts them to OpenClaw's local webhook; OpenClaw writes a short warning to Telegram. No inbound ports. |
 | Naive Bayes | A sanity gate and an optional skill, never the source of truth. A deterministic validator runs before it and catches absurd answers more cheaply. |
 | Telegram | Replies of 5 lines or fewer; full reasoning only on request. A `/` command menu plus inline buttons for the common actions. |
 | Real money | No automated trading. Simulated trades only for the experiment. Real trades are journaled but are not experiment results. |
-| Cost ceiling | Public IPv4 about $3.60 a month, plus at most about $10 of Anthropic API usage in total. AWS Budgets alarm at $5. |
-| Platform | `us-east-1`, ARM (EC2 t4g.small, Lambda arm64). Python 3.10 or newer (Ubuntu 22.04 ships 3.10; Lambda uses python3.12). Code must run on 3.10. |
+| Cost ceiling | Public IPv4 about $3.60 a month, DynamoDB $0 (free tier), plus at most about $5 to $10 of Anthropic API usage in total. AWS Budgets alarm at $5. |
+| Platform | `us-east-1`, Ubuntu 24.04 LTS (22.04 standard support ends mid-2027). Instance type is a variable (t4g.small today); the architecture and AMI follow from it, so another free-tier type needs no code change. Lambda arm64 python3.12; EC2 runs Python 3.12 as well. |
 
 ### 0.1 Infrastructure state and bring-up order (read before Phase 1)
 
@@ -186,16 +186,18 @@ Read each legacy script first and keep its behaviour, then improve.
 **Accept:** every legacy command has a new equivalent with compact JSON output; parser tests with fixtures for CMC listings and quotes, Fear & Greed and NewsAPI.
 
 ### 1.3 Terraform fixes
-- [ ] `ec2/variables.tf`: `instance_type = "t4g.small"`, `architecture = "arm64"`; keep the Ubuntu 22.04 arm64 AMI filter (optionally pin the AMI id).
-- [ ] Replace the heredoc injection in `locals.tf` and `bootstrap.sh`: bootstrap clones the repo at a pinned tag or commit, creates the venv and runs `pip install -e ".[ec2]"`.
-- [ ] Pin the OpenClaw version in `bootstrap.sh` (check the installer docs for how to pin; record the version in `TOOLS.md`).
-- [ ] IAM: allow both tables and their indexes (`table/NAME` and `table/NAME/index/*`), SSM `/sentinel/*`, the backup bucket, and later SQS receive/delete. Remove anything unused.
+- [x] `ec2`: architecture derived from the instance type, Ubuntu 24.04 AMI chosen by architecture, encrypted gp3 root volume, IMDSv2 with hop limit 1, no inbound rules and no DNS/NTP egress rules (link-local, not filtered).
+- [x] Replace the heredoc injection in `locals.tf` and `bootstrap.sh` with a static bootstrap (OS packages, venv, OpenClaw). Deploying the `sentinel` package is a separate step after 1.1 (clone at a pinned tag, or an S3 tarball if the repo goes private).
+- [x] OpenClaw installed through the installer with `--version` and `--no-onboard`; `openclaw_version` variable and a check block warn until it is pinned. Record the version in `TOOLS.md` after the first bring-up.
+- [x] IAM least privilege: both tables and their indexes, no `Scan`, SSM `/sentinel/*` read only, S3 read/write on the backup bucket and delete only under `strategy-share/`. Later: SQS receive/delete.
+- [x] State in S3 with native lock files (`env/bootstrap`, neutral committed bucket name); provider lock files committed; CI runs fmt, validate, tflint, shellcheck and gitleaks.
+- [ ] S3 lifecycle rule on the backup bucket (expire old `backups/` objects) so it stays under 5 GB; the bucket is not Terraform-managed, so import it or set the rule once.
 - [ ] Optional: `terraform_remote_state` instead of passing the instance profile name as a string.
 
 **Accept (Stage A):** `terraform fmt -check`, `validate` and `plan` are clean in every env. **Accept (Stage B, first bring-up):** a fresh instance boots to a working venv and OpenClaw is onboarded (document the manual `openclaw onboard` steps in `openclaw/README.md`).
 
 ### 1.4 DynamoDB tables in Terraform
-- [ ] Two tables, on-demand billing, `PK` (S) + `SK` (S), `GSI1` (`GSI1PK`, `GSI1SK`) on both, `GSI2` (`GSI2PK`, `GSI2SK`) on `sentinel-sim`, TTL attribute `ttl` on `sentinel-sim`, `deletion_protection_enabled = true` on `sentinel-real`. Point-in-time recovery is optional (tiny cost at this size).
+- [x] Two tables, provisioned capacity (2 RCU/WCU, free tier), `PK` (S) + `SK` (S), `GSI1` (`GSI1PK`, `GSI1SK`) on both, `GSI2` (`GSI2PK`, `GSI2SK`) on `sentinel-sim`, TTL attribute `ttl` on `sentinel-sim`, `deletion_protection_enabled = true` on `sentinel-real`. Point-in-time recovery is off to keep the cost at $0; the nightly export is the backup.
 - [ ] Item layouts exactly as in Appendix A.
 
 **Accept:** tables exist; the EC2 role can put and query; `tests/conftest.py` creates identical tables in `moto` from one shared spec.
@@ -411,6 +413,7 @@ Reply "details a3f" for the full analysis
 
 ### 8.3 Polish
 - [ ] Final whale proxy; GitHub Actions running `ruff`, `pytest`, `terraform fmt -check` and `validate`.
+- [ ] Golden AMI (Packer), only if instances are destroyed and recreated often. The AMI itself is free, but its EBS snapshot costs about $0.05 per GB-month, and it needs a rebuild per OpenClaw release. Never bake tokens into it.
 
 ---
 
