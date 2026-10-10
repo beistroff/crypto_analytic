@@ -1,64 +1,65 @@
 #!/bin/bash
-set -e
+# Sentinel instance bootstrap (runs once as root via EC2 user data).
+#
+# Installs OS packages, a Python venv and OpenClaw. It does NOT deploy the sentinel
+# package and does NOT onboard OpenClaw: both are manual first-bring-up steps
+# (see openclaw/README.md).
+#
+# Expected environment (exported by Terraform, see terraform/env/ec2/locals.tf):
+#   OPENCLAW_VERSION    exact version for the installer, or latest/next
+#   OPENCLAW_S3_BUCKET  backup bucket name
+#   AWS_REGION          AWS region
+set -euo pipefail
 
-# Ensure HOME is set for cloud-init environment
-export HOME=/root
-export PATH="/root/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+: "${OPENCLAW_VERSION:?OPENCLAW_VERSION is required}"
+: "${OPENCLAW_S3_BUCKET:?OPENCLAW_S3_BUCKET is required}"
+: "${AWS_REGION:?AWS_REGION is required}"
 
-echo "=== Sentinel Bootstrap Script ==="
+AGENT_USER="ubuntu"
+AGENT_HOME="/home/${AGENT_USER}"
+SENTINEL_DIR="${AGENT_HOME}/sentinel"
+export DEBIAN_FRONTEND=noninteractive
 
-# 1. System Updates and Tooling
-echo "[1/4] Updating system packages and installing tools..."
+echo "=== Sentinel bootstrap start: $(date -u +%FT%TZ) ==="
+
+echo "[1/5] System packages"
 apt-get update
 apt-get upgrade -y
-
-# Remove any pre-existing older nodejs packages to prevent conflicts with OpenClaw
+# Remove distro Node so it cannot conflict with the Node the OpenClaw installer provides.
 apt-get remove -y nodejs npm libnode-dev || true
 apt-get autoremove -y
+apt-get install -y git jq curl ca-certificates unzip python3-venv python3-pip
+# Ubuntu 24.04 has no apt awscli; the AWS-maintained snap provides CLI v2.
+snap install aws-cli --classic
 
-apt-get install -y git jq awscli python3-pip curl python3-requests python3-boto3
+echo "[2/5] Project directories and Python venv"
+install -d -o "${AGENT_USER}" -g "${AGENT_USER}" "${SENTINEL_DIR}"
+sudo -u "${AGENT_USER}" python3 -m venv "${SENTINEL_DIR}/venv"
 
-# 2. Create project directories
-echo "[2/4] Creating project structure..."
-mkdir -p /home/ubuntu/sentinel/scripts
-mkdir -p /home/ubuntu/sentinel/skills
+echo "[3/5] Environment for the agent user"
+cat > /etc/profile.d/sentinel.sh <<ENVEOF
+export OPENCLAW_S3_BUCKET='${OPENCLAW_S3_BUCKET}'
+export AWS_REGION='${AWS_REGION}'
+export AWS_DEFAULT_REGION='${AWS_REGION}'
+ENVEOF
+chmod 644 /etc/profile.d/sentinel.sh
 
-# Write project files directly (injected via Terraform template)
-cat << 'PYEOF' > /home/ubuntu/sentinel/scripts/market_intelligence.py
-${market_intelligence}
-PYEOF
+echo "[4/5] OpenClaw ${OPENCLAW_VERSION} (installed as ${AGENT_USER}, not root)"
+# Let the user systemd service (gateway) keep running without a login session.
+loginctl enable-linger "${AGENT_USER}"
 
-cat << 'PYEOF' > /home/ubuntu/sentinel/scripts/sentinel_memory.py
-${sentinel_memory}
-PYEOF
+# Download first, run second: nothing is piped straight into a shell.
+INSTALLER="$(mktemp /tmp/openclaw-install.XXXXXX.sh)"
+curl -fsSL --proto '=https' --tlsv1.2 -o "${INSTALLER}" https://openclaw.ai/install.sh
+chmod 755 "${INSTALLER}"
+sudo -u "${AGENT_USER}" -H env OPENCLAW_VERSION="${OPENCLAW_VERSION}" OPENCLAW_NO_ONBOARD=1 \
+  bash "${INSTALLER}" --no-onboard
+rm -f "${INSTALLER}"
 
-# Set S3 bucket environment variable for OpenClaw
-echo "export OPENCLAW_S3_BUCKET='openclaw-files'" >> /home/ubuntu/.bashrc
-echo "export OPENCLAW_S3_BUCKET='openclaw-files'" >> /root/.bashrc
+echo "[5/5] Verification"
+sudo -u "${AGENT_USER}" -H bash -lc 'node -v && npm -v && openclaw --version' \
+  || echo "WARNING: openclaw not on PATH yet; check the installer output above"
 
-# Ensure correct ownership and permissions for the sentinel directory
-chown -R ubuntu:ubuntu /home/ubuntu/sentinel
-chmod +x /home/ubuntu/sentinel/scripts/*.py 2>/dev/null || true
-
-# 3. Install Python dependencies
-echo "[3/4] Installing Python dependencies..."
-# Use pip to install any dependencies not covered by apt
-pip3 install requests boto3 click
-
-# 4. Install OpenClaw using official installer
-echo "[4/4] Installing OpenClaw..."
-# Install without interactive onboarding (we'll do it separately)
-export OPENCLAW_NO_ONBOARD=1
-yes | curl -fsSL https://openclaw.ai/install.sh | bash
-
-# Verify installation
-echo ""
-echo "=== Verification ==="
-node -v
-npm -v
-openclaw --version || echo "WARNING: openclaw command not found, may need PATH update"
-
-echo ""
-echo "=== Bootstrap Complete ==="
-echo "Instance ready at $(date)"
-echo "Please run 'openclaw onboard' manually to complete setup."
+touch "${SENTINEL_DIR}/.bootstrap-done"
+echo "=== Bootstrap complete: $(date -u +%FT%TZ) ==="
+echo "Next: open an SSM session, run 'openclaw onboard', then deploy the sentinel package."
