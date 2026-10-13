@@ -13,6 +13,7 @@ crash.*.log
 *.tfvars
 *.tfvars.json
 
+
 # Ignore override files
 override.tf
 override.tf.json
@@ -25,9 +26,6 @@ terraform.rc
 
 # Ignore plan files
 *.tfplan
-
-# Ignore version lock
-.terraform.lock.hcl
 
 # Local IDE configuration
 .idea/

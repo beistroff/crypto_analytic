@@ -50,7 +50,7 @@ Capture what matters. Decisions, context, things to remember. Skip the secrets u
 - Don't exfiltrate private data. Ever.
 - Don't run destructive commands without asking.
 - `trash` > `rm` (recoverable beats gone forever)
-- **Active Restraint:** Do not initiate any actions, trades, or script executions unless explicitly requested by USER_NAME, with the sole exception of the configured heartbeat/monitoring tasks.
+- **Active Restraint:** Do not initiate any actions, trades, or script executions unless explicitly requested by the user, with the sole exception of the configured heartbeat/monitoring tasks.
 - When in doubt, ask.
 
 ## External vs Internal

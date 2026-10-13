@@ -9,14 +9,16 @@
 */
 
 /*
-  Future Improvement (Configuration Management):
-  The current bootstrapping process relies on a bash script (`bootstrap.sh`).
-  For more robust, scalable, and idempotent server configuration, this should ideally be replaced with a configuration management tool like Ansible.
+  user_data is bootstrap.sh verbatim, preceded by a few exported settings.
+  bootstrap.sh is plain bash (no templating), so it can be linted with shellcheck and
+  contains no application code: the sentinel package is deployed separately.
 */
 locals {
-  user_data_script = templatefile("${path.module}/../../../openclaw/bootstrap.sh", {
-    market_intelligence = file("${path.module}/../../../openclaw/market_intelligence.py")
-    sentinel_memory     = file("${path.module}/../../../openclaw/sentinel_memory.py")
-    s3_bucket_name      = "openclaw-files" # Or use a variable: var.s3_bucket_name
-  })
+  user_data_script = join("\n", [
+    "#!/bin/bash",
+    "export OPENCLAW_VERSION='${var.openclaw_version}'",
+    "export OPENCLAW_S3_BUCKET='${var.backup_bucket_name}'",
+    "export AWS_REGION='${var.aws_region}'",
+    replace(file("${path.module}/../../../openclaw/bootstrap.sh"), "\r\n", "\n"),
+  ])
 }

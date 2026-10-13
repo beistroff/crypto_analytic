@@ -4,10 +4,10 @@
 
 TIMESTAMP=$(date -u +%Y-%m-%d_%H-%M_UTC)
 
-echo "Starting backup to s3://openclaw-files/backups/$TIMESTAMP/"
+echo "Starting backup to s3://openclaw-files/backups/${TIMESTAMP}/"
 
 # Full System Backup
-aws s3 cp /home/ubuntu/.openclaw/workspace/ s3://openclaw-files/backups/$TIMESTAMP/workspace/ --recursive --region us-east-1
-aws s3 cp /home/ubuntu/sentinel/ s3://openclaw-files/backups/$TIMESTAMP/sentinel/ --recursive --region us-east-1
+aws s3 cp /home/ubuntu/.openclaw/workspace/ s3://openclaw-files/backups/"$TIMESTAMP"/workspace/ --recursive --region us-east-1
+aws s3 cp /home/ubuntu/sentinel/ s3://openclaw-files/backups/"$TIMESTAMP"/sentinel/ --recursive --region us-east-1
 
 echo "Backup complete."
