@@ -11,7 +11,7 @@
 /*
   user_data is bootstrap.sh verbatim, preceded by a few exported settings.
   bootstrap.sh is plain bash (no templating), so it can be linted with shellcheck and
-  contains no application code: the sentinel package is deployed separately.
+  contains no application code: it clones the sentinel package at sentinel_ref.
 */
 locals {
   user_data_script = join("\n", [
@@ -19,6 +19,7 @@ locals {
     "export OPENCLAW_VERSION='${var.openclaw_version}'",
     "export OPENCLAW_S3_BUCKET='${var.backup_bucket_name}'",
     "export AWS_REGION='${var.aws_region}'",
+    "export SENTINEL_REF='${var.sentinel_ref}'",
     replace(file("${path.module}/../../../openclaw/bootstrap.sh"), "\r\n", "\n"),
   ])
 }

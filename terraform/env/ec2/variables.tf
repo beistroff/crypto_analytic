@@ -68,6 +68,24 @@ variable "backup_bucket_name" {
   }
 }
 
+variable "sentinel_ref" {
+  description = "Git tag (or branch) of this repo that bootstrap deploys as the sentinel package. Use a release tag such as v0.1.0."
+  type        = string
+  default     = "main"
+
+  validation {
+    condition     = can(regex("^[A-Za-z0-9][A-Za-z0-9._/-]*$", var.sentinel_ref))
+    error_message = "sentinel_ref may only contain letters, digits, dots, dashes, underscores and slashes."
+  }
+}
+
+check "sentinel_ref_pinned" {
+  assert {
+    condition     = can(regex("^v[0-9]", var.sentinel_ref))
+    error_message = "sentinel_ref is a branch, not a release tag. Tag a tested commit (e.g. v0.1.0) and set it in terraform.tfvars."
+  }
+}
+
 check "openclaw_version_pinned" {
   assert {
     condition     = !contains(["latest", "next"], var.openclaw_version)
