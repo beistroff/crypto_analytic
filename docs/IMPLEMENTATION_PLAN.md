@@ -72,6 +72,8 @@ Fix or retire each of these during Phase 1. File paths are relative to the repo 
 
 ## 2. Target repository layout
 
+This is the target, not a scaffold: a folder is created together with its first real module, never as an empty placeholder.
+
 ```text
 crypto_analytic/
   pyproject.toml                # package "sentinel", extras: [ec2], [lambda], [analysis], [dev]
@@ -79,8 +81,8 @@ crypto_analytic/
   sentinel/
     __init__.py
     config.py                   # settings: region, table names, watchlist, thresholds, model ids, prices
-    secrets.py                  # SSM SecureString reader with in-process cache
-    http.py                     # requests session: timeout, retries with backoff, User-Agent
+    aws.py                      # boto3 clients (timeouts, retries) and SSM SecureString keys, cached
+    net.py                      # requests session: timeout, retries with backoff, rate limit, User-Agent
     log.py                      # JSON-lines logging
     cli.py                      # `sentinel ...` entry point (click)
     data/
@@ -141,14 +143,14 @@ crypto_analytic/
 
 - **Packaging:** `pyproject.toml`, editable install `pip install -e ".[ec2,dev]"` in `/home/ubuntu/sentinel/venv`. Keep Lambda dependencies light (`requests`, `pydantic`; `boto3` is in the runtime). `ccxt`, `feedparser` and LLM SDKs are EC2-only extras. `pandas`, `scipy`, `statsmodels`, `scikit-learn`, `matplotlib` only in `[analysis]`.
 - **Libraries:** `boto3`, `requests`, `pydantic>=2`, `click` (already used), `python-ulid`, `ccxt`, `feedparser`, `google-genai`, `anthropic`, `openai` (for OpenRouter's OpenAI-compatible API), `pytest`, `moto`, `ruff`.
-- **HTTP:** every call goes through `sentinel.http` with `timeout=10`, 3 retries with exponential backoff on 429/5xx, and a per-source minimum interval.
-- **Secrets:** only from SSM SecureString under `/sentinel/*` (Appendix B). Never as CLI arguments, never printed, never logged.
+- **HTTP:** every call goes through `sentinel.net` with `timeout=10`, 3 retries on 429/5xx waiting 1, 2 and 4 s (at least the source's minimum interval), and a per-source minimum interval. A Retry-After over 30 s returns the response at once instead of waiting.
+- **Secrets:** only from SSM SecureString under `/sentinel/*` (Appendix B), read with `sentinel.aws.get_secret`. Sent in request headers only, never in URLs. Never as CLI arguments or environment variables, never printed, never logged (every loaded key is also redacted from log lines as a safety net).
 - **Time and ids:** UTC everywhere, ISO 8601 with `Z`. Trade and prediction ids are ULIDs (sortable).
 - **Numbers:** `Decimal` for anything stored in DynamoDB; floats only in analysis.
 - **CLI output:** `--format json` (compact, for the agent) or `--format telegram` (5 lines or fewer, for the user). JSON output must stay small, because it lands in the agent's context.
 - **Tests:** `pytest` with `moto` for DynamoDB and recorded JSON fixtures for every external API. No network in unit tests. One opt-in `@pytest.mark.live` smoke test per data source.
 - **Skills:** every CLI command an OpenClaw skill uses is documented in that skill's `SKILL.md`, with the exact command line and an example output.
-- **Logging:** JSON lines to stdout (CloudWatch for Lambda; journald on EC2).
+- **Logging:** JSON lines to stderr, so stdout carries only CLI output (journald collects both on EC2). The CLI logs at `WARNING`; services set `SENTINEL_LOG_LEVEL=INFO`. Lambda uses the runtime's JSON log format instead of `log.setup()`.
 
 ---
 
@@ -161,8 +163,8 @@ crypto_analytic/
 **Accept (Stage A, no EC2 needed):** the Gemini test call in Appendix F returns text when run from your laptop (read the key from SSM with the AWS CLI, as in F.5); `aws ssm get-parameters-by-path --path /sentinel --with-decryption --query "Parameters[].Name"` lists the Gemini key. The Anthropic key and its test call are checked later, before Phase 3.5.
 
 ### 1.1 Repo hygiene and package skeleton
-- [ ] Create `pyproject.toml`, the `sentinel/` skeleton (section 2), `ruff` and `pytest` config, `Makefile`, `.gitignore`.
-- [ ] Implement `config.py`, `secrets.py`, `http.py`, `log.py`.
+- [x] Create `pyproject.toml`, the `sentinel/` skeleton (section 2), `ruff` and `pytest` config, `Makefile`, `.gitignore`.
+- [x] Implement `config.py`, `aws.py` (SSM keys), `net.py` (HTTP), `log.py`.
 - [ ] Move the current scripts to `legacy/` unchanged so the running agent keeps working until replacements land.
 
 **Accept:** `pip install -e ".[ec2,dev]"` works; `sentinel --help` lists command groups; `pytest` and `ruff check` pass.
