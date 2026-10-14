@@ -96,7 +96,8 @@ def make_server():
                 pass
 
         httpd = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
-        threading.Thread(target=httpd.serve_forever, daemon=True).start()
+        # A short poll interval keeps shutdown() quick in teardown.
+        threading.Thread(target=httpd.serve_forever, args=(0.05,), daemon=True).start()
         servers.append(httpd)
         base = f"http://127.0.0.1:{httpd.server_port}"
         return SimpleNamespace(base=base, url=f"{base}/v1/quotes", replies=replies, seen=seen)

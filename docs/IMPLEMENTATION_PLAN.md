@@ -37,9 +37,9 @@ Version 1, 10 October 2026.
 
 | Stage | Tasks | Needs live infra? |
 | --- | --- | --- |
-| **A. Polish offline** | 1.0 (Google account, Gemini key in SSM, test from the laptop), 1.1, 1.2, 1.3 (Terraform fixes plus security hardening, `terraform validate` and `plan` only), 1.4 (DynamoDB Terraform), 1.5 (data layer, tested with `moto`), the CLI part of 1.7 | No. Only `terraform plan`, local tests and the laptop's AWS CLI. |
+| **A. Polish offline** | 1.0 (Google account, Gemini key in SSM, test from the laptop), 1.1, 1.2, 1.3 (Terraform fixes plus security hardening, `terraform validate` and `plan` only), 1.4 (DynamoDB Terraform), 1.5 (data layer, tested with `moto`), the CLI part of 1.7, 1.8 (readiness gate code and tests) | No. Only `terraform plan`, local tests and the laptop's AWS CLI. |
 | **Gate** | `terraform fmt -check`, `validate` and `plan` clean in every env; `pytest` and `ruff` pass; bootstrap reviewed. | |
-| **B. First bring-up (together)** | `terraform apply`, connect via SSM Session Manager, run `bootstrap.sh`, `openclaw onboard` (latest OpenClaw, then pin that exact version in `bootstrap.sh` and `TOOLS.md`), Telegram bot and DM allowlist, Gemini key check from the instance (F.5 and F.6), 1.6 migration from the S3 backup, 1.7 skill switch and Telegram checks | Yes |
+| **B. First bring-up (together)** | `terraform apply` (bootstrap runs and must pass the 1.8 readiness gate: `~/sentinel/.ready` exists), connect via SSM Session Manager, `openclaw onboard` (latest OpenClaw, then pin that exact version in `bootstrap.sh` and `TOOLS.md`), Telegram bot and DM allowlist, Gemini key check from the instance (F.5 and F.6), 1.6 migration from the S3 backup, 1.7 skill switch and Telegram checks | Yes |
 | **C. Phases 2 onward** | As written | Yes |
 
 Notes:
@@ -84,6 +84,7 @@ crypto_analytic/
     aws.py                      # boto3 clients (timeouts, retries) and SSM SecureString keys, cached
     net.py                      # requests session: timeout, retries with backoff, rate limit, User-Agent
     log.py                      # JSON-lines logging
+    health.py                   # readiness checks (keys, tables, bucket, CMC, Gemini)
     cli.py                      # `sentinel ...` entry point (click)
     data/
       cmc.py  coingecko.py  feargreed.py  exchange.py  flow.py  whales.py
@@ -141,7 +142,7 @@ crypto_analytic/
 
 ## 3. Conventions
 
-- **Packaging:** `pyproject.toml`, editable install `pip install -e ".[ec2,dev]"` in `/home/ubuntu/sentinel/venv`. Keep Lambda dependencies light (`requests`, `pydantic`; `boto3` is in the runtime). `ccxt`, `feedparser` and LLM SDKs are EC2-only extras. `pandas`, `scipy`, `statsmodels`, `scikit-learn`, `matplotlib` only in `[analysis]`.
+- **Packaging:** `pyproject.toml`, editable install with pinned versions: `pip install -c constraints.txt -e ".[ec2,dev]"` locally (`make install`), `.[ec2]` in `/home/ubuntu/sentinel/venv` (bootstrap). `constraints.txt` holds the exact versions tested together; CI and bootstrap install from it, and `make lock` re-pins after an upgrade. Keep Lambda dependencies light (`requests`, `pydantic`; `boto3` is in the runtime). `ccxt`, `feedparser` and LLM SDKs are EC2-only extras. `pandas`, `scipy`, `statsmodels`, `scikit-learn`, `matplotlib` only in `[analysis]`.
 - **Libraries:** `boto3`, `requests`, `pydantic>=2`, `click` (already used), `python-ulid`, `ccxt`, `feedparser`, `google-genai`, `anthropic`, `openai` (for OpenRouter's OpenAI-compatible API), `pytest`, `moto`, `ruff`.
 - **HTTP:** every call goes through `sentinel.net` with `timeout=10`, 3 retries on 429/5xx waiting 1, 2 and 4 s (at least the source's minimum interval), and a per-source minimum interval. A Retry-After over 30 s returns the response at once instead of waiting.
 - **Secrets:** only from SSM SecureString under `/sentinel/*` (Appendix B), read with `sentinel.aws.get_secret`. Sent in request headers only, never in URLs. Never as CLI arguments or environment variables, never printed, never logged (every loaded key is also redacted from log lines as a safety net).
@@ -179,7 +180,7 @@ Read each legacy script first and keep its behaviour, then improve.
 | `analysis/news_aggregator.py` | `sentinel news long SYM` (NewsAPI, documented as 24 h delayed, for long-range research) |
 | `analysis/whale_monitor.py` | `sentinel market whales SYM` (any symbol; real logic in 2.5) |
 | `monitoring/threshold_monitor.py`, `track_coin.py` | `sentinel watch ...` (read them first, then decide the exact subcommands) |
-| `utils/quick_ping.py`, `cmc_check.py` | `sentinel health` |
+| `utils/quick_ping.py`, `cmc_check.py` | `sentinel health` already exists (1.8); quick_ping's BTC and SOL prices come from `sentinel market overview --symbol X` |
 | `system_monitoring/*.sh` | `ops/` (fix paths; keep the daily S3 backup exactly as before) |
 
 - [ ] Unify SSM names (Appendix B); remove every API key CLI argument.
@@ -189,9 +190,9 @@ Read each legacy script first and keep its behaviour, then improve.
 
 ### 1.3 Terraform fixes
 - [x] `ec2`: architecture derived from the instance type, Ubuntu 24.04 AMI chosen by architecture, encrypted gp3 root volume, IMDSv2 with hop limit 1, no inbound rules and no DNS/NTP egress rules (link-local, not filtered).
-- [x] Replace the heredoc injection in `locals.tf` and `bootstrap.sh` with a static bootstrap (OS packages, venv, OpenClaw). Deploying the `sentinel` package is a separate step after 1.1 (clone at a pinned tag, or an S3 tarball if the repo goes private).
+- [x] Replace the heredoc injection in `locals.tf` and `bootstrap.sh` with a static bootstrap (OS packages, venv, OpenClaw). Since 1.8 it also deploys the `sentinel` package (git clone at `sentinel_ref`; an S3 tarball instead if the repo goes private).
 - [x] OpenClaw installed through the installer with `--version` and `--no-onboard`; `openclaw_version` variable and a check block warn until it is pinned. Record the version in `TOOLS.md` after the first bring-up.
-- [x] IAM least privilege: both tables and their indexes, no `Scan`, SSM `/sentinel/*` read only, S3 read/write on the backup bucket and delete only under `strategy-share/`. Later: SQS receive/delete.
+- [x] IAM least privilege: both tables and their indexes, no `Scan`, SSM `/sentinel/*` read only, S3 read/write on the backup bucket and delete only under `strategy-share/`. Session Manager through AWS's minimal instance policy, not `AmazonSSMManagedInstanceCore` (which allows reading every SSM parameter in the account). Later: SQS receive/delete.
 - [x] State in S3 with native lock files (`env/bootstrap`, neutral committed bucket name); provider lock files committed; CI runs fmt, validate, tflint, shellcheck and gitleaks.
 - [ ] S3 lifecycle rule on the backup bucket (expire old `backups/` objects) so it stays under 5 GB; the bucket is not Terraform-managed, so import it or set the rule once.
 - [ ] Optional: `terraform_remote_state` instead of passing the instance profile name as a string.
@@ -224,6 +225,15 @@ Read each legacy script first and keep its behaviour, then improve.
 - [ ] New skill folder `openclaw/workspace/skills/trade-journal/SKILL.md`; update `TOOLS.md`; stop all JSON portfolio writes.
 
 **Accept (Stage B, after first bring-up; the CLI and tests are done in Stage A):** in Telegram, "I bought 100 XRP at 1.20" creates a trade and updates the position; "show my balance" returns a short table; the nightly S3 backup still runs.
+
+### 1.8 Readiness gate
+Only the checks the agent cannot work without. Others join with their own task (the exchange in 2.1); OpenClaw and Telegram are checked after the manual onboarding.
+- [x] `sentinel health [--wait SECONDS] [--format json|telegram]`, exit 1 when not ready. Checks: `dynamodb` (both tables ACTIVE), `s3` (backup bucket reachable), `cmc` (key from SSM, `/v1/key/info`, no credit cost), `gemini` (key from SSM, list models).
+- [x] Retries at three levels: each request (`sentinel.net`, boto3 standard mode); the gate re-runs only transient failures (network, credentials not there yet, 429/5xx) every 5 s doubling to 60 s until the deadline, and stops at once on a fatal one (missing or bad key, missing table); bootstrap retries flaky network steps and waits for the dpkg lock and snap seeding.
+- [x] Bootstrap clones the repo at `sentinel_ref` (Terraform variable, check block warns until it is a release tag), installs the package, then runs `sentinel health --wait 600` before installing OpenClaw, so a bad key fails within minutes; `~/sentinel/.ready` only when every step passed, otherwise bootstrap exits 1 and the instance stays up for debugging over SSM.
+- [x] No key leaves the process: keys in headers only, key headers dropped on cross-host redirects, details from status and error codes only, loaded keys redacted from every log line; tests cover each failure path.
+
+**Accept (Stage A):** `pytest` covers pass, fatal and transient cases for every check, the wait loop, and that no key shows up in any output. **Accept (Stage B):** the first boot ends with `~/sentinel/.ready`; `cloud-init status --long` shows done.
 
 ---
 

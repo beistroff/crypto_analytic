@@ -27,6 +27,7 @@ class MinIntervals(BaseModel):
     cmc: float = 2.0  # CoinMarketCap Basic: 30 requests per minute
     feargreed: float = 1.0  # alternative.me: 60 requests per minute
     newsapi: float = 1.0  # NewsAPI.org developer plan: 100 requests per day
+    gemini: float = 0.0  # readiness check only; model calls go through the SDK
 
 
 class HttpSettings(BaseModel):
