@@ -12,7 +12,16 @@ from sentinel.config import HttpSettings
 
 CMC_KEY = "cmc-test-value"
 GEMINI_KEY = "gemini-test-value"
-CMC_OK = (200, {}, {"data": {"usage": {"current_month": {"credits_left": 14000}}}})
+CMC_OK = (
+    200,
+    {},
+    {
+        "data": {
+            "plan": {"rate_limit_minute": 30},
+            "usage": {"current_month": {"credits_left": 14000}},
+        }
+    },
+)
 
 
 @pytest.fixture
@@ -70,7 +79,7 @@ def test_all_checks_pass(aws_ready, apis):
     cmc.replies.append(CMC_OK)
     results = _by_name(health.run())
     assert all(r.ok for r in results.values())
-    assert results["cmc"].detail == "key valid, 14000 credits left"
+    assert results["cmc"].detail == "key valid, 30 requests/min, 14000 credits left"
     assert cmc.seen[0].headers["X-CMC_PRO_API_KEY"] == CMC_KEY
     assert gemini.seen[0].headers["x-goog-api-key"] == GEMINI_KEY
     assert gemini.seen[0].path.endswith("pageSize=1")

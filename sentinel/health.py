@@ -67,9 +67,16 @@ def check_cmc() -> str:
     response = net.session("cmc").get(CMC_KEY_INFO_URL, headers={"X-CMC_PRO_API_KEY": key})
     _raise_for_status(response)
     # No credit cost. CMC's docs disagree on current_month vs current_day.
-    usage = response.json().get("data", {}).get("usage", {})
+    data = response.json().get("data", {})
+    usage = data.get("usage", {})
     left = (usage.get("current_month") or usage.get("current_day") or {}).get("credits_left")
-    return "key valid" if left is None else f"key valid, {left} credits left"
+    per_minute = data.get("plan", {}).get("rate_limit_minute")
+    parts = ["key valid"]
+    if per_minute is not None:
+        parts.append(f"{per_minute} requests/min")
+    if left is not None:
+        parts.append(f"{left} credits left")
+    return ", ".join(parts)
 
 
 def check_gemini() -> str:
