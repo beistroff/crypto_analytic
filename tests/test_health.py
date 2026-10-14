@@ -3,10 +3,11 @@ import socket
 
 import boto3
 import pytest
+from botocore.exceptions import ClientError
 from click.testing import CliRunner
 from moto import mock_aws
 
-from sentinel import health, net
+from sentinel import aws, health, net
 from sentinel.cli import cli
 from sentinel.config import HttpSettings
 
@@ -150,6 +151,42 @@ def test_wait_gives_up_at_the_deadline(aws_ready, apis, clock):
     result = _by_name(health.run(wait_s=20))["cmc"]
     assert not result.ok
     assert clock.slept == [5.0, 10.0]
+
+
+def test_aws_throttling_waits_instead_of_failing(aws_ready, apis, clock, monkeypatch):
+    throttled = {"Error": {"Code": "ThrottlingException"}, "ResponseMetadata": {}}
+    calls = []
+    real_client = aws.client
+
+    class Throttled:
+        def describe_table(self, **kwargs):
+            calls.append(kwargs)
+            if len(calls) == 1:
+                raise ClientError(throttled, "DescribeTable")
+            return real_client("dynamodb").describe_table(**kwargs)
+
+    def client(service):
+        return Throttled() if service == "dynamodb" else real_client(service)
+
+    monkeypatch.setattr(aws, "client", client)
+    result = _by_name(health.run(wait_s=60))["dynamodb"]
+    assert result.ok
+    assert clock.slept == [5.0]
+
+
+def test_bad_aws_config_fails_at_once(apis, clock, monkeypatch):
+    monkeypatch.setenv("AWS_PROFILE", "does-not-exist")
+    result = _by_name(health.run(wait_s=600))["dynamodb"]
+    assert (result.ok, result.fatal, result.detail) == (False, True, "ProfileNotFound")
+    assert clock.slept == []
+
+
+@pytest.mark.parametrize("body", [{"data": {"plan": None, "usage": None}}, {"data": None}, []])
+def test_cmc_extra_fields_are_optional(aws_ready, apis, body):
+    cmc, _ = apis
+    cmc.replies.append((200, {}, body))
+    result = _by_name(health.run())["cmc"]
+    assert (result.ok, result.detail) == (True, "key valid")
 
 
 def test_cli_json_and_exit_code(aws_ready, apis):

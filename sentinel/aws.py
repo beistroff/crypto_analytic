@@ -14,7 +14,14 @@ from functools import cache
 import boto3
 from botocore.client import BaseClient
 from botocore.config import Config
-from botocore.exceptions import BotoCoreError, ClientError, NoCredentialsError
+from botocore.exceptions import (
+    BotoCoreError,
+    ClientError,
+    CredentialRetrievalError,
+    HTTPClientError,
+    NoCredentialsError,
+)
+from botocore.exceptions import ConnectionError as BotoConnectionError
 
 from sentinel import log
 from sentinel.config import get_settings
@@ -39,14 +46,45 @@ _CONFIG = Config(
     connect_timeout=5, read_timeout=10, retries={"mode": "standard", "max_attempts": 4}
 )
 
+# Errors still worth retrying after boto3's own attempts: throttling and server errors
+# (by code or HTTP status), lost connections, and credentials not there yet at boot.
+# Anything else (access denied, missing resource, bad config) waiting will not fix.
+_THROTTLING_CODES = frozenset(
+    {
+        "Throttling",
+        "ThrottlingException",
+        "ThrottledException",
+        "RequestThrottled",
+        "RequestLimitExceeded",
+        "ProvisionedThroughputExceededException",
+        "TooManyRequestsException",
+        "SlowDown",
+    }
+)
+_TRANSIENT_BOTO_ERRORS = (
+    BotoConnectionError,
+    HTTPClientError,
+    NoCredentialsError,
+    CredentialRetrievalError,
+)
+
 _cache: dict[str, str] = {}
+
+
+def is_transient(exc: Exception) -> bool:
+    """True for AWS errors that may pass on a later try (see ``_THROTTLING_CODES``)."""
+    if isinstance(exc, ClientError):
+        code = exc.response.get("Error", {}).get("Code", "")
+        status = exc.response.get("ResponseMetadata", {}).get("HTTPStatusCode", 0)
+        return code in _THROTTLING_CODES or status >= 500
+    return isinstance(exc, _TRANSIENT_BOTO_ERRORS)
 
 
 class SecretError(RuntimeError):
     """A key could not be read. The message names the parameter, never a value.
 
-    ``transient`` is True when AWS could not be reached or no credentials were found
-    (worth retrying, e.g. while the instance boots), False when AWS said no.
+    ``transient`` follows ``is_transient``: True when a later try may pass (throttling,
+    no connection, credentials not there yet at boot), False when AWS said no.
     """
 
     def __init__(self, message: str, *, transient: bool = False) -> None:
@@ -79,6 +117,13 @@ def get_secret(name: str) -> str:
     return value
 
 
+def error_code(exc: Exception) -> str:
+    """AWS error code, or the exception type: never the message (account ids, ARNs)."""
+    if isinstance(exc, ClientError):
+        return exc.response.get("Error", {}).get("Code") or "ClientError"
+    return type(exc).__name__
+
+
 def clear_cache() -> None:
     """Forget cached keys and clients (tests, or a key rotation in a long-running process)."""
     _cache.clear()
@@ -89,12 +134,10 @@ def _fetch(path: str) -> str:
     # Messages carry error codes only: AWS messages can hold account ids and role ARNs.
     try:
         parameter = client("ssm").get_parameter(Name=path, WithDecryption=True)["Parameter"]
-    except ClientError as exc:
-        code = exc.response.get("Error", {}).get("Code", "Unknown")
-        raise SecretError(f"cannot read SSM parameter {path}: {code}") from None
-    except BotoCoreError as exc:  # no credentials, endpoint unreachable, ...
-        reason = type(exc).__name__
-        raise SecretError(f"cannot read SSM parameter {path}: {reason}", transient=True) from None
+    except (ClientError, BotoCoreError) as exc:
+        reason = error_code(exc)
+        message = f"cannot read SSM parameter {path}: {reason}"
+        raise SecretError(message, transient=is_transient(exc)) from None
     if parameter["Type"] != "SecureString":
         raise SecretError(f"SSM parameter {path} must be a SecureString, not {parameter['Type']}")
     return parameter["Value"]

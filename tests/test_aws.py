@@ -3,7 +3,13 @@ import logging
 
 import boto3
 import pytest
-from botocore.exceptions import NoCredentialsError
+from botocore.exceptions import (
+    ClientError,
+    EndpointConnectionError,
+    NoCredentialsError,
+    ProfileNotFound,
+    ReadTimeoutError,
+)
 from moto import mock_aws
 
 from sentinel import aws, log
@@ -77,3 +83,33 @@ def test_client_without_credentials_is_not_cached(no_credentials, monkeypatch):
 def test_unknown_name_rejected_before_any_aws_call():
     with pytest.raises(ValueError, match="unknown secret 'cmc_key'"):
         aws.get_secret("cmc_key")
+
+
+def _client_error(code, status):
+    response = {"Error": {"Code": code}, "ResponseMetadata": {"HTTPStatusCode": status}}
+    return ClientError(response, "DescribeTable")
+
+
+@pytest.mark.parametrize(
+    ("exc", "transient"),
+    [
+        (_client_error("ThrottlingException", 400), True),
+        (_client_error("ProvisionedThroughputExceededException", 400), True),
+        (_client_error("InternalServerError", 500), True),
+        (_client_error("503", 503), True),
+        (_client_error("AccessDeniedException", 400), False),
+        (_client_error("ResourceNotFoundException", 400), False),
+        (EndpointConnectionError(endpoint_url="https://ssm.us-east-1.amazonaws.com"), True),
+        (ReadTimeoutError(endpoint_url="https://ssm.us-east-1.amazonaws.com"), True),
+        (NoCredentialsError(), True),
+        (ProfileNotFound(profile="missing"), False),
+    ],
+)
+def test_is_transient(exc, transient):
+    assert aws.is_transient(exc) is transient
+
+
+def test_error_code_never_uses_the_message():
+    response = {"Error": {"Code": "AccessDeniedException", "Message": "arn:aws:iam::123:role/x"}}
+    assert aws.error_code(ClientError(response, "GetParameter")) == "AccessDeniedException"
+    assert aws.error_code(ProfileNotFound(profile="missing")) == "ProfileNotFound"
