@@ -1,11 +1,12 @@
 #!/bin/bash
 # Sentinel instance bootstrap (runs once as root via EC2 user data).
 #
-# Installs OS packages, a Python venv, the sentinel package (at SENTINEL_REF) and
-# OpenClaw, then runs the readiness gate (`sentinel health`): keys in SSM, DynamoDB
-# tables, the backup bucket, CMC and Gemini. ~/sentinel/.ready exists only when the
-# gate passes. It does NOT onboard OpenClaw: that is a manual first-bring-up step
-# (see openclaw/README.md).
+# Installs OS packages, a Python venv and the sentinel package (at SENTINEL_REF), runs
+# the readiness gate (`sentinel health`: keys in SSM, DynamoDB tables, the backup
+# bucket, CMC and Gemini), then installs OpenClaw. The gate runs before OpenClaw so a
+# bad key or missing table fails within minutes. ~/sentinel/.ready exists only when
+# every step passed. It does NOT onboard OpenClaw: that is a manual first-bring-up
+# step (see openclaw/README.md).
 #
 # Expected environment (exported by Terraform, see terraform/env/ec2/locals.tf):
 #   OPENCLAW_VERSION    exact version for the installer, or latest/next
@@ -28,7 +29,7 @@ GATE_WAIT_S=600
 export DEBIAN_FRONTEND=noninteractive
 
 # retry ATTEMPTS CMD...: rerun a network step that can fail transiently at boot,
-# pausing 5, 10, 20 s between attempts.
+# pausing 5, 10, 20 s between attempts (for tools without a retry option of their own).
 retry() {
   local attempts="$1" pause=5 n=1
   shift
@@ -46,25 +47,22 @@ retry() {
 
 echo "=== Sentinel bootstrap start: $(date -u +%FT%TZ) ==="
 
-echo "[1/7] System packages"
+echo "[1/6] System packages"
 # On first boot unattended-upgrades often holds the dpkg lock: wait for it, and retry
 # package downloads, instead of failing.
 APT=(apt-get -y -o DPkg::Lock::Timeout=300 -o Acquire::Retries=3)
 "${APT[@]}" update
 "${APT[@]}" upgrade
-# Remove distro Node so it cannot conflict with the Node the OpenClaw installer provides.
-"${APT[@]}" remove nodejs npm libnode-dev || true
-"${APT[@]}" autoremove
 "${APT[@]}" install git jq curl ca-certificates unzip python3-venv python3-pip
 # Ubuntu 24.04 has no apt awscli; the AWS-maintained snap provides CLI v2.
 snap wait system seed.loaded
 retry 3 snap install aws-cli --classic
 
-echo "[2/7] Project directories and Python venv"
+echo "[2/6] Project directories and Python venv"
 install -d -o "${AGENT_USER}" -g "${AGENT_USER}" "${SENTINEL_DIR}"
 sudo -u "${AGENT_USER}" python3 -m venv "${SENTINEL_DIR}/venv"
 
-echo "[3/7] Environment for the agent user"
+echo "[3/6] Environment for the agent user"
 cat > /etc/profile.d/sentinel.sh <<ENVEOF
 export OPENCLAW_S3_BUCKET='${OPENCLAW_S3_BUCKET}'
 export AWS_REGION='${AWS_REGION}'
@@ -72,7 +70,7 @@ export AWS_DEFAULT_REGION='${AWS_REGION}'
 ENVEOF
 chmod 644 /etc/profile.d/sentinel.sh
 
-echo "[4/7] Sentinel package at ${SENTINEL_REF}"
+echo "[4/6] Sentinel package at ${SENTINEL_REF}"
 SRC_DIR="${SENTINEL_DIR}/src"
 clone_sentinel() {
   rm -rf "${SRC_DIR}"
@@ -82,33 +80,31 @@ clone_sentinel() {
 retry 3 clone_sentinel
 retry 3 sudo -u "${AGENT_USER}" -H "${SENTINEL_DIR}/venv/bin/pip" install --quiet -e "${SRC_DIR}[ec2]"
 
-echo "[5/7] OpenClaw ${OPENCLAW_VERSION} (installed as ${AGENT_USER}, not root)"
+echo "[5/6] Readiness gate (retries transient failures for up to ${GATE_WAIT_S}s)"
+# sudo resets the environment, so pass the settings the package reads explicitly.
+if ! sudo -u "${AGENT_USER}" -H env AWS_REGION="${AWS_REGION}" \
+  OPENCLAW_S3_BUCKET="${OPENCLAW_S3_BUCKET}" SENTINEL_LOG_LEVEL=INFO \
+  "${SENTINEL_DIR}/venv/bin/sentinel" health --wait "${GATE_WAIT_S}"; then
+  echo "=== NOT READY: see the health report above. OpenClaw was not installed." >&2
+  echo "    Fix the cause, then rerun the whole bootstrap as root:" >&2
+  echo "    sudo cloud-init single --name scripts_user --frequency always" >&2
+  exit 1
+fi
+
+echo "[6/6] OpenClaw ${OPENCLAW_VERSION} (installed as ${AGENT_USER}, not root)"
 # Let the user systemd service (gateway) keep running without a login session.
 loginctl enable-linger "${AGENT_USER}"
-
 # Download first, run second: nothing is piped straight into a shell.
 INSTALLER="$(mktemp /tmp/openclaw-install.XXXXXX.sh)"
-retry 3 curl -fsSL --proto '=https' --tlsv1.2 -o "${INSTALLER}" https://openclaw.ai/install.sh
+curl -fsSL --retry 3 --retry-all-errors --proto '=https' --tlsv1.2 \
+  -o "${INSTALLER}" https://openclaw.ai/install.sh
 chmod 755 "${INSTALLER}"
 sudo -u "${AGENT_USER}" -H env OPENCLAW_VERSION="${OPENCLAW_VERSION}" OPENCLAW_NO_ONBOARD=1 \
   bash "${INSTALLER}" --no-onboard
 rm -f "${INSTALLER}"
-
-echo "[6/7] Verification"
 sudo -u "${AGENT_USER}" -H bash -lc 'node -v && npm -v && openclaw --version' \
   || echo "WARNING: openclaw not on PATH yet; check the installer output above"
-touch "${SENTINEL_DIR}/.bootstrap-done"
 
-echo "[7/7] Readiness gate (retries transient failures for up to ${GATE_WAIT_S}s)"
-# sudo resets the environment, so pass the settings the package reads explicitly.
-if sudo -u "${AGENT_USER}" -H env AWS_REGION="${AWS_REGION}" \
-  OPENCLAW_S3_BUCKET="${OPENCLAW_S3_BUCKET}" SENTINEL_LOG_LEVEL=INFO \
-  "${SENTINEL_DIR}/venv/bin/sentinel" health --wait "${GATE_WAIT_S}"; then
-  sudo -u "${AGENT_USER}" touch "${SENTINEL_DIR}/.ready"
-  echo "=== Instance ready: $(date -u +%FT%TZ) ==="
-  echo "Next: open an SSM session and run 'openclaw onboard' (see openclaw/README.md)."
-else
-  echo "=== NOT READY: see the health report above. After fixing the cause, run as ${AGENT_USER}:" >&2
-  echo "    ${SENTINEL_DIR}/venv/bin/sentinel health --wait 60 && touch ${SENTINEL_DIR}/.ready" >&2
-  exit 1
-fi
+sudo -u "${AGENT_USER}" touch "${SENTINEL_DIR}/.ready"
+echo "=== Instance ready: $(date -u +%FT%TZ) ==="
+echo "Next: open an SSM session and run 'openclaw onboard' (see openclaw/README.md)."
