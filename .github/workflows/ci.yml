@@ -13,6 +13,34 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12" # same as the instance
+          cache: pip
+          cache-dependency-path: constraints.txt
+      - name: Install (pinned versions)
+        run: pip install -c constraints.txt -e ".[dev]"
+      - name: Lint
+        run: |
+          ruff check .
+          ruff format --check .
+      - name: Test (no network; live tests are opt-in)
+        run: pytest
+      # The instance (t4g, arm64) must get every pinned package as a wheel: a source build
+      # would need compilers bootstrap doesn't install.
+      - name: Pinned instance packages have arm64 wheels
+        run: |
+          python -c "import tomllib; p = tomllib.load(open('pyproject.toml', 'rb'))['project']; print('\n'.join(p['dependencies'] + p['optional-dependencies']['ec2']))" > /tmp/instance-reqs.txt
+          pip download --quiet --dest /tmp/wheels --only-binary=:all: \
+            --implementation cp --python-version 3.12 \
+            --platform manylinux_2_39_aarch64 --platform manylinux_2_28_aarch64 \
+            --platform manylinux_2_17_aarch64 --platform manylinux2014_aarch64 \
+            -c constraints.txt -r /tmp/instance-reqs.txt
+
   terraform:
     name: terraform (${{ matrix.env }})
     runs-on: ubuntu-latest

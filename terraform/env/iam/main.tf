@@ -33,10 +33,30 @@ resource "aws_iam_role" "sentinel_role" {
   }
 }
 
-# Session Manager access (no SSH, no inbound ports)
-resource "aws_iam_role_policy_attachment" "ssm_core" {
-  role       = aws_iam_role.sentinel_role.name
-  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+# Session Manager access (no SSH, no inbound ports), with AWS's minimal instance policy.
+# Not the managed AmazonSSMManagedInstanceCore: it also allows ssm:GetParameter(s) on every
+# parameter in the account. Without it there is no Run Command, State Manager, Inventory or
+# Patch Manager (none are used; Run Command would need ec2messages).
+resource "aws_iam_role_policy" "session_manager" {
+  name = "session-manager"
+  role = aws_iam_role.sentinel_role.id
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid = "SessionManager"
+        Action = [
+          "ssm:UpdateInstanceInformation",
+          "ssmmessages:CreateControlChannel",
+          "ssmmessages:CreateDataChannel",
+          "ssmmessages:OpenControlChannel",
+          "ssmmessages:OpenDataChannel"
+        ]
+        Effect   = "Allow"
+        Resource = "*"
+      }
+    ]
+  })
 }
 
 # Least-privilege permissions for the agent (checked against the calls the code makes):

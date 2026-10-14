@@ -2,10 +2,15 @@
 # `make install` installs the package into whichever venv is active.
 PYTHON ?= python
 
-.PHONY: install test lint fmt
+.PHONY: install lock test lint fmt
 
+# constraints.txt pins the exact versions tested together (CI and bootstrap use it too).
 install:
-	$(PYTHON) -m pip install -e ".[ec2,dev]"
+	$(PYTHON) -m pip install -c constraints.txt -e ".[ec2,dev]"
+
+# After upgrading packages in the venv and running the tests, re-pin them.
+lock:
+	$(PYTHON) -m pip freeze --exclude-editable > constraints.txt
 
 test:
 	$(PYTHON) -m pytest

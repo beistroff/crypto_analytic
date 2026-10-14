@@ -4,8 +4,10 @@
 # Installs OS packages, a Python venv and the sentinel package (at SENTINEL_REF), runs
 # the readiness gate (`sentinel health`: keys in SSM, DynamoDB tables, the backup
 # bucket, CMC and Gemini), then installs OpenClaw. The gate runs before OpenClaw so a
-# bad key or missing table fails within minutes. ~/sentinel/.ready exists only when
-# every step passed. It does NOT onboard OpenClaw: that is a manual first-bring-up
+# bad key or missing table fails within minutes. ~/sentinel/.ready is written when the
+# gate passed and the OpenClaw installer finished; whether `openclaw` is on PATH is only
+# warned about (the installer may set PATH for login shells only), so check it with
+# `openclaw --version`. It does NOT onboard OpenClaw: that is a manual first-bring-up
 # step (see openclaw/README.md).
 #
 # Expected environment (exported by Terraform, see terraform/env/ec2/locals.tf):
@@ -49,8 +51,10 @@ echo "=== Sentinel bootstrap start: $(date -u +%FT%TZ) ==="
 
 echo "[1/6] System packages"
 # On first boot unattended-upgrades often holds the dpkg lock: wait for it, and retry
-# package downloads, instead of failing.
-APT=(apt-get -y -o DPkg::Lock::Timeout=300 -o Acquire::Retries=3)
+# package downloads, instead of failing. A changed config file keeps the local version
+# without asking (user data has no terminal, so a dpkg prompt would fail the upgrade).
+APT=(apt-get -y -o DPkg::Lock::Timeout=300 -o Acquire::Retries=3
+  -o Dpkg::Options::=--force-confdef -o Dpkg::Options::=--force-confold)
 "${APT[@]}" update
 "${APT[@]}" upgrade
 "${APT[@]}" install git jq curl ca-certificates unzip python3-venv python3-pip
@@ -78,7 +82,9 @@ clone_sentinel() {
     "${SENTINEL_REPO}" "${SRC_DIR}"
 }
 retry 3 clone_sentinel
-retry 3 sudo -u "${AGENT_USER}" -H "${SENTINEL_DIR}/venv/bin/pip" install --quiet -e "${SRC_DIR}[ec2]"
+# constraints.txt pins the exact versions tested in CI, so a boot never pulls new releases.
+retry 3 sudo -u "${AGENT_USER}" -H "${SENTINEL_DIR}/venv/bin/pip" install --quiet \
+  -c "${SRC_DIR}/constraints.txt" -e "${SRC_DIR}[ec2]"
 
 echo "[5/6] Readiness gate (retries transient failures for up to ${GATE_WAIT_S}s)"
 # sudo resets the environment, so pass the settings the package reads explicitly.

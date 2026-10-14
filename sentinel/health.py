@@ -66,11 +66,12 @@ def check_cmc() -> str:
     key = aws.get_secret("cmc_api_key")
     response = net.session("cmc").get(CMC_KEY_INFO_URL, headers={"X-CMC_PRO_API_KEY": key})
     _raise_for_status(response)
-    # No credit cost. CMC's docs disagree on current_month vs current_day.
-    data = response.json().get("data", {})
-    usage = data.get("usage", {})
-    left = (usage.get("current_month") or usage.get("current_day") or {}).get("credits_left")
-    per_minute = data.get("plan", {}).get("rate_limit_minute")
+    # No credit cost. The extra fields are informational: missing or null ones are skipped.
+    # CMC's docs disagree on current_month vs current_day.
+    data = _obj(_obj(response.json()).get("data"))
+    usage = _obj(data.get("usage"))
+    left = _obj(usage.get("current_month") or usage.get("current_day")).get("credits_left")
+    per_minute = _obj(data.get("plan")).get("rate_limit_minute")
     parts = ["key valid"]
     if per_minute is not None:
         parts.append(f"{per_minute} requests/min")
@@ -151,8 +152,12 @@ def _classify(exc: Exception) -> tuple[str, bool]:
     """(detail, fatal) for a failed check, built from codes and type names only."""
     if isinstance(exc, CheckFailed | aws.SecretError):
         return str(exc), not exc.transient
-    if isinstance(exc, ClientError):
-        return exc.response.get("Error", {}).get("Code", "ClientError"), True
-    if isinstance(exc, BotoCoreError | requests.RequestException):
+    if isinstance(exc, ClientError | BotoCoreError):
+        return aws.error_code(exc), not aws.is_transient(exc)
+    if isinstance(exc, requests.RequestException):
         return type(exc).__name__, False
     return type(exc).__name__, True
+
+
+def _obj(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}

@@ -142,7 +142,7 @@ crypto_analytic/
 
 ## 3. Conventions
 
-- **Packaging:** `pyproject.toml`, editable install `pip install -e ".[ec2,dev]"` in `/home/ubuntu/sentinel/venv`. Keep Lambda dependencies light (`requests`, `pydantic`; `boto3` is in the runtime). `ccxt`, `feedparser` and LLM SDKs are EC2-only extras. `pandas`, `scipy`, `statsmodels`, `scikit-learn`, `matplotlib` only in `[analysis]`.
+- **Packaging:** `pyproject.toml`, editable install with pinned versions: `pip install -c constraints.txt -e ".[ec2,dev]"` locally (`make install`), `.[ec2]` in `/home/ubuntu/sentinel/venv` (bootstrap). `constraints.txt` holds the exact versions tested together; CI and bootstrap install from it, and `make lock` re-pins after an upgrade. Keep Lambda dependencies light (`requests`, `pydantic`; `boto3` is in the runtime). `ccxt`, `feedparser` and LLM SDKs are EC2-only extras. `pandas`, `scipy`, `statsmodels`, `scikit-learn`, `matplotlib` only in `[analysis]`.
 - **Libraries:** `boto3`, `requests`, `pydantic>=2`, `click` (already used), `python-ulid`, `ccxt`, `feedparser`, `google-genai`, `anthropic`, `openai` (for OpenRouter's OpenAI-compatible API), `pytest`, `moto`, `ruff`.
 - **HTTP:** every call goes through `sentinel.net` with `timeout=10`, 3 retries on 429/5xx waiting 1, 2 and 4 s (at least the source's minimum interval), and a per-source minimum interval. A Retry-After over 30 s returns the response at once instead of waiting.
 - **Secrets:** only from SSM SecureString under `/sentinel/*` (Appendix B), read with `sentinel.aws.get_secret`. Sent in request headers only, never in URLs. Never as CLI arguments or environment variables, never printed, never logged (every loaded key is also redacted from log lines as a safety net).
@@ -192,7 +192,7 @@ Read each legacy script first and keep its behaviour, then improve.
 - [x] `ec2`: architecture derived from the instance type, Ubuntu 24.04 AMI chosen by architecture, encrypted gp3 root volume, IMDSv2 with hop limit 1, no inbound rules and no DNS/NTP egress rules (link-local, not filtered).
 - [x] Replace the heredoc injection in `locals.tf` and `bootstrap.sh` with a static bootstrap (OS packages, venv, OpenClaw). Since 1.8 it also deploys the `sentinel` package (git clone at `sentinel_ref`; an S3 tarball instead if the repo goes private).
 - [x] OpenClaw installed through the installer with `--version` and `--no-onboard`; `openclaw_version` variable and a check block warn until it is pinned. Record the version in `TOOLS.md` after the first bring-up.
-- [x] IAM least privilege: both tables and their indexes, no `Scan`, SSM `/sentinel/*` read only, S3 read/write on the backup bucket and delete only under `strategy-share/`. Later: SQS receive/delete.
+- [x] IAM least privilege: both tables and their indexes, no `Scan`, SSM `/sentinel/*` read only, S3 read/write on the backup bucket and delete only under `strategy-share/`. Session Manager through AWS's minimal instance policy, not `AmazonSSMManagedInstanceCore` (which allows reading every SSM parameter in the account). Later: SQS receive/delete.
 - [x] State in S3 with native lock files (`env/bootstrap`, neutral committed bucket name); provider lock files committed; CI runs fmt, validate, tflint, shellcheck and gitleaks.
 - [ ] S3 lifecycle rule on the backup bucket (expire old `backups/` objects) so it stays under 5 GB; the bucket is not Terraform-managed, so import it or set the rule once.
 - [ ] Optional: `terraform_remote_state` instead of passing the instance profile name as a string.
