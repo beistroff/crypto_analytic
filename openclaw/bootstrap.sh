@@ -78,7 +78,9 @@ clone_sentinel() {
     "${SENTINEL_REPO}" "${SRC_DIR}"
 }
 retry 3 clone_sentinel
-retry 3 sudo -u "${AGENT_USER}" -H "${SENTINEL_DIR}/venv/bin/pip" install --quiet -e "${SRC_DIR}[ec2]"
+# constraints.txt pins the exact versions tested in CI, so a boot never pulls new releases.
+retry 3 sudo -u "${AGENT_USER}" -H "${SENTINEL_DIR}/venv/bin/pip" install --quiet \
+  -c "${SRC_DIR}/constraints.txt" -e "${SRC_DIR}[ec2]"
 
 echo "[5/6] Readiness gate (retries transient failures for up to ${GATE_WAIT_S}s)"
 # sudo resets the environment, so pass the settings the package reads explicitly.

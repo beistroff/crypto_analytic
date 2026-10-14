@@ -142,7 +142,7 @@ crypto_analytic/
 
 ## 3. Conventions
 
-- **Packaging:** `pyproject.toml`, editable install `pip install -e ".[ec2,dev]"` in `/home/ubuntu/sentinel/venv`. Keep Lambda dependencies light (`requests`, `pydantic`; `boto3` is in the runtime). `ccxt`, `feedparser` and LLM SDKs are EC2-only extras. `pandas`, `scipy`, `statsmodels`, `scikit-learn`, `matplotlib` only in `[analysis]`.
+- **Packaging:** `pyproject.toml`, editable install with pinned versions: `pip install -c constraints.txt -e ".[ec2,dev]"` locally (`make install`), `.[ec2]` in `/home/ubuntu/sentinel/venv` (bootstrap). `constraints.txt` holds the exact versions tested together; CI and bootstrap install from it, and `make lock` re-pins after an upgrade. Keep Lambda dependencies light (`requests`, `pydantic`; `boto3` is in the runtime). `ccxt`, `feedparser` and LLM SDKs are EC2-only extras. `pandas`, `scipy`, `statsmodels`, `scikit-learn`, `matplotlib` only in `[analysis]`.
 - **Libraries:** `boto3`, `requests`, `pydantic>=2`, `click` (already used), `python-ulid`, `ccxt`, `feedparser`, `google-genai`, `anthropic`, `openai` (for OpenRouter's OpenAI-compatible API), `pytest`, `moto`, `ruff`.
 - **HTTP:** every call goes through `sentinel.net` with `timeout=10`, 3 retries on 429/5xx waiting 1, 2 and 4 s (at least the source's minimum interval), and a per-source minimum interval. A Retry-After over 30 s returns the response at once instead of waiting.
 - **Secrets:** only from SSM SecureString under `/sentinel/*` (Appendix B), read with `sentinel.aws.get_secret`. Sent in request headers only, never in URLs. Never as CLI arguments or environment variables, never printed, never logged (every loaded key is also redacted from log lines as a safety net).
