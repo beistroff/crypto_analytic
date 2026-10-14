@@ -192,7 +192,7 @@ Read each legacy script first and keep its behaviour, then improve.
 - [x] `ec2`: architecture derived from the instance type, Ubuntu 24.04 AMI chosen by architecture, encrypted gp3 root volume, IMDSv2 with hop limit 1, no inbound rules and no DNS/NTP egress rules (link-local, not filtered).
 - [x] Replace the heredoc injection in `locals.tf` and `bootstrap.sh` with a static bootstrap (OS packages, venv, OpenClaw). Since 1.8 it also deploys the `sentinel` package (git clone at `sentinel_ref`; an S3 tarball instead if the repo goes private).
 - [x] OpenClaw installed through the installer with `--version` and `--no-onboard`; `openclaw_version` variable and a check block warn until it is pinned. Record the version in `TOOLS.md` after the first bring-up.
-- [x] IAM least privilege: both tables and their indexes, no `Scan`, SSM `/sentinel/*` read only, S3 read/write on the backup bucket and delete only under `strategy-share/`. Later: SQS receive/delete.
+- [x] IAM least privilege: both tables and their indexes, no `Scan`, SSM `/sentinel/*` read only, S3 read/write on the backup bucket and delete only under `strategy-share/`. Session Manager through AWS's minimal instance policy, not `AmazonSSMManagedInstanceCore` (which allows reading every SSM parameter in the account). Later: SQS receive/delete.
 - [x] State in S3 with native lock files (`env/bootstrap`, neutral committed bucket name); provider lock files committed; CI runs fmt, validate, tflint, shellcheck and gitleaks.
 - [ ] S3 lifecycle rule on the backup bucket (expire old `backups/` objects) so it stays under 5 GB; the bucket is not Terraform-managed, so import it or set the rule once.
 - [ ] Optional: `terraform_remote_state` instead of passing the instance profile name as a string.
