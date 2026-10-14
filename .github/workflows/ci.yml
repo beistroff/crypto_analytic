@@ -13,6 +13,24 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  python:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12" # same as the instance
+          cache: pip
+          cache-dependency-path: constraints.txt
+      - name: Install (pinned versions)
+        run: pip install -c constraints.txt -e ".[dev]"
+      - name: Lint
+        run: |
+          ruff check .
+          ruff format --check .
+      - name: Test (no network; live tests are opt-in)
+        run: pytest
+
   terraform:
     name: terraform (${{ matrix.env }})
     runs-on: ubuntu-latest
