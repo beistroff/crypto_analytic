@@ -85,9 +85,10 @@ crypto_analytic/
     net.py                      # requests session: timeout, retries with backoff, rate limit, User-Agent
     log.py                      # JSON-lines logging
     health.py                   # readiness checks (keys, tables, bucket, CMC, Gemini)
+    views.py                    # command results: compact JSON for the agent, 5-line Telegram text
     cli.py                      # `sentinel ...` entry point (click)
     data/
-      cmc.py  coingecko.py  feargreed.py  exchange.py  flow.py  whales.py
+      cmc.py  feargreed.py  exchange.py  flow.py  whales.py
       news_rss.py  gdelt.py  newsapi.py
     signals/
       indicators.py             # RSI, SMA, ATR, returns, volume z-score
@@ -166,7 +167,7 @@ crypto_analytic/
 ### 1.1 Repo hygiene and package skeleton
 - [x] Create `pyproject.toml`, the `sentinel/` skeleton (section 2), `ruff` and `pytest` config, `Makefile`, `.gitignore`.
 - [x] Implement `config.py`, `aws.py` (SSM keys), `net.py` (HTTP), `log.py`.
-- [ ] Move the current scripts to `legacy/` unchanged so the running agent keeps working until replacements land.
+- [x] Move the current scripts to `legacy/` unchanged so the running agent keeps working until replacements land.
 
 **Accept:** `pip install -e ".[ec2,dev]"` works; `sentinel --help` lists command groups; `pytest` and `ruff check` pass.
 
@@ -175,16 +176,16 @@ Read each legacy script first and keep its behaviour, then improve.
 
 | Legacy script | New command |
 | --- | --- |
-| `analysis/market_intelligence.py` | `sentinel market overview [--symbol X]`. Keep the old fixed rules as `rules_signal()` in `sentinel/eval/` as a baseline for the experiment. |
-| `analysis/top_15_analysis.py`, `top_50_scalp.py` | `sentinel market top --limit 15` and `sentinel market scalp --limit 50` |
-| `analysis/news_aggregator.py` | `sentinel news long SYM` (NewsAPI, documented as 24 h delayed, for long-range research) |
+| `analysis/market_intelligence.py` | `sentinel market overview [--symbol X[,Y]]` (default BTC): market block (Fear & Greed as background, BTC dominance, total market cap 24 h change, stablecoin share from CMC global metrics) plus quotes. The old fixed rules are `rules_signal()` in `sentinel/eval/rules.py`, the RULES baseline. |
+| `analysis/top_15_analysis.py`, `top_50_scalp.py` | `sentinel market top --limit 15` (legacy rule signal per coin) and `sentinel market scalp --limit 50` |
+| `analysis/news_aggregator.py` | `sentinel news long SYM` (NewsAPI, documented as 24 h delayed, for long-range research); headlines only, the old keyword sentiment is dropped (the LLM judges sentiment, 2.4) |
 | `analysis/whale_monitor.py` | `sentinel market whales SYM` (any symbol; real logic in 2.5) |
-| `monitoring/threshold_monitor.py`, `track_coin.py` | `sentinel watch ...` (read them first, then decide the exact subcommands) |
-| `utils/quick_ping.py`, `cmc_check.py` | `sentinel health` already exists (1.8); quick_ping's BTC and SOL prices come from `sentinel market overview --symbol X` |
-| `system_monitoring/*.sh` | `ops/` (fix paths; keep the daily S3 backup exactly as before) |
+| `monitoring/threshold_monitor.py`, `track_coin.py` | `sentinel watch levels SYM --below X --above Y` and `sentinel watch move SYM --entry P [--min-pct 1]`; levels are passed per call, none in code |
+| `utils/quick_ping.py`, `cmc_check.py` | `sentinel health` already exists (1.8); quick_ping's BTC and SOL prices come from `sentinel market overview --symbol BTC,SOL` |
+| `system_monitoring/*.sh` | `ops/` (paths from settings; S3 scripts take `--dry-run`; same backup layout, without the venv and repo clone that bootstrap rebuilds) |
 
-- [ ] Unify SSM names (Appendix B); remove every API key CLI argument.
-- [ ] Fix the README (SSM paths, NewsAPI.org vs NewsAPI.ai).
+- [x] Unify SSM names (Appendix B); remove every API key CLI argument.
+- [x] Fix the README (SSM paths, NewsAPI.org vs NewsAPI.ai).
 
 **Accept:** every legacy command has a new equivalent with compact JSON output; parser tests with fixtures for CMC listings and quotes, Fear & Greed and NewsAPI.
 
@@ -252,7 +253,7 @@ Only the checks the agent cannot work without. Others join with their own task (
 **Accept:** unit tests against hand-checked values on a fixture series.
 
 ### 2.3 BTC regime (`sentinel/signals/btc_regime.py`)
-- [ ] Inputs: BTC 24 h and 7 d change, price versus SMA50 and SMA200, BTC dominance (CoinGecko global).
+- [ ] Inputs: BTC 24 h and 7 d change, price versus SMA50 and SMA200, BTC dominance (CMC global metrics, `sentinel.data.cmc.global_metrics`).
 - [ ] Output: `regime` (`risk_on`, `neutral`, `risk_off`) plus the numbers. Document the rule in the docstring.
 
 ### 2.4 News (`sentinel/data/news_rss.py`, `gdelt.py`)
@@ -349,7 +350,7 @@ Reply "details a3f" for the full analysis
 ## Phase 5: Naive Bayes model and gate (W5 to W6, 9 to 22 Nov) [P1]
 
 ### 5.1 Historical dataset
-- [ ] `sentinel nb build-dataset --days 730`: daily candles for the watchlist and BTC from the exchange, full Fear & Greed history (alternative.me supports `?limit=0`), BTC dominance if CoinGecko's demo history allows (otherwise drop the feature). Save Parquet to S3 `datasets/`.
+- [ ] `sentinel nb build-dataset --days 730`: daily candles for the watchlist and BTC from the exchange, full Fear & Greed history (alternative.me supports `?limit=0`). BTC dominance history is dropped (CMC history needs a paid plan) unless a free source turns up. Save Parquet to S3 `datasets/`.
 
 ### 5.2 Features and label (`sentinel/models/features.py`)
 - [ ] Label: 1 if the next 24 h return is above +0.5%, else 0.
@@ -491,7 +492,7 @@ All items carry `type` and `created_at`. Keys are strings.
 
 ## Appendix B: SSM parameters (SecureString)
 
-`/sentinel/cmc_api_key`, `/sentinel/newsapi_key`, `/sentinel/coingecko_api_key`, `/sentinel/gemini_api_key`, `/sentinel/anthropic_api_key`, `/sentinel/openrouter_api_key`, `/sentinel/openclaw_hook_token`. The Telegram bot token stays in OpenClaw's own config.
+`/sentinel/cmc_api_key`, `/sentinel/newsapi_key`, `/sentinel/gemini_api_key`, `/sentinel/anthropic_api_key`, `/sentinel/openrouter_api_key`, `/sentinel/openclaw_hook_token`. `/sentinel/telegram_token` is stored here too, but only copied into OpenClaw's config at onboarding; `sentinel` never reads it.
 
 ## Appendix C: Snapshot example (compact, hierarchy order)
 
@@ -499,7 +500,7 @@ All items carry `type` and `created_at`. Keys are strings.
 {
   "schema_version": 1, "ts": "2026-11-03T09:00:00Z", "symbol": "XRP", "price": 1.183,
   "btc": {"price": 81250, "chg_24h": 1.2, "chg_7d": -3.4, "above_sma50": true, "above_sma200": true, "dominance": 58.1, "regime": "neutral"},
-  "market": {"fear_greed": 41, "headlines": ["...", "..."]},
+  "market": {"fear_greed": 41, "total_mcap_chg_24h": 1.2, "stablecoin_share": 7.9, "headlines": ["...", "..."]},
   "coin_news": ["...", "..."],
   "flow": {"funding_8h": 0.006, "oi_chg_24h": 3.1, "taker_buy_sell": 1.08, "long_short": 1.32},
   "whales": {"large_trade_share": 0.12},
@@ -623,5 +624,5 @@ Create a new key, update the SSM parameter (`--overwrite`), restart the services
 - [ ] Exact OpenClaw config key for custom Telegram commands, and the `/hooks/agent` payload fields for delivering to Telegram.
 - [ ] How to pin the OpenClaw version in the installer.
 - [ ] Your real Gemini Flash free-tier limits in AI Studio (Google no longer publishes fixed numbers for the current Flash models). Free-tier prompts may be used by Google to improve products, so send market data only.
-- [ ] CoinGecko Demo history depth for BTC dominance.
+- [ ] CMC global-metrics field names (`btc_dominance`, `stablecoin_market_cap`, `total_market_cap_yesterday_percentage_change`): `pytest -m live` checks them.
 - [ ] The t4g.small free trial end date (31 Dec 2026 per current reports) and what the instance will cost afterwards.

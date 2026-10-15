@@ -33,7 +33,6 @@ NAMES = frozenset(
     {
         "cmc_api_key",
         "newsapi_key",
-        "coingecko_api_key",
         "gemini_api_key",
         "anthropic_api_key",
         "openrouter_api_key",
