@@ -119,6 +119,22 @@ resource "aws_iam_role_policy" "sentinel_permissions" {
   })
 }
 
+# Terraform owns the role's complete set of policies: a policy attached or added by hand
+# shows up in the plan and is removed on apply, instead of silently widening what the
+# instance can do.
+resource "aws_iam_role_policy_attachments_exclusive" "sentinel_role" {
+  role_name   = aws_iam_role.sentinel_role.name
+  policy_arns = []
+}
+
+resource "aws_iam_role_policies_exclusive" "sentinel_role" {
+  role_name = aws_iam_role.sentinel_role.name
+  policy_names = [
+    aws_iam_role_policy.sentinel_permissions.name,
+    aws_iam_role_policy.session_manager.name,
+  ]
+}
+
 # IAM instance profile
 resource "aws_iam_instance_profile" "sentinel_profile" {
   name = var.instance_profile_name
