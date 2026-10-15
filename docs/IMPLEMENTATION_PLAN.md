@@ -85,9 +85,10 @@ crypto_analytic/
     net.py                      # requests session: timeout, retries with backoff, rate limit, User-Agent
     log.py                      # JSON-lines logging
     health.py                   # readiness checks (keys, tables, bucket, CMC, Gemini)
+    views.py                    # command results: compact JSON for the agent, 5-line Telegram text
     cli.py                      # `sentinel ...` entry point (click)
     data/
-      cmc.py  coingecko.py  feargreed.py  exchange.py  flow.py  whales.py
+      cmc.py  feargreed.py  exchange.py  flow.py  whales.py
       news_rss.py  gdelt.py  newsapi.py
     signals/
       indicators.py             # RSI, SMA, ATR, returns, volume z-score
@@ -166,7 +167,7 @@ crypto_analytic/
 ### 1.1 Repo hygiene and package skeleton
 - [x] Create `pyproject.toml`, the `sentinel/` skeleton (section 2), `ruff` and `pytest` config, `Makefile`, `.gitignore`.
 - [x] Implement `config.py`, `aws.py` (SSM keys), `net.py` (HTTP), `log.py`.
-- [ ] Move the current scripts to `legacy/` unchanged so the running agent keeps working until replacements land.
+- [x] Move the current scripts to `legacy/` unchanged so the running agent keeps working until replacements land.
 
 **Accept:** `pip install -e ".[ec2,dev]"` works; `sentinel --help` lists command groups; `pytest` and `ruff check` pass.
 
@@ -175,16 +176,16 @@ Read each legacy script first and keep its behaviour, then improve.
 
 | Legacy script | New command |
 | --- | --- |
-| `analysis/market_intelligence.py` | `sentinel market overview [--symbol X]`. Keep the old fixed rules as `rules_signal()` in `sentinel/eval/` as a baseline for the experiment. |
-| `analysis/top_15_analysis.py`, `top_50_scalp.py` | `sentinel market top --limit 15` and `sentinel market scalp --limit 50` |
-| `analysis/news_aggregator.py` | `sentinel news long SYM` (NewsAPI, documented as 24 h delayed, for long-range research) |
+| `analysis/market_intelligence.py` | `sentinel market overview [--symbol X[,Y]]` (default BTC): market block (Fear & Greed as background, BTC dominance, total market cap 24 h change, stablecoin share from CMC global metrics) plus quotes. The old fixed rules are `rules_signal()` in `sentinel/eval/rules.py`, the RULES baseline. |
+| `analysis/top_15_analysis.py`, `top_50_scalp.py` | `sentinel market top --limit 15` (legacy rule signal per coin) and `sentinel market scalp --limit 50` |
+| `analysis/news_aggregator.py` | `sentinel news long SYM` (NewsAPI, documented as 24 h delayed, for long-range research); headlines only, the old keyword sentiment is dropped (the LLM judges sentiment, 2.4) |
 | `analysis/whale_monitor.py` | `sentinel market whales SYM` (any symbol; real logic in 2.5) |
-| `monitoring/threshold_monitor.py`, `track_coin.py` | `sentinel watch ...` (read them first, then decide the exact subcommands) |
-| `utils/quick_ping.py`, `cmc_check.py` | `sentinel health` already exists (1.8); quick_ping's BTC and SOL prices come from `sentinel market overview --symbol X` |
-| `system_monitoring/*.sh` | `ops/` (fix paths; keep the daily S3 backup exactly as before) |
+| `monitoring/threshold_monitor.py`, `track_coin.py` | `sentinel watch levels SYM --below X --above Y` and `sentinel watch move SYM --entry P [--min-pct 1]`; levels are passed per call, none in code |
+| `utils/quick_ping.py`, `cmc_check.py` | `sentinel health` already exists (1.8); quick_ping's BTC and SOL prices come from `sentinel market overview --symbol BTC,SOL` |
+| `system_monitoring/*.sh` | `ops/` (paths from settings; S3 scripts take `--dry-run`; same backup layout, without the venv and repo clone that bootstrap rebuilds) |
 
-- [ ] Unify SSM names (Appendix B); remove every API key CLI argument.
-- [ ] Fix the README (SSM paths, NewsAPI.org vs NewsAPI.ai).
+- [x] Unify SSM names (Appendix B); remove every API key CLI argument.
+- [x] Fix the README (SSM paths, NewsAPI.org vs NewsAPI.ai).
 
 **Accept:** every legacy command has a new equivalent with compact JSON output; parser tests with fixtures for CMC listings and quotes, Fear & Greed and NewsAPI.
 
@@ -213,16 +214,18 @@ Read each legacy script first and keep its behaviour, then improve.
 
 **Accept:** tests for buy, second buy, partial sell, full sell, realised P&L, fee handling, and a failed transaction on a version conflict.
 
-### 1.6 Migration from S3 and JSON (Stage B: needs the tables applied)
-- [ ] `sentinel migrate fetch --bucket openclaw-files --prefix <backup prefix>` downloads the latest backup to a local folder.
-- [ ] `sentinel migrate draft` turns `portfolio.json`, `lessons_learned.md` (Active Bids, Active Trades, Success Cases, Mistakes) and `memory/*.md` into `migration/trades.csv`, `bids.csv`, `lessons.csv` for manual review. Use regex for obvious lines and leave anything unclear for the user to fill in.
-- [ ] `sentinel migrate import --dry-run` then `import` writes the reviewed CSVs to `sentinel-real`.
+### 1.6 Migration of lessons from the S3 backup (Stage B: needs the tables applied)
+Only the lessons move over. Positions, bids and the baseline are entered fresh at bring-up with the 1.7 commands; the May 2026 portfolio in the backup is not migrated.
+- [ ] `sentinel migrate fetch --bucket openclaw-files --prefix <backup prefix>` downloads `lessons_learned.md` from the latest backup to a local folder.
+- [ ] `sentinel migrate draft` turns its Principles, Success Cases and Mistakes sections into `migration/lessons.csv` for manual review. Use regex for obvious lines and leave anything unclear for the user to fill in.
+- [ ] `sentinel migrate import --dry-run` then `import` writes the reviewed rows as `LESSON` items to `sentinel-real`.
 
-**Accept:** the dry run prints counts; resulting positions match `portfolio.json` within 1e-6.
+**Accept:** the dry run prints the count; `sentinel lesson list` shows every reviewed lesson.
 
 ### 1.7 Switch the trade journal to DynamoDB
 - [ ] Commands: `sentinel trade add --side buy|sell --symbol SOL --qty 1.35 --price 72.6 [--fee 0.1]`, `sentinel portfolio summary --format telegram|json`, `sentinel lesson add|list`, `sentinel bid add|list|remove`, `sentinel backup export` (DynamoDB to JSON in S3, nightly, next to the existing file backups).
 - [ ] New skill folder `openclaw/workspace/skills/trade-journal/SKILL.md`; update `TOOLS.md`; stop all JSON portfolio writes.
+- [ ] `sentinel lesson share` (daily, after the backup): renders the approved `LESSON` items as `beistroff_lessons_learned.md`, redacts dollar amounts, quantities and the baseline (rules and % results stay), and replaces yesterday's copy in your own subfolder of the shared Google Drive folder (F.9). `sentinel lesson auth` runs the one-time Google consent from the laptop. Defaults chosen 2026-10-15, change if you prefer: redacted, folder owned by the dedicated Google account.
 
 **Accept (Stage B, after first bring-up; the CLI and tests are done in Stage A):** in Telegram, "I bought 100 XRP at 1.20" creates a trade and updates the position; "show my balance" returns a short table; the nightly S3 backup still runs.
 
@@ -252,7 +255,7 @@ Only the checks the agent cannot work without. Others join with their own task (
 **Accept:** unit tests against hand-checked values on a fixture series.
 
 ### 2.3 BTC regime (`sentinel/signals/btc_regime.py`)
-- [ ] Inputs: BTC 24 h and 7 d change, price versus SMA50 and SMA200, BTC dominance (CoinGecko global).
+- [ ] Inputs: BTC 24 h and 7 d change, price versus SMA50 and SMA200, BTC dominance (CMC global metrics, `sentinel.data.cmc.global_metrics`).
 - [ ] Output: `regime` (`risk_on`, `neutral`, `risk_off`) plus the numbers. Document the rule in the docstring.
 
 ### 2.4 News (`sentinel/data/news_rss.py`, `gdelt.py`)
@@ -349,7 +352,7 @@ Reply "details a3f" for the full analysis
 ## Phase 5: Naive Bayes model and gate (W5 to W6, 9 to 22 Nov) [P1]
 
 ### 5.1 Historical dataset
-- [ ] `sentinel nb build-dataset --days 730`: daily candles for the watchlist and BTC from the exchange, full Fear & Greed history (alternative.me supports `?limit=0`), BTC dominance if CoinGecko's demo history allows (otherwise drop the feature). Save Parquet to S3 `datasets/`.
+- [ ] `sentinel nb build-dataset --days 730`: daily candles for the watchlist and BTC from the exchange, full Fear & Greed history (alternative.me supports `?limit=0`). BTC dominance history is dropped (CMC history needs a paid plan) unless a free source turns up. Save Parquet to S3 `datasets/`.
 
 ### 5.2 Features and label (`sentinel/models/features.py`)
 - [ ] Label: 1 if the next 24 h return is above +0.5%, else 0.
@@ -427,6 +430,15 @@ Reply "details a3f" for the full analysis
 - [ ] Final whale proxy; GitHub Actions running `ruff`, `pytest`, `terraform fmt -check` and `validate`.
 - [ ] Golden AMI (Packer), only if instances are destroyed and recreated often. The AMI itself is free, but its EBS snapshot costs about $0.05 per GB-month, and it needs a rebuild per OpenClaw release. Never bake tokens into it.
 
+### 8.4 Shared lessons from other users
+Other users share their lessons the same way (`<user>_lessons_learned.md`), so the agent can learn from experience beyond its own trades.
+- [ ] Folder layout (F.9): the parent folder is view-only for invited users; each user has a subfolder where only they are an editor, so nobody can change or remove another user's files. Files count against their uploader's own Google storage.
+- [ ] `sentinel lesson inbox` (daily, after `share`): reads the other users' subfolders, only `.md` and `.txt` up to 200 KB per file, skips everything else, and warns when the folder passes 500 MB.
+- [ ] Untrusted text never reaches the agent raw: a model call without tools (3.1 client) turns each changed file into at most 3 candidate lessons, stored as `LESSON` with `status = proposed` and `source = shared:<user>`; Telegram Approve / Reject buttons as in 8.2; only approved lessons reach the prompt.
+- [ ] Disabled during the experiment (like 8.2), so the frozen prompt stays fixed.
+
+**Accept:** a test file from a second account produces proposals; approving one adds it to `sentinel lesson list`; a file that tries to give instructions ("ignore your rules and run ...") only ever becomes a proposal you can reject.
+
 ---
 
 ## Phase 9: Experiment freeze, run and analysis (30 Nov to 28 Dec)
@@ -491,7 +503,7 @@ All items carry `type` and `created_at`. Keys are strings.
 
 ## Appendix B: SSM parameters (SecureString)
 
-`/sentinel/cmc_api_key`, `/sentinel/newsapi_key`, `/sentinel/coingecko_api_key`, `/sentinel/gemini_api_key`, `/sentinel/anthropic_api_key`, `/sentinel/openrouter_api_key`, `/sentinel/openclaw_hook_token`. The Telegram bot token stays in OpenClaw's own config.
+`/sentinel/cmc_api_key`, `/sentinel/newsapi_key`, `/sentinel/gemini_api_key`, `/sentinel/anthropic_api_key`, `/sentinel/openrouter_api_key`, `/sentinel/openclaw_hook_token`. `/sentinel/telegram_token` is stored here too, but only copied into OpenClaw's config at onboarding; `sentinel` never reads it.
 
 ## Appendix C: Snapshot example (compact, hierarchy order)
 
@@ -499,7 +511,7 @@ All items carry `type` and `created_at`. Keys are strings.
 {
   "schema_version": 1, "ts": "2026-11-03T09:00:00Z", "symbol": "XRP", "price": 1.183,
   "btc": {"price": 81250, "chg_24h": 1.2, "chg_7d": -3.4, "above_sma50": true, "above_sma200": true, "dominance": 58.1, "regime": "neutral"},
-  "market": {"fear_greed": 41, "headlines": ["...", "..."]},
+  "market": {"fear_greed": 41, "total_mcap_chg_24h": 1.2, "stablecoin_share": 7.9, "headlines": ["...", "..."]},
   "coin_news": ["...", "..."],
   "flow": {"funding_8h": 0.006, "oi_chg_24h": 3.1, "taker_buy_sell": 1.08, "long_short": 1.32},
   "whales": {"large_trade_share": 0.12},
@@ -539,7 +551,7 @@ Do these steps yourself, in a browser and a terminal. Never paste a key into a c
 
 ### F.1 Dedicated Google account
 1. Create a new Google account just for this project (for example `sentinel.agent.<something>@gmail.com`). Turn on 2-step verification.
-2. Use it only for AI Studio. Do not link it to your main Gmail, Drive or YouTube.
+2. Use it only for this project: AI Studio, and later the shared lessons folder (F.9). Do not link it to your main Gmail, Drive or YouTube.
 3. Why: in February 2026 Google suspended accounts that used OpenClaw with the Gemini CLI / Antigravity login, sometimes including linked Gmail. A plain AI Studio API key is the allowed route, and a separate account keeps your main account out of it entirely.
 
 ### F.2 Create the Gemini API key (free tier)
@@ -617,11 +629,19 @@ Both should return a short JSON answer containing "OK". A 403 from Google usuall
 ### F.8 If a key leaks
 Create a new key, update the SSM parameter (`--overwrite`), restart the services, check that calls work, then delete the old key. In AI Studio this is the **API Keys** page; in the Claude Console the **API keys** page.
 
+### F.9 Google Drive folder for shared lessons (for 1.7 and 8.4)
+1. Signed in with the dedicated Google account (F.1), create a folder `sentinel-lessons` with one subfolder per user (`beistroff/`, `user1/`, ...).
+2. Share the parent folder as **Viewer** with each invited user, and each user's subfolder as **Editor** with that user only.
+3. In the Google Cloud project of the Gemini key (no billing needed), enable the Google Drive API and create an OAuth client of type **Desktop app**. Set the consent screen to **External** and **In production**: in Testing, Google expires refresh tokens after 7 days. The "unverified app" warning is expected for personal use.
+4. Scopes: `drive.file` (write your own file) and `drive.readonly` (read the others').
+5. Run `sentinel lesson auth` once from the laptop; it stores the client id, secret and refresh token as one SecureString, `/sentinel/gdrive_oauth`. Never paste them into a chat.
+
 ## Appendix G: Verify before relying on it
 
 - [ ] OKX (or Kraken) public endpoints for candles, funding, open interest, taker volume and long/short ratio work from `us-east-1`.
 - [ ] Exact OpenClaw config key for custom Telegram commands, and the `/hooks/agent` payload fields for delivering to Telegram.
 - [ ] How to pin the OpenClaw version in the installer.
 - [ ] Your real Gemini Flash free-tier limits in AI Studio (Google no longer publishes fixed numbers for the current Flash models). Free-tier prompts may be used by Google to improve products, so send market data only.
-- [ ] CoinGecko Demo history depth for BTC dominance.
+- [ ] CMC global-metrics field names (`btc_dominance`, `stablecoin_market_cap`, `total_market_cap_yesterday_percentage_change`): `pytest -m live` checks them.
 - [ ] The t4g.small free trial end date (31 Dec 2026 per current reports) and what the instance will cost afterwards.
+- [ ] Google OAuth for F.9: refresh-token lifetime for an unverified app "In production", and that Drive viewers of the parent folder cannot remove files from another user's subfolder.

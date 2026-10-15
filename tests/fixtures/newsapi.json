@@ -1,0 +1,15 @@
+{
+  "status": "ok",
+  "totalResults": 3,
+  "articles": [
+    {"source": {"id": null, "name": "Example Wire"}, "author": null,
+     "title": "Solana network upgrade goes live after months of testing",
+     "url": "https://example.com/news/solana-upgrade", "publishedAt": "2026-11-02T08:00:00Z"},
+    {"source": {"id": null, "name": "Example Markets"}, "author": null,
+     "title": "Funds add SOL exposure as volumes climb",
+     "url": "https://example.com/news/sol-funds", "publishedAt": "2026-11-02T06:30:00Z"},
+    {"source": {"id": null, "name": "Example Daily"}, "author": null,
+     "title": "Validators debate fee changes",
+     "url": "https://example.com/news/validators", "publishedAt": "2026-11-02T05:00:00Z"}
+  ]
+}

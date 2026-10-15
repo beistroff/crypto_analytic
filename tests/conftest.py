@@ -70,19 +70,22 @@ def _fresh_state(monkeypatch):
 def make_server():
     """Start local HTTP servers that answer scripted replies, then 200 ``{"ok": true}``.
 
-    Append ``(status, headers)`` or ``(status, headers, json_body)`` to ``.replies``;
-    ``.seen`` lists each request's path and headers.
+    Append ``(status, headers)`` or ``(status, headers, json_body)`` to ``.replies``
+    (used once each, in order), or set ``.routes[path]`` to answer every request for
+    that path (without query string). ``.seen`` lists each request's path and headers.
     """
     servers = []
 
     def start():
         replies = []
+        routes = {}
         seen = []
 
         class Handler(BaseHTTPRequestHandler):
             def do_GET(self):
                 seen.append(SimpleNamespace(path=self.path, headers=dict(self.headers)))
-                reply = replies.pop(0) if replies else (200, {})
+                route = routes.get(self.path.split("?")[0])
+                reply = replies.pop(0) if replies else route or (200, {})
                 body = json.dumps(reply[2] if len(reply) > 2 else {"ok": True}).encode()
                 self.send_response(reply[0])
                 for name, value in reply[1].items():
@@ -100,7 +103,9 @@ def make_server():
         threading.Thread(target=httpd.serve_forever, args=(0.05,), daemon=True).start()
         servers.append(httpd)
         base = f"http://127.0.0.1:{httpd.server_port}"
-        return SimpleNamespace(base=base, url=f"{base}/v1/quotes", replies=replies, seen=seen)
+        return SimpleNamespace(
+            base=base, url=f"{base}/v1/quotes", replies=replies, routes=routes, seen=seen
+        )
 
     yield start
     for httpd in servers:

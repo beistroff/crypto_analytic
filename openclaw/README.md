@@ -1,26 +1,14 @@
 # OpenClaw Agent
 
-This directory contains the core logic and foundational scripts for the `openclaw` agent, including tools for data analysis, system monitoring, and portfolio management.
+This directory holds the agent's OpenClaw side: its workspace (persona, rules, memory templates) and the instance bootstrap. The data tools the agent calls are the `sentinel` package at the repo root (`sentinel --help`); operational shell scripts are in `ops/`; the old standalone scripts are kept unchanged in `legacy/` until their replacements are proven.
 
-**Note:** While this directory includes the agent's executable scripts, it does not contain the agent's full memory or context. Those dynamic files are generated during operation within the `/workspace` and are backed up separately to S3.
+**Note:** This directory does not contain the agent's full memory or context. Those dynamic files are generated during operation within the `/workspace` and are backed up separately to S3 (`ops/s3_backup.sh`).
 
 ## Directory Structure
 
-The agent's functionality is organized into the following subdirectories:
-
-- **`/analysis`**: Contains scripts focused on market intelligence. These tools perform quantitative analysis, scalp candidate identification, and news aggregation to generate market signals.
-
-- **`/monitoring`**: Holds scripts for actively tracking market conditions. This includes monitoring specific price thresholds or tracking the performance of an individual coin after a trade is made.
-
-- **`/portfolio`**: Includes tools for managing the trade portfolio. This involves saving new trades and generating performance summaries (e.g., ROI, total value).
-
-- **`/system_monitoring`**: Contains shell scripts for maintaining the agent's operational environment, such as performing backups to S3 and generating system resource reports.
-
-- **`/utils`**: A collection of helper scripts and common utilities that are used by other parts of the agent, like quick price checks.
-
 - **`/workspace`**: This is the agent's "mind." It contains foundational files like `AGENTS.md` and `SOUL.md` that define the agent's behavior. The files included in the repository serve as a powerful starting template, but users are encouraged to tune and customize them to fit their own needs and strategies.
 
-- **`bootstrap.sh`**: A shell script used by Terraform's `user_data` to set up the agent on a new EC2 instance.
+- **`bootstrap.sh`**: run by Terraform's `user_data` on a new EC2 instance: OS packages, the `sentinel` package at `sentinel_ref`, the readiness gate (`sentinel health`), then OpenClaw.
 
 ---
 

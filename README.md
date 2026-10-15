@@ -23,7 +23,7 @@ graph TD
 
     subgraph "External Services"
         direction LR
-        NewsAPI("[NewsAPI.ai]")
+        NewsAPI("[NewsAPI.org]")
         CoinMarketCap("[CoinMarketCap API]")
         MessagingPlatform("Messaging Platform API\n(e.g., Telegram, Discord)")
         CryptoExchange("Crypto Exchange")
@@ -77,11 +77,12 @@ This guide provides the steps to get your own `openclaw` agent running. While an
 Before you begin, ensure you have the following:
 
 *   **A Server/Compute Environment**: A place to run the agent, such as a personal server, a virtual machine, or a cloud instance (e.g., AWS EC2, GCP Compute Engine).
-*   **Python 3**: The agent is written in Python and has been tested with Python 3.8.
+*   **Python 3.12**: the `sentinel` package (the agent's data tools) runs on Python 3.12 or newer.
 *   **Messaging Platform Bot**: A bot for your preferred messaging service (e.g., Slack, Discord) to communicate with the agent. You will need its API token.
 *   **API Keys**:
-    *   **NewsAPIAI**: For fetching news data.
-    *   **CoinMarketCap**: For fetching cryptocurrency market data.
+    *   **NewsAPI.org**: For news headlines (the free developer plan delivers articles about 24 h late).
+    *   **CoinMarketCap**: For market data (the free Basic plan is enough).
+    *   **Google Gemini**: The agent's model (an AI Studio API key).
 
 ### 2. Configuration: Managing Secrets
 
@@ -90,17 +91,29 @@ The agent needs secure access to your API keys. Obviously, they should **never**
 
 If you are deploying on AWS, you can store the API keys as encrypted `SecureString` parameters in the AWS Systems Manager (SSM) Parameter Store. The agent's IAM role will allow it to securely fetch them at runtime.
 
-Use the AWS CLI to store your secrets:
+The code reads exactly these names under `/sentinel/` and refuses anything that is not a `SecureString`: `cmc_api_key`, `newsapi_key`, `gemini_api_key` (plus `telegram_token`, which you copy into OpenClaw at onboarding). Store each one without it landing in your shell history (`read -s` hides the input):
 ```bash
-# Replace placeholders with your actual API keys/tokens
-aws ssm put-parameter --name "/crypto/api/messaging_token" --value "YOUR_MESSAGING_BOT_TOKEN" --type SecureString
-aws ssm put-parameter --name "/crypto/api/newsapi" --value "YOUR_NEWSAPI_KEY" --type SecureString
-aws ssm put-parameter --name "/crypto/api/coinmarketcap" --value "YOUR_COINMARKETCAP_KEY" --type SecureString
+read -s KEY   # paste the key, press Enter
+aws ssm put-parameter --name /sentinel/cmc_api_key --type SecureString --value "$KEY" --overwrite
+unset KEY
 ```
+Keys are only ever sent in request headers; never pass them as command-line arguments.
+
+### 2b. The `sentinel` command line
+
+The agent never fetches data itself: it runs `sentinel` commands, which fetch and compute, and then reasons over their compact output.
+```bash
+python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
+make install                                        # pip install -c constraints.txt -e ".[ec2,dev]"
+sentinel --help
+sentinel health --format telegram                   # needs AWS credentials for SSM
+sentinel market overview --symbol BTC,SOL
+```
+`make test` and `make lint` run the tests (no network) and ruff.
 
 ### 3. Deployment
 
-You need to run the `openclaw` script on your chosen server.
+You need OpenClaw and the `sentinel` package on your chosen server. On AWS, `openclaw/bootstrap.sh` installs both and then runs `sentinel health` as a readiness gate; `~/sentinel/.ready` appears only when it passes.
 
 #### Example: Deploying on AWS EC2 with Terraform
 
