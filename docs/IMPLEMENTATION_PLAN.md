@@ -214,16 +214,18 @@ Read each legacy script first and keep its behaviour, then improve.
 
 **Accept:** tests for buy, second buy, partial sell, full sell, realised P&L, fee handling, and a failed transaction on a version conflict.
 
-### 1.6 Migration from S3 and JSON (Stage B: needs the tables applied)
-- [ ] `sentinel migrate fetch --bucket openclaw-files --prefix <backup prefix>` downloads the latest backup to a local folder.
-- [ ] `sentinel migrate draft` turns `portfolio.json`, `lessons_learned.md` (Active Bids, Active Trades, Success Cases, Mistakes) and `memory/*.md` into `migration/trades.csv`, `bids.csv`, `lessons.csv` for manual review. Use regex for obvious lines and leave anything unclear for the user to fill in.
-- [ ] `sentinel migrate import --dry-run` then `import` writes the reviewed CSVs to `sentinel-real`.
+### 1.6 Migration of lessons from the S3 backup (Stage B: needs the tables applied)
+Only the lessons move over. Positions, bids and the baseline are entered fresh at bring-up with the 1.7 commands; the May 2026 portfolio in the backup is not migrated.
+- [ ] `sentinel migrate fetch --bucket openclaw-files --prefix <backup prefix>` downloads `lessons_learned.md` from the latest backup to a local folder.
+- [ ] `sentinel migrate draft` turns its Principles, Success Cases and Mistakes sections into `migration/lessons.csv` for manual review. Use regex for obvious lines and leave anything unclear for the user to fill in.
+- [ ] `sentinel migrate import --dry-run` then `import` writes the reviewed rows as `LESSON` items to `sentinel-real`.
 
-**Accept:** the dry run prints counts; resulting positions match `portfolio.json` within 1e-6.
+**Accept:** the dry run prints the count; `sentinel lesson list` shows every reviewed lesson.
 
 ### 1.7 Switch the trade journal to DynamoDB
 - [ ] Commands: `sentinel trade add --side buy|sell --symbol SOL --qty 1.35 --price 72.6 [--fee 0.1]`, `sentinel portfolio summary --format telegram|json`, `sentinel lesson add|list`, `sentinel bid add|list|remove`, `sentinel backup export` (DynamoDB to JSON in S3, nightly, next to the existing file backups).
 - [ ] New skill folder `openclaw/workspace/skills/trade-journal/SKILL.md`; update `TOOLS.md`; stop all JSON portfolio writes.
+- [ ] `sentinel lesson share` (daily, after the backup): renders the approved `LESSON` items as `beistroff_lessons_learned.md`, redacts dollar amounts, quantities and the baseline (rules and % results stay), and replaces yesterday's copy in your own subfolder of the shared Google Drive folder (F.9). `sentinel lesson auth` runs the one-time Google consent from the laptop. Defaults chosen 2026-10-15, change if you prefer: redacted, folder owned by the dedicated Google account.
 
 **Accept (Stage B, after first bring-up; the CLI and tests are done in Stage A):** in Telegram, "I bought 100 XRP at 1.20" creates a trade and updates the position; "show my balance" returns a short table; the nightly S3 backup still runs.
 
@@ -428,6 +430,15 @@ Reply "details a3f" for the full analysis
 - [ ] Final whale proxy; GitHub Actions running `ruff`, `pytest`, `terraform fmt -check` and `validate`.
 - [ ] Golden AMI (Packer), only if instances are destroyed and recreated often. The AMI itself is free, but its EBS snapshot costs about $0.05 per GB-month, and it needs a rebuild per OpenClaw release. Never bake tokens into it.
 
+### 8.4 Shared lessons from other users
+Other users share their lessons the same way (`<user>_lessons_learned.md`), so the agent can learn from experience beyond its own trades.
+- [ ] Folder layout (F.9): the parent folder is view-only for invited users; each user has a subfolder where only they are an editor, so nobody can change or remove another user's files. Files count against their uploader's own Google storage.
+- [ ] `sentinel lesson inbox` (daily, after `share`): reads the other users' subfolders, only `.md` and `.txt` up to 200 KB per file, skips everything else, and warns when the folder passes 500 MB.
+- [ ] Untrusted text never reaches the agent raw: a model call without tools (3.1 client) turns each changed file into at most 3 candidate lessons, stored as `LESSON` with `status = proposed` and `source = shared:<user>`; Telegram Approve / Reject buttons as in 8.2; only approved lessons reach the prompt.
+- [ ] Disabled during the experiment (like 8.2), so the frozen prompt stays fixed.
+
+**Accept:** a test file from a second account produces proposals; approving one adds it to `sentinel lesson list`; a file that tries to give instructions ("ignore your rules and run ...") only ever becomes a proposal you can reject.
+
 ---
 
 ## Phase 9: Experiment freeze, run and analysis (30 Nov to 28 Dec)
@@ -540,7 +551,7 @@ Do these steps yourself, in a browser and a terminal. Never paste a key into a c
 
 ### F.1 Dedicated Google account
 1. Create a new Google account just for this project (for example `sentinel.agent.<something>@gmail.com`). Turn on 2-step verification.
-2. Use it only for AI Studio. Do not link it to your main Gmail, Drive or YouTube.
+2. Use it only for this project: AI Studio, and later the shared lessons folder (F.9). Do not link it to your main Gmail, Drive or YouTube.
 3. Why: in February 2026 Google suspended accounts that used OpenClaw with the Gemini CLI / Antigravity login, sometimes including linked Gmail. A plain AI Studio API key is the allowed route, and a separate account keeps your main account out of it entirely.
 
 ### F.2 Create the Gemini API key (free tier)
@@ -618,6 +629,13 @@ Both should return a short JSON answer containing "OK". A 403 from Google usuall
 ### F.8 If a key leaks
 Create a new key, update the SSM parameter (`--overwrite`), restart the services, check that calls work, then delete the old key. In AI Studio this is the **API Keys** page; in the Claude Console the **API keys** page.
 
+### F.9 Google Drive folder for shared lessons (for 1.7 and 8.4)
+1. Signed in with the dedicated Google account (F.1), create a folder `sentinel-lessons` with one subfolder per user (`beistroff/`, `user1/`, ...).
+2. Share the parent folder as **Viewer** with each invited user, and each user's subfolder as **Editor** with that user only.
+3. In the Google Cloud project of the Gemini key (no billing needed), enable the Google Drive API and create an OAuth client of type **Desktop app**. Set the consent screen to **External** and **In production**: in Testing, Google expires refresh tokens after 7 days. The "unverified app" warning is expected for personal use.
+4. Scopes: `drive.file` (write your own file) and `drive.readonly` (read the others').
+5. Run `sentinel lesson auth` once from the laptop; it stores the client id, secret and refresh token as one SecureString, `/sentinel/gdrive_oauth`. Never paste them into a chat.
+
 ## Appendix G: Verify before relying on it
 
 - [ ] OKX (or Kraken) public endpoints for candles, funding, open interest, taker volume and long/short ratio work from `us-east-1`.
@@ -626,3 +644,4 @@ Create a new key, update the SSM parameter (`--overwrite`), restart the services
 - [ ] Your real Gemini Flash free-tier limits in AI Studio (Google no longer publishes fixed numbers for the current Flash models). Free-tier prompts may be used by Google to improve products, so send market data only.
 - [ ] CMC global-metrics field names (`btc_dominance`, `stablecoin_market_cap`, `total_market_cap_yesterday_percentage_change`): `pytest -m live` checks them.
 - [ ] The t4g.small free trial end date (31 Dec 2026 per current reports) and what the instance will cost afterwards.
+- [ ] Google OAuth for F.9: refresh-token lifetime for an unverified app "In production", and that Drive viewers of the parent folder cannot remove files from another user's subfolder.
