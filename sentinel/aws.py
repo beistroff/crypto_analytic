@@ -28,15 +28,13 @@ from sentinel.config import get_settings
 
 PREFIX = "/sentinel/"
 
-# Every parameter the code may read. The Telegram bot token stays in OpenClaw's config.
+# Every parameter the code reads; a name is added with the first module that uses it.
+# (/sentinel/telegram_token is only copied into OpenClaw's config at onboarding.)
 NAMES = frozenset(
     {
         "cmc_api_key",
         "newsapi_key",
         "gemini_api_key",
-        "anthropic_api_key",
-        "openrouter_api_key",
-        "openclaw_hook_token",
     }
 )
 

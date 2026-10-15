@@ -23,12 +23,17 @@ class Headline:
 
 
 def headlines(query: str, limit: int = 5) -> list[Headline]:
-    """Newest articles about ``query`` from the last day available on the plan."""
+    """Newest English articles about ``query`` from the last day available on the plan."""
     since = (datetime.now(UTC) - timedelta(days=1)).strftime("%Y-%m-%d")
+    params = {
+        "q": query,
+        "language": "en",
+        "sortBy": "publishedAt",
+        "from": since,
+        "pageSize": limit,
+    }
     response = net.session("newsapi").get(
-        URL,
-        params={"q": query, "sortBy": "publishedAt", "from": since, "pageSize": limit},
-        headers={"X-Api-Key": aws.get_secret("newsapi_key")},
+        URL, params=params, headers={"X-Api-Key": aws.get_secret("newsapi_key")}
     )
     try:
         body = response.json()
