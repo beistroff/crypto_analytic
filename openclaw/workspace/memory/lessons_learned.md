@@ -8,16 +8,6 @@
 - **DCA Strategy:** Layer entries. Tier 1 = Small test, Tier 2 = Major support buy.
 - **Weekend Risk Management:** Avoid building large positions (>20%) on Friday/Saturday due to "thin" weekend liquidity. Priority is to enter on Monday/Tuesday when institutional volume returns.
 
-## Active Bids (Limit Orders) 🎯
-- **ADA:** Buy 300 ADA @ $0.2250.
-- **LINK:** Buy 13 LINK @ $7.50.
-- **XRP:** Buy 100 XRP @ $1.15.
-- **SOL:** Buy 1.35 SOL @ $72.60.
-- **BTC:** Buy 0.00161 BTC @ $62,000.
-
-## Active Trades (Siege Mode) 🏰
-- **SUI:** 390 units @ $1.2025 avg. Status: **Strategic Hold.** Target: **$1.150** (Risk Mitigation Exit). No further DCA allowed.
-
 ## Success Cases ✅
 - **NEAR Vertical Breakout Scalp (May 6, 2026):** Bought at $1.265, sold at $1.447 for a massive **+14.4%** profit.
 - **TAO Trend Re-Entry Scalp (May 6, 2026):** Bought at $288.00, sold at $301.50 for a **+4.7%** profit.

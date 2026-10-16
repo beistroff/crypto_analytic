@@ -20,15 +20,17 @@ Version 1, 10 October 2026.
 | Topic | Decision |
 | --- | --- |
 | Gateway | OpenClaw stays. Pin the version, gateway on localhost, no ClawHub skills. Hermes Agent is out of scope (possible later comparison). |
-| Agent | By default one agent, one model, with the existing SOUL / IDENTITY persona ("the best crypto analyst"). Default model: Gemini Flash (free tier). |
-| Claude models | Sonnet 5.5 (`claude-sonnet-5-5`) and Haiku 5.5 (`claude-haiku-5-5`) through an **Anthropic API key** with a prepaid limit ($5 to $10), **created later, before Phase 3.5**. A Claude Pro subscription does not include API usage, and subscription use inside third-party agents like OpenClaw changed three times in 2026 and is still unclear, so do not depend on it. |
+| Agent | By default one agent with the existing SOUL / IDENTITY persona ("the best crypto analyst"). Chat model: Claude Haiku 5.5, with the free Gemini models (3.8, 3.7, 3.6 Flash, then 3.5 and 3.1 Flash Lite) as fallbacks. Decided at bring-up (2026-10-16): free Gemini Flash allows 5 requests a minute and 20 a day, which one agent turn plus OpenClaw's retries can use up. |
+| Priorities (2026-10-16) | 1. Bring the agent back: history from the old backup, daily backup and market scan, `web_fetch`. 2. Phase 2 data plus the CMC pass-through (2.7). 3. Trade journal (1.4, 1.5, 1.7). 4. Predictions, alerts, Telegram UX. Deep analysis stays on Haiku with more thinking; Sonnet is not used for chat (cost). |
+| Data access | `sentinel` commands for structured, compact data; `web_fetch` for public, keyless sources (OKX candles, funding, open interest); the CMC pass-through for any other CMC endpoint. The agent never holds an API key: whatever is in its context can end up in replies, memory files and the S3 backup. |
+| Claude models | Sonnet 5.5 (`claude-sonnet-5-5`) and Haiku 5.5 (`claude-haiku-5-5`) through an **Anthropic API key** with $5 of prepaid credit, a $5 monthly spend limit and no auto-reload (created 2026-10-16). A Claude Pro subscription does not include API usage, and Anthropic cut subscriptions off from third-party agents like OpenClaw in April 2026, so do not depend on it. |
 | Data store | DynamoDB is the source of truth: `sentinel-real` (real trades) and `sentinel-sim` (predictions, snapshots, outcomes). Provisioned capacity (2 RCU/WCU per table and index) stays inside the always-free tier; point-in-time recovery is off. Backup is the nightly JSON export to S3 (plus a `portfolio.json` fallback on the instance); the existing daily S3 backups stay as well. Keep S3 under 5 GB with a lifecycle rule on `backups/`. |
 | Lambda | Only for jobs that need no LLM: market scans and alerts, prediction scoring, Naive Bayes retraining. Cost is effectively $0. All LLM calls run on EC2. |
 | Alerts | Lambda puts alerts on SQS; a small poller on EC2 posts them to OpenClaw's local webhook; OpenClaw writes a short warning to Telegram. No inbound ports. |
 | Naive Bayes | A sanity gate and an optional skill, never the source of truth. A deterministic validator runs before it and catches absurd answers more cheaply. |
-| Telegram | Replies of 5 lines or fewer; full reasoning only on request. A `/` command menu plus inline buttons for the common actions. |
+| Telegram | Short summaries and signals (about 5 lines); longer when the user asks for detail, when the agent needs to ask questions, or when the market situation needs explaining. A `/` command menu plus inline buttons for the common actions. |
 | Real money | No automated trading. Simulated trades only for the experiment. Real trades are journaled but are not experiment results. |
-| Cost ceiling | Public IPv4 about $3.60 a month, DynamoDB $0 (free tier), plus at most about $5 to $10 of Anthropic API usage in total. AWS Budgets alarm at $5. |
+| Cost ceiling | Public IPv4 about $3.60 a month, DynamoDB $0 (free tier), plus at most $5 a month of Anthropic API usage (the key's spend limit). AWS Budgets alarm at $5. |
 | Platform | `us-east-1`, Ubuntu 24.04 LTS (22.04 standard support ends mid-2027). Instance type is a variable (t4g.small today); the architecture and AMI follow from it, so another free-tier type needs no code change. Lambda arm64 python3.12; EC2 runs Python 3.12 as well. |
 
 ### 0.1 Infrastructure state and bring-up order (read before Phase 1)
@@ -39,7 +41,7 @@ Version 1, 10 October 2026.
 | --- | --- | --- |
 | **A. Polish offline** | 1.0 (Google account, Gemini key in SSM, test from the laptop), 1.1, 1.2, 1.3 (Terraform fixes plus security hardening, `terraform validate` and `plan` only), 1.4 (DynamoDB Terraform), 1.5 (data layer, tested with `moto`), the CLI part of 1.7, 1.8 (readiness gate code and tests) | No. Only `terraform plan`, local tests and the laptop's AWS CLI. |
 | **Gate** | `terraform fmt -check`, `validate` and `plan` clean in every env; `pytest` and `ruff` pass; bootstrap reviewed. | |
-| **B. First bring-up (together)** | `terraform apply` (bootstrap runs and must pass the 1.8 readiness gate: `~/sentinel/.ready` exists), connect via SSM Session Manager, `openclaw onboard` (latest OpenClaw, then pin that exact version in `bootstrap.sh` and `TOOLS.md`), Telegram bot and DM allowlist, Gemini key check from the instance (F.5 and F.6), 1.6 migration from the S3 backup, 1.7 skill switch and Telegram checks | Yes |
+| **B. First bring-up (together)** | `terraform apply` (bootstrap runs and must pass the 1.8 readiness gate: `~/sentinel/.ready` exists), connect via SSM Session Manager, `openclaw onboard` (latest OpenClaw, then pin that exact version as `openclaw_version` in `terraform.tfvars` and record it in `TOOLS.md`; steps in `openclaw/README.md`), Telegram bot and DM allowlist, Gemini key check from the instance (F.5 and F.6), history import from the old backup (full lessons, the April to May memory notes, the May portfolio as a history note; not the old `HEARTBEAT.md`), daily S3 backup (system crontab) and daily market scan (OpenClaw automation), 1.7 skill switch and Telegram checks | Yes |
 | **C. Phases 2 onward** | As written | Yes |
 
 Notes:
@@ -215,6 +217,8 @@ Read each legacy script first and keep its behaviour, then improve.
 **Accept:** tests for buy, second buy, partial sell, full sell, realised P&L, fee handling, and a failed transaction on a version conflict.
 
 ### 1.6 Migration of lessons from the S3 backup (Stage B: needs the tables applied)
+**Deferred (2026-10-16):** the lessons stay a workspace file (`memory/lessons_learned.md`, copied at bring-up and backed up daily); this migration waits until shared lessons (8.4) need `LESSON` items.
+
 Only the lessons move over. Positions, bids and the baseline are entered fresh at bring-up with the 1.7 commands; the May 2026 portfolio in the backup is not migrated.
 - [ ] `sentinel migrate fetch --bucket openclaw-files --prefix <backup prefix>` downloads `lessons_learned.md` from the latest backup to a local folder.
 - [ ] `sentinel migrate draft` turns its Principles, Success Cases and Mistakes sections into `migration/lessons.csv` for manual review. Use regex for obvious lines and leave anything unclear for the user to fill in.
@@ -274,6 +278,13 @@ Only the checks the agent cannot work without. Others join with their own task (
 - [ ] `--save` stores it as a `SNAP` item in `sentinel-sim` with a 180-day TTL.
 
 **Accept:** snapshots for 10 coins in under 20 s; tests for missing sources and the size budget.
+
+### 2.7 CMC pass-through (`sentinel cmc get`)
+So the agent can ask CMC for more than the fixed commands without ever holding the key.
+- [ ] `sentinel cmc get <endpoint> [--param key=value ...]`: read-only endpoints from an allowlist in config; `sentinel` adds the key header, trims the response to the requested fields and a size budget, and reports the credits used.
+- [ ] A per-day credit budget in settings; the command refuses once it is spent (the free plan has a monthly credit limit).
+
+**Accept:** tests for an allowed and a refused endpoint, the trimming, the budget, and that the key never appears in any output.
 
 ---
 
@@ -503,7 +514,7 @@ All items carry `type` and `created_at`. Keys are strings.
 
 ## Appendix B: SSM parameters (SecureString)
 
-`/sentinel/cmc_api_key`, `/sentinel/newsapi_key`, `/sentinel/gemini_api_key`, `/sentinel/anthropic_api_key`, `/sentinel/openrouter_api_key`, `/sentinel/openclaw_hook_token`. `/sentinel/telegram_token` is stored here too, but only copied into OpenClaw's config at onboarding; `sentinel` never reads it.
+`/sentinel/cmc_api_key`, `/sentinel/newsapi_key`, `/sentinel/gemini_api_key`, `/sentinel/anthropic_api_key`, `/sentinel/openrouter_api_key`, `/sentinel/openclaw_hook_token`. `/sentinel/telegram_token` and `/sentinel/telegram_user_id` (the only Telegram account allowed to talk to the bot) are stored here too, but only copied into OpenClaw's config at onboarding; `sentinel` never reads them. OpenClaw also gets `/sentinel/anthropic_api_key` at onboarding, for the chat model.
 
 ## Appendix C: Snapshot example (compact, hierarchy order)
 
