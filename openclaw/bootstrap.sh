@@ -98,6 +98,15 @@ if ! sudo -u "${AGENT_USER}" -H env AWS_REGION="${AWS_REGION}" \
 fi
 
 echo "[6/6] OpenClaw ${OPENCLAW_VERSION} (installed as ${AGENT_USER}, not root)"
+# The gateway alone takes about 1 GB; on a 2 GB instance an agent turn pushed it into the
+# OOM killer, so add 2 GB of swap (once).
+if [[ ! -f /swapfile ]]; then
+  fallocate -l 2G /swapfile
+  chmod 600 /swapfile
+  mkswap /swapfile
+  swapon /swapfile
+  echo '/swapfile none swap sw 0 0' >> /etc/fstab
+fi
 # Let the user systemd service (gateway) keep running without a login session.
 loginctl enable-linger "${AGENT_USER}"
 # Download first, run second: nothing is piped straight into a shell.
