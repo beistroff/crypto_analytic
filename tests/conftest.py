@@ -13,7 +13,7 @@ import boto3
 import pytest
 from moto import mock_aws
 
-from sentinel import aws, log, net
+from sentinel import aws, config, log, net
 from sentinel.config import ENV_VARS, HttpSettings, get_settings
 from sentinel.data import SourceError, cmc, exchange, feargreed, flow, newsapi
 from sentinel.data.exchange import Candle, Candles
@@ -80,9 +80,10 @@ def _fresh_state(monkeypatch):
 def make_server():
     """Start local HTTP servers that answer scripted replies, then 200 ``{"ok": true}``.
 
-    Append ``(status, headers)`` or ``(status, headers, json_body)`` to ``.replies``
+    Append ``(status, headers)`` or ``(status, headers, body)`` to ``.replies``
     (used once each, in order), or set ``.routes[path]`` to answer every request for
-    that path (without query string). ``.seen`` lists each request's path and headers.
+    that path (without query string). A body is sent as JSON, or as RSS when it is bytes.
+    ``.seen`` lists each request's path and headers.
     """
     servers = []
 
@@ -96,11 +97,14 @@ def make_server():
                 seen.append(SimpleNamespace(path=self.path, headers=dict(self.headers)))
                 route = routes.get(self.path.split("?")[0])
                 reply = replies.pop(0) if replies else route or (200, {})
-                body = json.dumps(reply[2] if len(reply) > 2 else {"ok": True}).encode()
+                body = reply[2] if len(reply) > 2 else {"ok": True}
+                kind = "application/rss+xml" if isinstance(body, bytes) else "application/json"
+                if not isinstance(body, bytes):
+                    body = json.dumps(body).encode()
                 self.send_response(reply[0])
                 for name, value in reply[1].items():
                     self.send_header(name, value)
-                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Type", kind)
                 self.send_header("Content-Length", str(len(body)))
                 self.end_headers()
                 self.wfile.write(body)
@@ -134,8 +138,10 @@ def load_fixture(name):
 
 @pytest.fixture
 def apis(make_server, monkeypatch):
-    """Keys in a mocked SSM, and local CMC, Fear & Greed, NewsAPI, OKX and Kraken servers
-    answering with the recorded fixtures. Sessions have no waits."""
+    """Keys in a mocked SSM, and local CMC, Fear & Greed, NewsAPI, OKX, Kraken and RSS
+    servers answering with the recorded fixtures. Sessions have no waits.
+
+    The two news feeds, "Cointelegraph" and "Mirror", serve the same recorded feed."""
     with mock_aws():
         ssm = boto3.client("ssm", region_name="us-east-1")
         keys = SimpleNamespace(cmc="cmc-test-value", news="news-test-value")
@@ -148,6 +154,7 @@ def apis(make_server, monkeypatch):
             news=make_server(),
             okx=make_server(),
             kraken=make_server(),
+            rss=make_server(),
         )
         servers.cmc.routes.update(
             {
@@ -167,13 +174,20 @@ def apis(make_server, monkeypatch):
             }
         )
         servers.kraken.routes["/0/public/OHLC"] = (200, {}, load_fixture("kraken_ohlc.json"))
+        feed = (200, {}, (FIXTURES / "rss_cointelegraph.xml").read_bytes())
+        servers.rss.routes.update({"/rss": feed, "/mirror": feed})
+        monkeypatch.setattr(
+            config,
+            "NEWS_FEEDS",
+            {"Cointelegraph": f"{servers.rss.base}/rss", "Mirror": f"{servers.rss.base}/mirror"},
+        )
         monkeypatch.setattr(cmc, "BASE_URL", servers.cmc.base)
         monkeypatch.setattr(feargreed, "URL", f"{servers.fng.base}/fng/")
         monkeypatch.setattr(newsapi, "URL", f"{servers.news.base}/v2/everything")
         monkeypatch.setattr(exchange, "OKX_URL", f"{servers.okx.base}/api/v5/market/candles")
         monkeypatch.setattr(exchange, "KRAKEN_URL", f"{servers.kraken.base}/0/public/OHLC")
         monkeypatch.setattr(flow, "BASE_URL", servers.okx.base)
-        names = ("cmc", "feargreed", "newsapi", "okx", "kraken")
+        names = ("cmc", "feargreed", "newsapi", "okx", "kraken", "rss")
         fast = HttpSettings(backoff_s=0, min_interval_s=dict.fromkeys(names, 0))
         monkeypatch.setattr(net, "_sessions", {name: net.Session(name, fast) for name in names})
         yield servers
