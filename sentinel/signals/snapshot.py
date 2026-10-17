@@ -22,6 +22,7 @@ import requests
 from sentinel import aws
 from sentinel.config import get_settings
 from sentinel.data import SourceError, cmc, exchange, feargreed, flow, newsapi
+from sentinel.data.exchange import NotListed
 from sentinel.signals import btc_regime, indicators, schema
 
 DAILY_LIMIT = 300  # SMA200 plus 90 days for beta
@@ -105,7 +106,11 @@ def _fetch(jobs: dict[str, Callable[[], Any]]) -> dict[str, Any]:
             IndexError,
             TypeError,
         ) as exc:
-            log.warning("source unavailable", extra={"source": name, "error": type(exc).__name__})
+            # A coin an exchange does not list (no OKX swap for XMR) is expected, not a fault.
+            level = logging.INFO if isinstance(exc, NotListed) else logging.WARNING
+            log.log(
+                level, "source unavailable", extra={"source": name, "error": type(exc).__name__}
+            )
     return results
 
 

@@ -25,8 +25,10 @@ def _listing(symbol, change_24h=1.2, change_7d=-3.4):
 
 @pytest.fixture
 def top50(trending):
-    """CMC's top 50: BTC, a stablecoin, wrapped BTC, a coin no exchange has, 46 others."""
-    coins = [_listing("BTC"), _listing("USDT"), _listing("WBTC"), _listing("NOPE")]
+    """CMC's top coins: BTC, a listed and a tagged stablecoin, wrapped BTC, a coin no
+    exchange has, 46 others."""
+    tagged = {**_listing("USDG"), "tags": ["stablecoin", "usd-stablecoin"]}
+    coins = [_listing("BTC"), _listing("USDT"), tagged, _listing("WBTC"), _listing("NOPE")]
     coins += [_listing(f"C{i:02}") for i in range(46)]
     body = {"status": {"error_code": 0}, "data": coins}
     trending.cmc.routes[LISTINGS] = (200, {}, body)
@@ -49,7 +51,7 @@ def test_scan_one_row_per_coin_within_budget(top50):
     assert data["btc"]["regime"] == "risk_on"
     assert data["missing"] == ["NOPE"]
     rows = [dict(zip(data["columns"], row, strict=True)) for row in data["rows"]]
-    assert [r["sym"] for r in rows[:2]] == ["BTC", "C00"]  # no USDT, no WBTC
+    assert [r["sym"] for r in rows[:2]] == ["BTC", "C00"]  # no USDT, USDG or WBTC
     assert len(rows) == 47
     assert rows[0]["rs_7d"] is None
     # Uptrend of 0.1% a day: the 7-day wick low is 6 days back, 0.99 x its close.

@@ -10,7 +10,8 @@ candles and its OKX funding rate, fetched in parallel, plus BTC's hourly candles
 - RSI, SMA50/200, strength against BTC and the 7-day wick range come from the daily
   candles (``sentinel.signals.indicators``); ``to_low_7d`` and ``to_high_7d`` are the
   distance in percent from the price to the 7-day wick low and high.
-- Stablecoins and wrapped or staked copies of BTC and ETH are skipped. Coins without
+- Stablecoins (CMC's "stablecoin" tag, or the fixed list) and wrapped or staked copies
+  of BTC and ETH are skipped. Coins without
   candles on any exchange are listed in ``missing``; coins without an OKX swap have no
   funding rate (``null``). When a rate could not be read (rate limit, outage),
   ``missing`` also names ``funding``.
@@ -78,7 +79,11 @@ class Scan:
 
 def build(limit: int) -> Scan:
     now = _now()
-    coins = [c for c in cmc.listings(limit) if c.symbol not in STABLECOINS | WRAPPED]
+    coins = [
+        c
+        for c in cmc.listings(limit)
+        if not c.is_stablecoin and c.symbol not in STABLECOINS | WRAPPED
+    ]
     with ThreadPoolExecutor(max_workers=WORKERS) as pool:
         daily_jobs = {c.symbol: pool.submit(_candles, c.symbol, "1d") for c in coins}
         funding_jobs = {c.symbol: pool.submit(_funding, c.symbol) for c in coins}
