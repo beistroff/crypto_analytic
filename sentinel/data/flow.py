@@ -23,6 +23,7 @@ from typing import Any
 
 from sentinel import net
 from sentinel.data import SourceError
+from sentinel.data.exchange import OKX_NOT_LISTED, NotListed
 
 BASE_URL = "https://www.okx.com"
 FUNDING = "/api/v5/public/funding-rate"
@@ -89,6 +90,8 @@ def _get(path: str, params: dict[str, Any]) -> list[Any]:
     except ValueError:
         body = {}
     code = body.get("code") if isinstance(body, dict) else None
+    if code == OKX_NOT_LISTED:
+        raise NotListed(f"OKX has no {params['instId']}")
     if response.status_code != 200 or code != "0" or not body.get("data"):
         raise SourceError(f"OKX {path}: HTTP {response.status_code}, code {code}")
     return body["data"]

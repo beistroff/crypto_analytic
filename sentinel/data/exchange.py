@@ -20,6 +20,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -43,6 +44,8 @@ OKX_NOT_LISTED = "51001"
 KRAKEN_URL = "https://api.kraken.com/0/public/OHLC"
 KRAKEN_INTERVALS = {"1d": 1440, "4h": 240, "1h": 60}
 KRAKEN_NOT_LISTED = "EQuery:Unknown asset pair"
+
+SYMBOL = re.compile(r"[A-Z0-9]{1,20}")
 
 log = logging.getLogger(__name__)
 
@@ -85,16 +88,26 @@ def pair(exchange: Exchange, symbol: str) -> str:
 def candles(symbol: str, timeframe: Timeframe, limit: int = 200) -> Candles:
     """The newest ``limit`` candles from the first exchange in ``settings.exchanges`` that
     lists the coin. Another exchange is tried when one fails or does not list it."""
+    symbol = symbol.upper()
+    # The ticker becomes part of a cache file name, so only plain tickers pass.
+    if not SYMBOL.fullmatch(symbol):
+        raise SourceError(f"not a ticker: {symbol!r}")
     errors = []
     for exchange in get_settings().exchanges:
         try:
-            return _cached(exchange, symbol.upper(), timeframe, limit)
+            return _cached(exchange, symbol, timeframe, limit)
         except NotListed:
             errors.append(f"{exchange}: not listed")
         except (SourceError, requests.RequestException) as exc:
             log.warning("exchange failed", extra={"exchange": exchange, "error": str(exc)})
             errors.append(f"{exchange}: {exc}")
-    raise SourceError(f"no candles for {symbol.upper()} ({'; '.join(errors)})")
+        except (ValueError, KeyError, IndexError, TypeError) as exc:  # not the expected JSON
+            log.warning(
+                "exchange reply malformed",
+                extra={"exchange": exchange, "error": type(exc).__name__},
+            )
+            errors.append(f"{exchange}: malformed reply")
+    raise SourceError(f"no candles for {symbol} ({'; '.join(errors)})")
 
 
 def _cached(exchange: Exchange, symbol: str, timeframe: Timeframe, limit: int) -> Candles:
@@ -134,7 +147,7 @@ def _kraken(pair_name: str, timeframe: Timeframe, limit: int) -> list[list[float
     if response.status_code != 200 or errors:
         raise SourceError(f"Kraken OHLC: HTTP {response.status_code}, {', '.join(errors)}")
     # The result key is Kraken's own pair name (XXMRZUSD), next to "last".
-    rows = next(v for k, v in body["result"].items() if k != "last")
+    rows = next((v for k, v in body["result"].items() if k != "last"), [])
     # [time s, open, high, low, close, vwap, volume, count], oldest first; vwap * volume
     # is the volume in USD, comparable with OKX's quote volume.
     return [[r[0] * 1000.0, *map(float, r[1:5]), float(r[5]) * float(r[6])] for r in rows[-limit:]]

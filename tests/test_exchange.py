@@ -59,6 +59,18 @@ def test_no_exchange_has_it(venues):
     venues.kraken.routes[KRAKEN_PATH] = (200, {}, {"error": ["EQuery:Unknown asset pair"]})
     with pytest.raises(SourceError, match="no candles for NOPE"):
         exchange.candles("NOPE", "1d")
+    # Only plain tickers reach the cache file name or an exchange.
+    seen = len(venues.okx.seen)
+    with pytest.raises(SourceError, match="not a ticker"):
+        exchange.candles("../x", "1d")
+    assert len(venues.okx.seen) == seen
+
+
+def test_malformed_replies_fall_through_to_a_clean_error(venues):
+    venues.okx.routes[OKX_PATH] = (200, {}, {"code": "0", "data": [["1792195200000"]]})
+    venues.kraken.routes[KRAKEN_PATH] = (200, {}, {"error": [], "result": {"last": 1}})
+    with pytest.raises(SourceError, match=r"okx: malformed reply; kraken: .*no 1d candles"):
+        exchange.candles("BTC", "1d")
 
 
 def test_flow_from_okx_swap(venues):
@@ -80,7 +92,7 @@ def test_flow_from_okx_swap(venues):
 
 def test_flow_for_a_coin_without_a_swap(venues):
     venues.okx.routes[flow.FUNDING] = NOT_ON_OKX
-    with pytest.raises(SourceError, match="code 51001"):
+    with pytest.raises(exchange.NotListed, match="OKX has no XMR-USDT-SWAP"):
         flow.flow("XMR")
 
 

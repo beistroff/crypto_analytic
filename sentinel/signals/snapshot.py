@@ -63,15 +63,15 @@ def build(symbol: str) -> schema.Snapshot:
         missing.append("fomc_calendar")
 
     metrics = got.get("cmc_global")
-    technicals = _technicals(daily, hourly) if daily and hourly else None
-    btc_technicals = _technicals(btc_daily, btc_hourly) if btc_daily and btc_hourly else None
+    coin_technicals = technicals(daily, hourly) if daily and hourly else None
+    btc_technicals = technicals(btc_daily, btc_hourly) if btc_daily and btc_hourly else None
     return schema.Snapshot(
         as_of=iso(now),
         symbol=symbol,
         price=sig(hourly.price) if hourly else None,
         prices_at=iso(hourly.fetched_at) if hourly else None,
         exchange=hourly.exchange if hourly else None,
-        btc=_btc(btc_hourly, btc_technicals, metrics) if btc_technicals else None,
+        btc=btc_context(btc_hourly, btc_technicals, metrics) if btc_technicals else None,
         market=schema.Market(
             fear_greed=got["feargreed"].value if "feargreed" in got else None,
             total_mcap_chg_24h=rounded(metrics.total_mcap_chg_24h) if metrics else None,
@@ -80,7 +80,7 @@ def build(symbol: str) -> schema.Snapshot:
         macro=macro,
         coin_news=[_headline(h) for h in got["news"]] if "news" in got else None,
         flow=_flow(got["flow"]) if "flow" in got else None,
-        technicals=technicals,
+        technicals=coin_technicals,
         levels=_levels(daily) if daily else None,
         vs_btc=_vs_btc(daily, btc_daily) if symbol != "BTC" and daily and btc_daily else None,
         missing=missing,
@@ -95,12 +95,21 @@ def _fetch(jobs: dict[str, Callable[[], Any]]) -> dict[str, Any]:
     for name, future in futures.items():
         try:
             results[name] = future.result()
-        except (SourceError, aws.SecretError, requests.RequestException) as exc:
+        # The last four: a reply that is not the expected JSON (e.g. a maintenance page).
+        except (
+            SourceError,
+            aws.SecretError,
+            requests.RequestException,
+            ValueError,
+            KeyError,
+            IndexError,
+            TypeError,
+        ) as exc:
             log.warning("source unavailable", extra={"source": name, "error": type(exc).__name__})
     return results
 
 
-def _technicals(daily: exchange.Candles, hourly: exchange.Candles) -> schema.Technicals:
+def technicals(daily: exchange.Candles, hourly: exchange.Candles) -> schema.Technicals:
     closes = [c.close for c in daily.candles]
     price = hourly.price
     sma50, sma200 = indicators.sma(closes, 50), indicators.sma(closes, 200)
@@ -123,7 +132,7 @@ def _technicals(daily: exchange.Candles, hourly: exchange.Candles) -> schema.Tec
     )
 
 
-def _btc(
+def btc_context(
     hourly: exchange.Candles, tech: schema.Technicals, metrics: cmc.Market | None
 ) -> schema.BtcContext:
     dominance = rounded(metrics.btc_dominance, 1) if metrics else None

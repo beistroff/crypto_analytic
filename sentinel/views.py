@@ -18,6 +18,7 @@ from sentinel.data import SourceError, cmc, feargreed, newsapi
 from sentinel.eval.rules import is_scalp_candidate, rules_signal
 from sentinel.signals import scan as signals_scan
 from sentinel.signals import snapshot as signals_snapshot
+from sentinel.signals.snapshot import rounded, sig
 
 # Legacy whale_monitor.py: a 1 h pump above this many percent is worth an alert.
 WHALE_PUMP_1H_PCT = 1.5
@@ -103,8 +104,8 @@ def scan(limit: int) -> View:
     head = f"Top {limit} scan, {len(rows)} coins"
     if btc:
         head += (
-            f": BTC {_usd(btc['price'])} {btc['regime']} "
-            f"({_pct_or(btc['chg_24h'])} 24h, {_pct_or(btc['chg_7d'])} 7d)"
+            f": BTC {_usd(btc.price)} {btc.regime} "
+            f"({_pct_or(btc.chg_24h)} 24h, {_pct_or(btc.chg_7d)} 7d)"
         )
     if result.missing:
         head += f"; no data: {', '.join(result.missing)}"
@@ -114,10 +115,12 @@ def scan(limit: int) -> View:
     )
     hot = [f"{r.sym} {r.rsi14:.0f}" for r in rows if r.rsi14 is not None and r.rsi14 > 70]
     cold = [f"{r.sym} {r.rsi14:.0f}" for r in rows if r.rsi14 is not None and r.rsi14 < 30]
+    # The weakest come from the coins not already among the strongest.
+    strongest, weakest = ranked[:3], ranked[3:][::-1][:3]
     lines = [
         head,
-        "Strongest vs BTC 7d: " + ", ".join(f"{r.sym} {r.rs_7d:+.1f}" for r in ranked[:3]),
-        "Weakest vs BTC 7d: " + ", ".join(f"{r.sym} {r.rs_7d:+.1f}" for r in ranked[-3:][::-1]),
+        "Strongest vs BTC 7d: " + ", ".join(f"{r.sym} {r.rs_7d:+.1f}" for r in strongest),
+        "Weakest vs BTC 7d: " + (", ".join(f"{r.sym} {r.rs_7d:+.1f}" for r in weakest) or "none"),
         "Near 7d wick low: " + ", ".join(f"{r.sym} ({r.to_low_7d:+.1f}%)" for r in near_low[:3]),
         f"RSI over 70: {_some(hot)}; under 30: {_some(cold)}",
     ]
@@ -138,7 +141,8 @@ def snapshot(symbol: str) -> View:
     tech, btc, vs = snap.technicals, snap.btc, snap.vs_btc
     head = f"{snap.symbol} {_usd(snap.price)}"
     if tech:
-        head += f" ({_pct_or(tech.chg_24h)} 24h, {_pct_or(tech.chg_7d)} 7d), RSI {tech.rsi14}"
+        rsi = "?" if tech.rsi14 is None else tech.rsi14
+        head += f" ({_pct_or(tech.chg_24h)} 24h, {_pct_or(tech.chg_7d)} 7d), RSI {rsi}"
     if vs and vs.rs_7d is not None:
         head += f", vs BTC 7d {vs.rs_7d:+.1f} pts"
     lines = [head]
@@ -182,7 +186,7 @@ def watch_levels(symbol: str, below: float | None, above: float | None) -> View:
         zone = "sell"
     data = {
         "symbol": coin.symbol,
-        "price": _round(coin.price),
+        "price": sig(coin.price),
         "below": below,
         "above": above,
         "zone": zone,
@@ -203,7 +207,7 @@ def watch_move(symbol: str, entry: float, min_pct: float) -> View:
     alert = abs(change) >= min_pct
     data = {
         "symbol": coin.symbol,
-        "price": _round(coin.price),
+        "price": sig(coin.price),
         "entry": entry,
         "chg_pct": round(change, 2),
         "alert": alert,
@@ -227,9 +231,9 @@ def _market_context() -> tuple[dict[str, Any], list[str]]:
         _skip("feargreed", exc, missing)
     try:
         metrics = cmc.global_metrics()
-        market["btc_dominance"] = _round(metrics.btc_dominance, 1)
-        market["total_mcap_chg_24h"] = _round(metrics.total_mcap_chg_24h, 2)
-        market["stablecoin_share"] = _round(metrics.stablecoin_share, 1)
+        market["btc_dominance"] = rounded(metrics.btc_dominance, 1)
+        market["total_mcap_chg_24h"] = rounded(metrics.total_mcap_chg_24h, 2)
+        market["stablecoin_share"] = rounded(metrics.stablecoin_share, 1)
     except (SourceError, requests.RequestException) as exc:
         _skip("cmc_global", exc, missing)
     return market, missing
@@ -258,9 +262,9 @@ def _quote(symbol: str) -> cmc.Coin:
 def _coin(coin: cmc.Coin) -> dict[str, Any]:
     return {
         "symbol": coin.symbol,
-        "price": _round(coin.price),
-        "chg_1h": _round(coin.change_1h, 2),
-        "chg_24h": _round(coin.change_24h, 2),
+        "price": sig(coin.price),
+        "chg_1h": rounded(coin.change_1h, 2),
+        "chg_24h": rounded(coin.change_24h, 2),
         "vol_mc": round(coin.vol_mc, 3),
     }
 
@@ -276,13 +280,6 @@ def _market_line(market: dict[str, Any]) -> str:
     if market["stablecoin_share"] is not None:
         parts.append(f"stables {market['stablecoin_share']}%")
     return "Market: " + (", ".join(parts) if parts else "no data")
-
-
-def _round(value: float | None, digits: int | None = None) -> float | None:
-    """Prices to 6 significant digits (works for BTC and for tiny coins alike)."""
-    if value is None:
-        return None
-    return round(value, digits) if digits is not None else float(f"{value:.6g}")
 
 
 def _usd(value: float | None) -> str:
