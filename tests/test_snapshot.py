@@ -1,15 +1,12 @@
 import json
-from datetime import UTC, datetime
 
 import pytest
 from click.testing import CliRunner
 
 from sentinel.cli import cli
-from sentinel.data import SourceError, exchange, flow
-from sentinel.data.exchange import PERIOD, Candle, Candles
+from sentinel.data import flow
 from sentinel.signals import snapshot
 
-NOW = datetime(2026, 10, 17, 12, 20, tzinfo=UTC)
 HIERARCHY = [
     "schema_version",
     "as_of",
@@ -32,39 +29,19 @@ HIERARCHY = [
 MAX_CHARS = 6000
 
 
-def _candles(symbol, timeframe, limit=200):
-    """A steady uptrend of 0.1% per candle, the last candle still open."""
-    if symbol == "NOPE":
-        raise SourceError("no candles for NOPE")
-    period = PERIOD[timeframe]
-    start = datetime(2026, 10, 17, tzinfo=UTC) if timeframe == "1d" else NOW.replace(minute=0)
-    base = 80000.0 if symbol == "BTC" else 100.0
-    items = []
-    for i in range(limit):
-        close = base * 1.001 ** (i - limit + 1)  # every timeframe ends at the base price
-        ts = start - period * (limit - 1 - i)
-        items.append(
-            Candle(ts, close, close * 1.01, close * 0.99, close, 1000.0 + i % 5, i < limit - 1)
-        )
-    return Candles(symbol, "okx", exchange.pair("okx", symbol), timeframe, items, NOW)
-
-
-@pytest.fixture
-def market(apis, monkeypatch):
-    monkeypatch.setattr(exchange, "candles", _candles)
-    monkeypatch.setattr(snapshot, "_now", lambda: NOW)
-    return apis
-
-
 def _run(*args):
     result = CliRunner().invoke(cli, ["snapshot", *args])
     assert result.exit_code == 0, result.output
     return result.stdout
 
 
-def test_snapshot_in_hierarchy_order_and_within_budget(market):
+def test_snapshot_in_hierarchy_order_and_within_budget(trending):
     long_title = {"source": {"name": "Example Wire"}, "title": "Solana " + "x" * 300, "url": "u"}
-    market.news.routes["/v2/everything"] = (200, {}, {"status": "ok", "articles": [long_title] * 3})
+    trending.news.routes["/v2/everything"] = (
+        200,
+        {},
+        {"status": "ok", "articles": [long_title] * 3},
+    )
     out = _run("SOL")
     data = json.loads(out)
     assert list(data) == HIERARCHY
@@ -81,17 +58,17 @@ def test_snapshot_in_hierarchy_order_and_within_budget(market):
     assert len(_run("SOL", "--format", "telegram").strip().splitlines()) == 4  # nothing missing
 
 
-def test_btc_snapshot_has_no_comparison_with_itself(market):
+def test_btc_snapshot_has_no_comparison_with_itself(trending):
     data = json.loads(_run("BTC"))
     assert data["vs_btc"] is None
     assert data["technicals"]["rsi14"] == 100.0
     assert data["missing"] == []
 
 
-def test_missing_sources_become_null(market):
-    market.okx.routes[flow.FUNDING] = (200, {}, {"code": "51001", "data": [], "msg": ""})
-    market.fng.routes["/fng/"] = (500, {})
-    market.news.routes["/v2/everything"] = (401, {}, {"status": "error", "code": "apiKeyInvalid"})
+def test_missing_sources_become_null(trending):
+    trending.okx.routes[flow.FUNDING] = (200, {}, {"code": "51001", "data": [], "msg": ""})
+    trending.fng.routes["/fng/"] = (500, {})
+    trending.news.routes["/v2/everything"] = (401, {}, {"status": "error", "code": "apiKeyInvalid"})
     data = json.loads(_run("NOPE"))
     assert data["missing"] == ["candles", "feargreed", "news", "flow"]
     assert [data[k] for k in ("price", "flow", "technicals", "levels", "vs_btc")] == [None] * 5

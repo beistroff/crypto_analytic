@@ -31,7 +31,7 @@ class MinIntervals(BaseModel):
     feargreed: float = 1.0  # alternative.me: 60 requests per minute
     newsapi: float = 1.0  # NewsAPI.org developer plan: 100 requests per day
     gemini: float = 0.0  # readiness check only; model calls go through the SDK
-    okx: float = 0.1  # OKX public market data: 40 candle requests per 2 s per IP
+    okx: float = 0.05  # OKX public market data: 40 candle requests per 2 s per IP
     kraken: float = 1.0  # Kraken public API: about 1 request per second
 
 

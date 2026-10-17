@@ -307,6 +307,14 @@ Why (agent runs of 16 and 17 Oct): the agent fetched raw data and eyeballed it. 
 
 **Accept:** snapshots for 10 coins in under 20 s (17 Oct, laptop: 19 s as 10 separate CLI calls, most of it Python start-up; about 0.8 s per snapshot); tests for missing sources and the size budget.
 
+### 2.8 Market scan (`sentinel/signals/scan.py`)
+Replaces the agent's own top-50 scan (about 33 `web_fetch` calls, levels read off raw candles).
+- [x] `sentinel market scan [--limit 50] [--format json|telegram]`: one CMC listings call, then per coin its daily candles and OKX funding rate in parallel, in one process; BTC's regime first.
+- [x] One row per coin under `columns`: price, 24 h and 7 d change (CMC, rolling), RSI14, above SMA50 and SMA200, strength against BTC over 7 days, distance to the 7-day wick low and high, funding. Stablecoins and wrapped BTC or ETH are skipped; coins without candles are listed in `missing`.
+- [x] The Telegram form names the stand-outs: strongest and weakest against BTC, nearest the 7-day wick low, RSI extremes.
+
+**Accept:** top 50 in about 5 s (17 Oct, laptop: 5.3 s, 3.1 s with cached candles; about 3,200 characters of JSON); a test for the rows, skipped and missing coins and the size budget.
+
 ### 2.7 CMC pass-through (`sentinel cmc get`) [Later: build it when a question needs more than `web_fetch` and the fixed commands give]
 So the agent can ask CMC for more than the fixed commands without ever holding the key.
 - [ ] `sentinel cmc get <endpoint> [--param key=value ...]`: read-only endpoints from an allowlist in config; `sentinel` adds the key header, trims the response to the requested fields and a size budget, and reports the credits used.

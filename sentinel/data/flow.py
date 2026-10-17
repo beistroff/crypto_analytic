@@ -46,17 +46,25 @@ def swap(symbol: str) -> str:
     return f"{symbol.upper()}-USDT-SWAP"
 
 
+def funding(symbol: str) -> tuple[float, float]:
+    """Predicted funding rate in percent for the current period, and the period in hours."""
+    data = _get(FUNDING, {"instId": swap(symbol)})[0]
+    interval_ms = int(data["nextFundingTime"]) - int(data["fundingTime"])
+    return float(data["fundingRate"]) * 100, interval_ms / 3_600_000
+
+
 def flow(symbol: str) -> Flow:
     instrument = swap(symbol)
     span = OI_DAYS * timedelta(days=1)
     # The three endpoints have separate rate limits, so they are asked at the same time.
     with ThreadPoolExecutor(max_workers=3) as pool:
-        funding_job = pool.submit(_get, FUNDING, {"instId": instrument})
+        funding_job = pool.submit(funding, symbol)
         oi_params = {"instId": instrument, "period": "4H", "limit": span // OI_PERIOD + 1}
         oi_job = pool.submit(_get, OI_HISTORY, oi_params)
         ls_params = {"instId": instrument, "period": "1H", "limit": 1}
         ls_job = pool.submit(_get, LONG_SHORT, ls_params)
-    funding, entries, long_short = funding_job.result()[0], oi_job.result(), ls_job.result()[0]
+    (funding_pct, interval_h), entries = funding_job.result(), oi_job.result()
+    long_short = ls_job.result()[0]
 
     newest, oldest = entries[0], entries[-1]
     newest_ts = datetime.fromtimestamp(int(newest[0]) / 1000, UTC)
@@ -64,10 +72,9 @@ def flow(symbol: str) -> Flow:
     oi_chg = None
     if newest_ts - oldest_ts == span and float(oldest[2]) > 0:
         oi_chg = (float(newest[2]) / float(oldest[2]) - 1) * 100
-    interval_ms = int(funding["nextFundingTime"]) - int(funding["fundingTime"])
     return Flow(
-        funding_pct=float(funding["fundingRate"]) * 100,
-        funding_interval_h=interval_ms / 3_600_000,
+        funding_pct=funding_pct,
+        funding_interval_h=interval_h,
         oi_usd=float(newest[3]),
         oi_chg_7d=oi_chg,
         long_short=float(long_short[1]),

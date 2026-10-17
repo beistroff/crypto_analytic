@@ -66,16 +66,16 @@ def build(symbol: str) -> schema.Snapshot:
     technicals = _technicals(daily, hourly) if daily and hourly else None
     btc_technicals = _technicals(btc_daily, btc_hourly) if btc_daily and btc_hourly else None
     return schema.Snapshot(
-        as_of=_iso(now),
+        as_of=iso(now),
         symbol=symbol,
-        price=_sig(hourly.price) if hourly else None,
-        prices_at=_iso(hourly.fetched_at) if hourly else None,
+        price=sig(hourly.price) if hourly else None,
+        prices_at=iso(hourly.fetched_at) if hourly else None,
         exchange=hourly.exchange if hourly else None,
         btc=_btc(btc_hourly, btc_technicals, metrics) if btc_technicals else None,
         market=schema.Market(
             fear_greed=got["feargreed"].value if "feargreed" in got else None,
-            total_mcap_chg_24h=_round(metrics.total_mcap_chg_24h) if metrics else None,
-            stablecoin_share=_round(metrics.stablecoin_share, 1) if metrics else None,
+            total_mcap_chg_24h=rounded(metrics.total_mcap_chg_24h) if metrics else None,
+            stablecoin_share=rounded(metrics.stablecoin_share, 1) if metrics else None,
         ),
         macro=macro,
         coin_news=[_headline(h) for h in got["news"]] if "news" in got else None,
@@ -109,29 +109,29 @@ def _technicals(daily: exchange.Candles, hourly: exchange.Candles) -> schema.Tec
         n: indicators.change_over_hours(hourly.candles, n, hourly.fetched_at) for n in (1, 24, 168)
     }
     return schema.Technicals(
-        rsi14=_round(indicators.rsi(closes), 1),
-        sma20=_sig(indicators.sma(closes, 20)),
-        sma50=_sig(sma50),
-        sma200=_sig(sma200),
+        rsi14=rounded(indicators.rsi(closes), 1),
+        sma20=sig(indicators.sma(closes, 20)),
+        sma50=sig(sma50),
+        sma200=sig(sma200),
         above_sma50=None if sma50 is None else price > sma50,
         above_sma200=None if sma200 is None else price > sma200,
-        atr14_pct=_round(atr / price * 100) if atr is not None else None,
-        vol_z30=_round(indicators.volume_z(daily.candles)),
-        chg_1h=_round(hours[1]),
-        chg_24h=_round(hours[24]),
-        chg_7d=_round(hours[168]),
+        atr14_pct=rounded(atr / price * 100) if atr is not None else None,
+        vol_z30=rounded(indicators.volume_z(daily.candles)),
+        chg_1h=rounded(hours[1]),
+        chg_24h=rounded(hours[24]),
+        chg_7d=rounded(hours[168]),
     )
 
 
 def _btc(
     hourly: exchange.Candles, tech: schema.Technicals, metrics: cmc.Market | None
 ) -> schema.BtcContext:
-    dominance = _round(metrics.btc_dominance, 1) if metrics else None
+    dominance = rounded(metrics.btc_dominance, 1) if metrics else None
     regime = btc_regime.classify(
         hourly.price, tech.chg_24h, tech.chg_7d, tech.sma50, tech.sma200, dominance
     )
     return schema.BtcContext(
-        price=_sig(hourly.price),
+        price=sig(hourly.price),
         chg_24h=tech.chg_24h,
         chg_7d=tech.chg_7d,
         sma50=tech.sma50,
@@ -162,7 +162,7 @@ def _flow(item: flow.Flow) -> schema.Flow:
         funding_pct=round(item.funding_pct, 4),
         funding_interval_h=item.funding_interval_h,
         oi_usd=round(item.oi_usd),
-        oi_chg_7d=_round(item.oi_chg_7d),
+        oi_chg_7d=rounded(item.oi_chg_7d),
         long_short=round(item.long_short, 2),
     )
 
@@ -172,7 +172,7 @@ def _levels(daily: exchange.Candles) -> schema.Levels:
         found = indicators.range_edges(daily.candles, days)
         if found is None:
             return None
-        return schema.Range(**{k: _sig(v) if isinstance(v, float) else v for k, v in found.items()})
+        return schema.Range(**{k: sig(v) if isinstance(v, float) else v for k, v in found.items()})
 
     return schema.Levels(d7=edges(7), d30=edges(30))
 
@@ -180,10 +180,10 @@ def _levels(daily: exchange.Candles) -> schema.Levels:
 def _vs_btc(daily: exchange.Candles, btc_daily: exchange.Candles) -> schema.VsBtc:
     coin, btc = daily.candles, btc_daily.candles
     return schema.VsBtc(
-        rs_7d=_round(indicators.relative_strength(coin, btc, 7)),
-        rs_14d=_round(indicators.relative_strength(coin, btc, 14)),
-        rs_30d=_round(indicators.relative_strength(coin, btc, 30)),
-        beta_90d=_round(indicators.beta(coin, btc, 90)),
+        rs_7d=rounded(indicators.relative_strength(coin, btc, 7)),
+        rs_14d=rounded(indicators.relative_strength(coin, btc, 14)),
+        rs_30d=rounded(indicators.relative_strength(coin, btc, 30)),
+        beta_90d=rounded(indicators.beta(coin, btc, 90)),
     )
 
 
@@ -191,14 +191,14 @@ def _now() -> datetime:
     return datetime.now(UTC)
 
 
-def _iso(ts: datetime) -> str:
+def iso(ts: datetime) -> str:
     return ts.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def _round(value: float | None, digits: int = 2) -> float | None:
+def rounded(value: float | None, digits: int = 2) -> float | None:
     return None if value is None else round(value, digits)
 
 
-def _sig(value: float | None) -> float | None:
+def sig(value: float | None) -> float | None:
     """Prices to 6 significant digits (works for BTC and for tiny coins alike)."""
     return None if value is None else float(f"{value:.6g}")

@@ -16,6 +16,7 @@ import requests
 
 from sentinel.data import SourceError, cmc, feargreed, newsapi
 from sentinel.eval.rules import is_scalp_candidate, rules_signal
+from sentinel.signals import scan as signals_scan
 from sentinel.signals import snapshot as signals_snapshot
 
 # Legacy whale_monitor.py: a 1 h pump above this many percent is worth an alert.
@@ -93,6 +94,41 @@ def news(symbol: str, limit: int) -> View:
     lines = [f"{symbol.upper()} news (about 24 h delayed): {len(items)}"]
     lines += [f"- {_short(h.title)} ({h.source})" for h in items]
     return View(data, _lines(lines))
+
+
+def scan(limit: int) -> View:
+    """One row of computed signals per top coin; the text names the stand-outs."""
+    result = signals_scan.build(limit)
+    rows, btc = result.rows, result.btc
+    head = f"Top {limit} scan, {len(rows)} coins"
+    if btc:
+        head += (
+            f": BTC {_usd(btc['price'])} {btc['regime']} "
+            f"({_pct_or(btc['chg_24h'])} 24h, {_pct_or(btc['chg_7d'])} 7d)"
+        )
+    if result.missing:
+        head += f"; no data: {', '.join(result.missing)}"
+    ranked = sorted((r for r in rows if r.rs_7d is not None), key=lambda r: r.rs_7d, reverse=True)
+    near_low = sorted(
+        (r for r in rows if r.to_low_7d is not None), key=lambda r: r.to_low_7d, reverse=True
+    )
+    hot = [f"{r.sym} {r.rsi14:.0f}" for r in rows if r.rsi14 is not None and r.rsi14 > 70]
+    cold = [f"{r.sym} {r.rsi14:.0f}" for r in rows if r.rsi14 is not None and r.rsi14 < 30]
+    lines = [
+        head,
+        "Strongest vs BTC 7d: " + ", ".join(f"{r.sym} {r.rs_7d:+.1f}" for r in ranked[:3]),
+        "Weakest vs BTC 7d: " + ", ".join(f"{r.sym} {r.rs_7d:+.1f}" for r in ranked[-3:][::-1]),
+        "Near 7d wick low: " + ", ".join(f"{r.sym} ({r.to_low_7d:+.1f}%)" for r in near_low[:3]),
+        f"RSI over 70: {_some(hot)}; under 30: {_some(cold)}",
+    ]
+    return View(result.data(), _lines(lines))
+
+
+def _some(items: list[str], shown: int = 5) -> str:
+    if not items:
+        return "none"
+    more = f" (+{len(items) - shown} more)" if len(items) > shown else ""
+    return ", ".join(items[:shown]) + more
 
 
 def snapshot(symbol: str) -> View:

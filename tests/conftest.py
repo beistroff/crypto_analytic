@@ -4,6 +4,7 @@ import json
 import logging
 import socket
 import threading
+from datetime import UTC, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from types import SimpleNamespace
@@ -14,7 +15,9 @@ from moto import mock_aws
 
 from sentinel import aws, log, net
 from sentinel.config import ENV_VARS, HttpSettings, get_settings
-from sentinel.data import cmc, exchange, feargreed, flow, newsapi
+from sentinel.data import SourceError, cmc, exchange, feargreed, flow, newsapi
+from sentinel.data.exchange import Candle, Candles
+from sentinel.signals import scan, snapshot
 
 FIXTURES = Path(__file__).parent / "fixtures"
 _LOCAL_HOSTS = {"127.0.0.1", "::1", "localhost"}
@@ -174,3 +177,36 @@ def apis(make_server, monkeypatch):
         fast = HttpSettings(backoff_s=0, min_interval_s=dict.fromkeys(names, 0))
         monkeypatch.setattr(net, "_sessions", {name: net.Session(name, fast) for name in names})
         yield servers
+
+
+# 17 Oct 2026, 12:20 UTC, for the `trending` fixture.
+TRENDING_NOW = datetime(2026, 10, 17, 12, 20, tzinfo=UTC)
+
+
+def _trend_candles(symbol, timeframe, limit=200):
+    """A steady uptrend of 0.1% per candle ending at the base price, the last one open."""
+    if symbol == "NOPE":
+        raise SourceError("no candles for NOPE")
+    period = exchange.PERIOD[timeframe]
+    end = (
+        datetime(2026, 10, 17, tzinfo=UTC) if timeframe == "1d" else TRENDING_NOW.replace(minute=0)
+    )
+    base = 80000.0 if symbol == "BTC" else 100.0
+    items = []
+    for i in range(limit):
+        close = base * 1.001 ** (i - limit + 1)
+        ts = end - period * (limit - 1 - i)
+        items.append(
+            Candle(ts, close, close * 1.01, close * 0.99, close, 1000.0 + i % 5, i < limit - 1)
+        )
+    return Candles(symbol, "okx", exchange.pair("okx", symbol), timeframe, items, TRENDING_NOW)
+
+
+@pytest.fixture
+def trending(apis, monkeypatch):
+    """`apis`, with every coin's candles a steady uptrend (BTC at 80,000, others at 100;
+    "NOPE" has none) and the clock at 17 Oct 2026, 12:20 UTC."""
+    monkeypatch.setattr(exchange, "candles", _trend_candles)
+    monkeypatch.setattr(snapshot, "_now", lambda: TRENDING_NOW)
+    monkeypatch.setattr(scan, "_now", lambda: TRENDING_NOW)
+    return apis
