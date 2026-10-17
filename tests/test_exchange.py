@@ -8,7 +8,7 @@ import pytest
 
 from sentinel import net
 from sentinel.config import HttpSettings
-from sentinel.data import SourceError, exchange
+from sentinel.data import SourceError, exchange, flow
 
 FIXTURES = Path(__file__).parent / "fixtures"
 OKX_PATH = "/api/v5/market/candles"
@@ -27,6 +27,10 @@ def venues(make_server, monkeypatch):
     servers = SimpleNamespace(okx=make_server(), kraken=make_server())
     servers.okx.routes[OKX_PATH] = (200, {}, _fixture("okx_candles.json"))
     servers.kraken.routes[KRAKEN_PATH] = (200, {}, _fixture("kraken_ohlc.json"))
+    servers.okx.routes[flow.FUNDING] = (200, {}, _fixture("okx_funding.json"))
+    servers.okx.routes[flow.OI_HISTORY] = (200, {}, _fixture("okx_oi_history.json"))
+    servers.okx.routes[flow.LONG_SHORT] = (200, {}, _fixture("okx_long_short.json"))
+    monkeypatch.setattr(flow, "BASE_URL", servers.okx.base)
     monkeypatch.setattr(exchange, "OKX_URL", servers.okx.base + OKX_PATH)
     monkeypatch.setattr(exchange, "KRAKEN_URL", servers.kraken.base + KRAKEN_PATH)
     monkeypatch.setattr(exchange, "_now", lambda: NOW)
@@ -75,6 +79,33 @@ def test_no_exchange_has_it(venues):
     venues.kraken.routes[KRAKEN_PATH] = (200, {}, {"error": ["EQuery:Unknown asset pair"]})
     with pytest.raises(SourceError, match="no candles for NOPE"):
         exchange.candles("NOPE", "1d")
+
+
+def test_flow_from_okx_swap(venues):
+    result = flow.flow("sol")
+    assert result.funding_pct == pytest.approx(-0.0011007, abs=1e-7)
+    assert result.funding_interval_h == 8.0
+    # Newest entry against the one 7 days earlier, in coins: 2,996,045 / 3,091,933 - 1.
+    assert result.oi_chg_7d == pytest.approx(-3.1012, abs=1e-4)
+    assert result.oi_usd == pytest.approx(314345044.55)
+    assert result.long_short == pytest.approx(2.207036)
+    assert result.ts == datetime(2026, 10, 17, 8, tzinfo=UTC)
+    assert _query(venues.okx.seen[1]) == {
+        "instId": ["SOL-USDT-SWAP"],
+        "period": ["4H"],
+        "limit": ["43"],
+    }
+
+
+def test_flow_for_a_coin_without_a_swap(venues):
+    venues.okx.routes[flow.FUNDING] = NOT_ON_OKX
+    with pytest.raises(SourceError, match="code 51001"):
+        flow.flow("XMR")
+
+
+@pytest.mark.live
+def test_live_flow():
+    assert flow.flow("BTC").oi_chg_7d is not None
 
 
 @pytest.mark.live
