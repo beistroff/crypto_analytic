@@ -1,16 +1,10 @@
-import json
 from datetime import UTC, datetime
-from pathlib import Path
-from types import SimpleNamespace
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
-from sentinel import net
-from sentinel.config import HttpSettings
 from sentinel.data import SourceError, exchange, flow
 
-FIXTURES = Path(__file__).parent / "fixtures"
 OKX_PATH = "/api/v5/market/candles"
 KRAKEN_PATH = "/0/public/OHLC"
 NOT_ON_OKX = (200, {}, {"code": "51001", "data": [], "msg": "Instrument ID doesn't exist."})
@@ -18,25 +12,11 @@ NOT_ON_OKX = (200, {}, {"code": "51001", "data": [], "msg": "Instrument ID doesn
 NOW = datetime(2026, 10, 17, 12, tzinfo=UTC)
 
 
-def _fixture(name):
-    return json.loads((FIXTURES / name).read_text(encoding="utf-8"))
-
-
 @pytest.fixture
-def venues(make_server, monkeypatch):
-    servers = SimpleNamespace(okx=make_server(), kraken=make_server())
-    servers.okx.routes[OKX_PATH] = (200, {}, _fixture("okx_candles.json"))
-    servers.kraken.routes[KRAKEN_PATH] = (200, {}, _fixture("kraken_ohlc.json"))
-    servers.okx.routes[flow.FUNDING] = (200, {}, _fixture("okx_funding.json"))
-    servers.okx.routes[flow.OI_HISTORY] = (200, {}, _fixture("okx_oi_history.json"))
-    servers.okx.routes[flow.LONG_SHORT] = (200, {}, _fixture("okx_long_short.json"))
-    monkeypatch.setattr(flow, "BASE_URL", servers.okx.base)
-    monkeypatch.setattr(exchange, "OKX_URL", servers.okx.base + OKX_PATH)
-    monkeypatch.setattr(exchange, "KRAKEN_URL", servers.kraken.base + KRAKEN_PATH)
+def venues(apis, monkeypatch):
+    """OKX and Kraken serving the recorded fixtures (conftest.py), at a fixed time."""
     monkeypatch.setattr(exchange, "_now", lambda: NOW)
-    fast = HttpSettings(backoff_s=0, min_interval_s={"okx": 0, "kraken": 0})
-    monkeypatch.setattr(net, "_sessions", {n: net.Session(n, fast) for n in ("okx", "kraken")})
-    return servers
+    return apis
 
 
 def _query(request):
@@ -90,7 +70,8 @@ def test_flow_from_okx_swap(venues):
     assert result.oi_usd == pytest.approx(314345044.55)
     assert result.long_short == pytest.approx(2.207036)
     assert result.ts == datetime(2026, 10, 17, 8, tzinfo=UTC)
-    assert _query(venues.okx.seen[1]) == {
+    oi_request = next(r for r in venues.okx.seen if r.path.startswith(flow.OI_HISTORY))
+    assert _query(oi_request) == {
         "instId": ["SOL-USDT-SWAP"],
         "period": ["4H"],
         "limit": ["43"],

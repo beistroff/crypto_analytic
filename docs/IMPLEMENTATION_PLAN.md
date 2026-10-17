@@ -550,16 +550,23 @@ All items carry `type` and `created_at`. Keys are strings.
 
 ## Appendix C: Snapshot example (compact, hierarchy order)
 
+`sentinel snapshot SOL` as built in 2.6 (live values from 17 Oct 2026, about 1,500 characters). Market headlines (2.4 RSS), `whales` (2.5) and `portfolio` (1.7) join when their tasks land.
+
 ```json
 {
-  "schema_version": 1, "ts": "2026-11-03T09:00:00Z", "symbol": "XRP", "price": 1.183,
-  "btc": {"price": 81250, "chg_24h": 1.2, "chg_7d": -3.4, "above_sma50": true, "above_sma200": true, "dominance": 58.1, "regime": "neutral"},
-  "market": {"fear_greed": 41, "total_mcap_chg_24h": 1.2, "stablecoin_share": 7.9, "headlines": ["...", "..."]},
-  "coin_news": ["...", "..."],
-  "flow": {"funding_8h": 0.006, "oi_chg_24h": 3.1, "taker_buy_sell": 1.08, "long_short": 1.32},
-  "whales": {"large_trade_share": 0.12},
-  "technicals": {"rsi14": 54, "above_sma50": true, "above_sma200": false, "atr14_pct": 4.2, "vol_z": 0.8, "chg_1h": 0.3, "chg_24h": 2.1},
-  "portfolio": {"has_position": false, "exposure_pct": 0, "weekday": "Tue"},
+  "schema_version": 1, "as_of": "2026-10-17T08:31:53Z", "symbol": "SOL", "price": 104.92,
+  "prices_at": "2026-10-17T08:31:53Z", "exchange": "okx",
+  "btc": {"price": 81698.0, "chg_24h": -0.66, "chg_7d": -1.39, "sma50": 81361.6, "sma200": 72466.0, "above_sma50": true, "above_sma200": true, "dominance": 58.1, "regime": "neutral", "regime_points": 2},
+  "market": {"fear_greed": 55, "total_mcap_chg_24h": -0.8, "stablecoin_share": 7.9},
+  "macro": {"next_fomc": "2026-10-28", "days_to_fomc": 11},
+  "coin_news": [{"title": "...", "source": "..."}], "news_delayed_24h": true,
+  "flow": {"funding_pct": -0.0012, "funding_interval_h": 8.0, "oi_usd": 313875577.0, "oi_chg_7d": -3.21, "long_short": 2.21},
+  "technicals": {"rsi14": 39.7, "sma20": 113.206, "sma50": 109.425, "sma200": 87.5164, "above_sma50": false, "above_sma200": true, "atr14_pct": 4.65, "vol_z30": -0.43, "chg_1h": -0.16, "chg_24h": -1.78, "chg_7d": -4.62},
+  "levels": {
+    "d7": {"wick_low": 100.56, "wick_low_date": "2026-10-15", "wick_high": 113.4, "wick_high_date": "2026-10-12", "close_low": 104.29, "close_high": 111.34},
+    "d30": {"wick_low": 100.56, "wick_low_date": "2026-10-15", "wick_high": 124.96, "wick_high_date": "2026-09-27", "close_low": 104.29, "close_high": 122.16}
+  },
+  "vs_btc": {"rs_7d": -3.15, "rs_14d": -8.69, "rs_30d": -3.67, "beta_90d": 1.24},
   "missing": []
 }
 ```

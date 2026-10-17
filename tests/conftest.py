@@ -5,13 +5,18 @@ import logging
 import socket
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 from types import SimpleNamespace
 
+import boto3
 import pytest
+from moto import mock_aws
 
 from sentinel import aws, log, net
-from sentinel.config import ENV_VARS, get_settings
+from sentinel.config import ENV_VARS, HttpSettings, get_settings
+from sentinel.data import cmc, exchange, feargreed, flow, newsapi
 
+FIXTURES = Path(__file__).parent / "fixtures"
 _LOCAL_HOSTS = {"127.0.0.1", "::1", "localhost"}
 
 
@@ -118,3 +123,54 @@ def make_server():
 @pytest.fixture
 def server(make_server):
     return make_server()
+
+
+def load_fixture(name):
+    return json.loads((FIXTURES / name).read_text(encoding="utf-8"))
+
+
+@pytest.fixture
+def apis(make_server, monkeypatch):
+    """Keys in a mocked SSM, and local CMC, Fear & Greed, NewsAPI, OKX and Kraken servers
+    answering with the recorded fixtures. Sessions have no waits."""
+    with mock_aws():
+        ssm = boto3.client("ssm", region_name="us-east-1")
+        keys = SimpleNamespace(cmc="cmc-test-value", news="news-test-value")
+        ssm.put_parameter(Name="/sentinel/cmc_api_key", Value=keys.cmc, Type="SecureString")
+        ssm.put_parameter(Name="/sentinel/newsapi_key", Value=keys.news, Type="SecureString")
+        servers = SimpleNamespace(
+            keys=keys,
+            cmc=make_server(),
+            fng=make_server(),
+            news=make_server(),
+            okx=make_server(),
+            kraken=make_server(),
+        )
+        servers.cmc.routes.update(
+            {
+                "/v1/cryptocurrency/listings/latest": (200, {}, load_fixture("cmc_listings.json")),
+                "/v1/cryptocurrency/quotes/latest": (200, {}, load_fixture("cmc_quotes.json")),
+                "/v1/global-metrics/quotes/latest": (200, {}, load_fixture("cmc_global.json")),
+            }
+        )
+        servers.fng.routes["/fng/"] = (200, {}, load_fixture("feargreed.json"))
+        servers.news.routes["/v2/everything"] = (200, {}, load_fixture("newsapi.json"))
+        servers.okx.routes.update(
+            {
+                "/api/v5/market/candles": (200, {}, load_fixture("okx_candles.json")),
+                flow.FUNDING: (200, {}, load_fixture("okx_funding.json")),
+                flow.OI_HISTORY: (200, {}, load_fixture("okx_oi_history.json")),
+                flow.LONG_SHORT: (200, {}, load_fixture("okx_long_short.json")),
+            }
+        )
+        servers.kraken.routes["/0/public/OHLC"] = (200, {}, load_fixture("kraken_ohlc.json"))
+        monkeypatch.setattr(cmc, "BASE_URL", servers.cmc.base)
+        monkeypatch.setattr(feargreed, "URL", f"{servers.fng.base}/fng/")
+        monkeypatch.setattr(newsapi, "URL", f"{servers.news.base}/v2/everything")
+        monkeypatch.setattr(exchange, "OKX_URL", f"{servers.okx.base}/api/v5/market/candles")
+        monkeypatch.setattr(exchange, "KRAKEN_URL", f"{servers.kraken.base}/0/public/OHLC")
+        monkeypatch.setattr(flow, "BASE_URL", servers.okx.base)
+        names = ("cmc", "feargreed", "newsapi", "okx", "kraken")
+        fast = HttpSettings(backoff_s=0, min_interval_s=dict.fromkeys(names, 0))
+        monkeypatch.setattr(net, "_sessions", {name: net.Session(name, fast) for name in names})
+        yield servers

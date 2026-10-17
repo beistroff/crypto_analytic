@@ -1,22 +1,16 @@
 import json
 from pathlib import Path
-from types import SimpleNamespace
 from urllib.parse import parse_qs, urlsplit
 
-import boto3
 import pytest
 from click.testing import CliRunner
-from moto import mock_aws
 
-from sentinel import net
 from sentinel.cli import cli
-from sentinel.config import HttpSettings
 from sentinel.data import cmc, feargreed, newsapi
 from sentinel.eval.rules import rules_signal
 
+# The `apis` fixture (conftest.py) serves these fixtures from local servers.
 FIXTURES = Path(__file__).parent / "fixtures"
-CMC_KEY = "cmc-test-value"
-NEWS_KEY = "news-test-value"
 LISTINGS = "/v1/cryptocurrency/listings/latest"
 QUOTES = "/v1/cryptocurrency/quotes/latest"
 GLOBAL = "/v1/global-metrics/quotes/latest"
@@ -25,32 +19,6 @@ CMC_INVALID_KEY = (401, {}, {"status": {"error_code": 1001, "error_message": "AP
 
 def _fixture(name):
     return json.loads((FIXTURES / name).read_text(encoding="utf-8"))
-
-
-@pytest.fixture
-def apis(make_server, monkeypatch):
-    """Keys in a mocked SSM, and local CMC, Fear & Greed and NewsAPI serving the fixtures."""
-    with mock_aws():
-        ssm = boto3.client("ssm", region_name="us-east-1")
-        ssm.put_parameter(Name="/sentinel/cmc_api_key", Value=CMC_KEY, Type="SecureString")
-        ssm.put_parameter(Name="/sentinel/newsapi_key", Value=NEWS_KEY, Type="SecureString")
-        servers = SimpleNamespace(cmc=make_server(), fng=make_server(), news=make_server())
-        servers.cmc.routes.update(
-            {
-                LISTINGS: (200, {}, _fixture("cmc_listings.json")),
-                QUOTES: (200, {}, _fixture("cmc_quotes.json")),
-                GLOBAL: (200, {}, _fixture("cmc_global.json")),
-            }
-        )
-        servers.fng.routes["/fng/"] = (200, {}, _fixture("feargreed.json"))
-        servers.news.routes["/v2/everything"] = (200, {}, _fixture("newsapi.json"))
-        monkeypatch.setattr(cmc, "BASE_URL", servers.cmc.base)
-        monkeypatch.setattr(feargreed, "URL", f"{servers.fng.base}/fng/")
-        monkeypatch.setattr(newsapi, "URL", f"{servers.news.base}/v2/everything")
-        fast = HttpSettings(backoff_s=0, min_interval_s={"cmc": 0, "feargreed": 0, "newsapi": 0})
-        sessions = {name: net.Session(name, fast) for name in ("cmc", "feargreed", "newsapi")}
-        monkeypatch.setattr(net, "_sessions", sessions)
-        yield servers
 
 
 def _run(*args):
@@ -70,8 +38,8 @@ def test_listings_parse_and_send_the_key_in_a_header(apis):
     assert [c.symbol for c in coins] == ["BTC", "ETH", "USDT", "SOL", "XRP"]
     assert coins[0].vol_mc == pytest.approx(30e9 / 1.6e12)
     request = apis.cmc.seen[0]
-    assert request.headers["X-CMC_PRO_API_KEY"] == CMC_KEY
-    assert CMC_KEY not in request.path
+    assert request.headers["X-CMC_PRO_API_KEY"] == apis.keys.cmc
+    assert apis.keys.cmc not in request.path
 
 
 def test_global_metrics_tolerate_missing_fields(apis):
@@ -88,8 +56,8 @@ def test_news_asks_for_ticker_and_name_and_drops_unrelated_titles(apis):
     query = parse_qs(urlsplit(request.path).query)
     terms = '("SOL" OR "Solana") AND (crypto OR cryptocurrency OR blockchain OR token)'
     assert (query["q"], query["language"]) == ([terms], ["en"])
-    assert request.headers["X-Api-Key"] == NEWS_KEY
-    assert NEWS_KEY not in request.path
+    assert request.headers["X-Api-Key"] == apis.keys.news
+    assert apis.keys.news not in request.path
 
 
 # --- legacy rules (RULES baseline) -----------------------------------------------------
@@ -228,8 +196,8 @@ def test_keys_never_leak(apis, monkeypatch, command, failing):
     result = _run(*command)
     everything = result.stdout + result.stderr
     assert result.stdout.strip()
-    assert CMC_KEY not in everything
-    assert NEWS_KEY not in everything
+    assert apis.keys.cmc not in everything
+    assert apis.keys.news not in everything
 
 
 # --- live smoke tests (opt-in: pytest -m live, under aws-vault) ------------------------

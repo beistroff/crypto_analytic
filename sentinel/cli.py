@@ -123,6 +123,16 @@ def market_whales(symbol: str, fmt: str) -> None:
     _emit(views.whales(symbol), fmt)
 
 
+@cli.command("snapshot")
+@click.argument("symbol")
+@FORMAT
+@_source_errors
+def snapshot_cmd(symbol: str, fmt: str) -> None:
+    """Computed signals for one coin, BTC first: regime, market, macro, news, flow,
+    technicals, range levels and strength against BTC."""
+    _emit(views.snapshot(symbol), fmt)
+
+
 @cli.group()
 def news() -> None:
     """Headlines for the agent to judge."""

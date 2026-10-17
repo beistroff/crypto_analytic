@@ -16,6 +16,7 @@ Coins without an OKX swap raise ``SourceError``; the snapshot lists them as miss
 
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -47,12 +48,15 @@ def swap(symbol: str) -> str:
 
 def flow(symbol: str) -> Flow:
     instrument = swap(symbol)
-    funding = _get(FUNDING, {"instId": instrument})[0]
     span = OI_DAYS * timedelta(days=1)
-    entries = _get(
-        OI_HISTORY, {"instId": instrument, "period": "4H", "limit": span // OI_PERIOD + 1}
-    )
-    long_short = _get(LONG_SHORT, {"instId": instrument, "period": "1H", "limit": 1})[0]
+    # The three endpoints have separate rate limits, so they are asked at the same time.
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        funding_job = pool.submit(_get, FUNDING, {"instId": instrument})
+        oi_params = {"instId": instrument, "period": "4H", "limit": span // OI_PERIOD + 1}
+        oi_job = pool.submit(_get, OI_HISTORY, oi_params)
+        ls_params = {"instId": instrument, "period": "1H", "limit": 1}
+        ls_job = pool.submit(_get, LONG_SHORT, ls_params)
+    funding, entries, long_short = funding_job.result()[0], oi_job.result(), ls_job.result()[0]
 
     newest, oldest = entries[0], entries[-1]
     newest_ts = datetime.fromtimestamp(int(newest[0]) / 1000, UTC)

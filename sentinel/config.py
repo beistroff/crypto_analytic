@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Mapping
+from datetime import date
 from functools import cache
 from pathlib import Path
 from typing import Literal
@@ -72,6 +73,23 @@ COIN_NAMES: dict[str, tuple[str, ...]] = {
 }
 
 
+# FOMC rate decisions (the second day of each meeting), from the Federal Reserve's
+# calendar (federalreserve.gov/monetarypolicy/fomccalendars.htm, checked 2026-10-17).
+# Dates are tentative until the meeting before; add the next year when the Fed publishes it.
+FOMC_DECISIONS: tuple[date, ...] = (
+    date(2026, 10, 28),
+    date(2026, 12, 9),
+    date(2027, 1, 27),
+    date(2027, 3, 17),
+    date(2027, 4, 28),
+    date(2027, 6, 9),
+    date(2027, 7, 28),
+    date(2027, 9, 15),
+    date(2027, 10, 27),
+    date(2027, 12, 8),
+)
+
+
 class Settings(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -87,6 +105,7 @@ class Settings(BaseModel):
     exchanges: tuple[Exchange, ...] = ("okx", "kraken")
     candle_cache_s: float = 300.0
     cache_dir: Path = Path("~/.cache/sentinel").expanduser()
+    fomc_decisions: tuple[date, ...] = FOMC_DECISIONS
 
     @field_validator("log_level", mode="before")
     @classmethod

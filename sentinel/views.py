@@ -16,6 +16,7 @@ import requests
 
 from sentinel.data import SourceError, cmc, feargreed, newsapi
 from sentinel.eval.rules import is_scalp_candidate, rules_signal
+from sentinel.signals import snapshot as signals_snapshot
 
 # Legacy whale_monitor.py: a 1 h pump above this many percent is worth an alert.
 WHALE_PUMP_1H_PCT = 1.5
@@ -91,6 +92,47 @@ def news(symbol: str, limit: int) -> View:
         return View(data, f"{symbol.upper()} news (about 24 h delayed): {NO_NEWS}")
     lines = [f"{symbol.upper()} news (about 24 h delayed): {len(items)}"]
     lines += [f"- {_short(h.title)} ({h.source})" for h in items]
+    return View(data, _lines(lines))
+
+
+def snapshot(symbol: str) -> View:
+    """The coin in the signal hierarchy: BTC, market, macro, news, flow, technicals."""
+    snap = signals_snapshot.build(symbol)
+    data = snap.model_dump(mode="json")
+    tech, btc, vs = snap.technicals, snap.btc, snap.vs_btc
+    head = f"{snap.symbol} {_usd(snap.price)}"
+    if tech:
+        head += f" ({_pct_or(tech.chg_24h)} 24h, {_pct_or(tech.chg_7d)} 7d), RSI {tech.rsi14}"
+    if vs and vs.rs_7d is not None:
+        head += f", vs BTC 7d {vs.rs_7d:+.1f} pts"
+    lines = [head]
+    if btc:
+        mood = snap.market.fear_greed if snap.market else None
+        lines.append(
+            f"BTC {_usd(btc.price)} {btc.regime}: {_pct_or(btc.chg_24h)} 24h, "
+            f"{_side(btc.above_sma50)} SMA50, {_side(btc.above_sma200)} SMA200"
+            + (f"; F&G {mood}" if mood is not None else "")
+        )
+    week = snap.levels.d7 if snap.levels else None
+    if week:
+        lines.append(
+            f"7d range: wicks {_usd(week.wick_low)} ({week.wick_low_date:%d %b}) to "
+            f"{_usd(week.wick_high)} ({week.wick_high_date:%d %b}); "
+            f"closes {_usd(week.close_low)} to {_usd(week.close_high)}"
+        )
+    extra = []
+    if snap.flow:
+        f = snap.flow
+        extra.append(
+            f"funding {f.funding_pct:+.4f}%/{f.funding_interval_h:g}h, "
+            f"OI {_pct_or(f.oi_chg_7d)} 7d, L/S {f.long_short}"
+        )
+    if snap.macro:
+        extra.append(f"FOMC {snap.macro.next_fomc:%d %b} (in {snap.macro.days_to_fomc} d)")
+    if extra:
+        lines.append("; ".join(extra))
+    if snap.missing:
+        lines.append("Missing: " + ", ".join(snap.missing))
     return View(data, _lines(lines))
 
 
@@ -219,6 +261,14 @@ def _usd(value: float | None) -> str:
 
 def _pct(value: float) -> str:
     return f"{value:+.1f}%"
+
+
+def _pct_or(value: float | None) -> str:
+    return "?" if value is None else _pct(value)
+
+
+def _side(above: bool | None) -> str:
+    return "?" if above is None else ("above" if above else "below")
 
 
 def _short(text: str, width: int = 90) -> str:
