@@ -108,8 +108,20 @@ make install                                        # pip install -c constraints
 sentinel --help
 sentinel health --format telegram                   # needs AWS credentials for SSM
 sentinel market overview --symbol BTC,SOL
+sentinel snapshot SOL --format telegram
 ```
-`make test` and `make lint` run the tests (no network) and ruff.
+Commands (JSON by default, `--format telegram` for 5 lines or fewer):
+
+| Command | What it returns |
+| --- | --- |
+| `sentinel snapshot SYM` | Computed signals for one coin, BTC first: BTC regime, market mood, next FOMC, news, funding and open interest, RSI, moving averages, ATR, returns, range levels (wick and close, with UTC dates), strength and beta against BTC. Missing sources are `null` and listed in `missing`. |
+| `sentinel market overview [--symbol BTC,SOL]` | Fear & Greed, BTC dominance, market cap change, stablecoin share, quotes |
+| `sentinel market top [--limit 15]`, `market scalp [--limit 50]`, `market whales SYM` | Legacy rule signals, scalp candidates, a rough whale check |
+| `sentinel news long SYM [--limit 3]` | NewsAPI headlines that name the coin (about 24 h delayed) |
+| `sentinel watch levels SYM --below X --above Y`, `watch move SYM --entry P` | Price checks for monitoring |
+| `sentinel health`, `sentinel config show` | Readiness checks, settings |
+
+Candles come from OKX's and Kraken's public APIs (no key; daily candles are UTC days) and are cached for 5 minutes in `~/.cache/sentinel` (`SENTINEL_CACHE_DIR`). `make test` and `make lint` run the tests (no network) and ruff; `pytest -m live` runs the smoke tests against the real APIs.
 
 ### 3. Deployment
 
