@@ -9,11 +9,13 @@ from __future__ import annotations
 import os
 from collections.abc import Mapping
 from functools import cache
+from pathlib import Path
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR"]
+Exchange = Literal["okx", "kraken"]
 
 
 class MinIntervals(BaseModel):
@@ -28,6 +30,8 @@ class MinIntervals(BaseModel):
     feargreed: float = 1.0  # alternative.me: 60 requests per minute
     newsapi: float = 1.0  # NewsAPI.org developer plan: 100 requests per day
     gemini: float = 0.0  # readiness check only; model calls go through the SDK
+    okx: float = 0.1  # OKX public market data: 40 candle requests per 2 s per IP
+    kraken: float = 1.0  # Kraken public API: about 1 request per second
 
 
 class HttpSettings(BaseModel):
@@ -79,6 +83,10 @@ class Settings(BaseModel):
     log_level: LogLevel = "WARNING"
     http: HttpSettings = Field(default_factory=HttpSettings)
     coin_names: dict[str, tuple[str, ...]] = Field(default_factory=lambda: dict(COIN_NAMES))
+    # Candle sources in the order tried. Binance answers HTTP 451 from AWS, so it is not one.
+    exchanges: tuple[Exchange, ...] = ("okx", "kraken")
+    candle_cache_s: float = 300.0
+    cache_dir: Path = Path("~/.cache/sentinel").expanduser()
 
     @field_validator("log_level", mode="before")
     @classmethod
@@ -94,6 +102,7 @@ ENV_VARS = {
     "sim_table": "SENTINEL_SIM_TABLE",
     "backup_bucket": "OPENCLAW_S3_BUCKET",
     "log_level": "SENTINEL_LOG_LEVEL",
+    "cache_dir": "SENTINEL_CACHE_DIR",
 }
 
 

@@ -33,7 +33,8 @@ def _no_network(request, monkeypatch):
 
 @pytest.fixture(autouse=True)
 def _isolated_env(request, monkeypatch, tmp_path):
-    """Fake AWS credentials, no AWS config files, no overrides from the developer's shell.
+    """Fake AWS credentials, no AWS config files, no overrides from the developer's shell,
+    and a fresh cache folder.
 
     Live tests keep the real environment (run them under aws-vault).
     """
@@ -48,6 +49,7 @@ def _isolated_env(request, monkeypatch, tmp_path):
     monkeypatch.setenv("AWS_SECRET_ACCESS_KEY", "testing")
     monkeypatch.setenv("AWS_SESSION_TOKEN", "testing")
     monkeypatch.setenv("AWS_DEFAULT_REGION", "us-east-1")
+    monkeypatch.setenv("SENTINEL_CACHE_DIR", str(tmp_path / "cache"))
 
 
 @pytest.fixture(autouse=True)
