@@ -11,7 +11,7 @@ flowchart LR
     User(("You")) <-->|"1. ask / 5. answer (Telegram)"| Agent
 
     subgraph EC2["AWS EC2 (Terraform)"]
-        Agent["OpenClaw agent<br/>Claude Haiku"] -->|"2. runs"| Sentinel["sentinel CLI<br/>fetches data, computes signals"]
+        Agent["OpenClaw agent"] -->|"2. runs"| Sentinel["sentinel CLI<br/>fetches data, computes signals"]
     end
 
     Sentinel -->|"3. reads keys"| SSM[("SSM Parameter Store<br/>API keys")]
