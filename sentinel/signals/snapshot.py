@@ -1,11 +1,13 @@
 """One coin's snapshot in the signal hierarchy (plan, Appendix C).
 
-BTC first (its regime outweighs the coin's own signal), then market mood, macro, the
-coin's news, derivatives flow and the coin's technicals, range levels and strength
-against BTC. Code computes every number; the agent reads them and decides.
+BTC first (its regime outweighs the coin's own signal), then market mood and headlines,
+macro, the coin's news (fresh from RSS, then NewsAPI's day-old headlines), derivatives
+flow and the coin's technicals, range levels and strength against BTC. Code computes
+every number; the agent reads them and decides.
 
 Sources are fetched in parallel. A source that fails becomes ``null`` and is named in
-``missing``, so one bad source never fails the whole snapshot. Candles come from
+``missing`` (a single news feed as ``rss:<name>``), so one bad source never fails the
+whole snapshot. Candles come from
 ``sentinel.data.exchange`` (cached for 5 minutes, so BTC is fetched once per scan).
 """
 
@@ -21,13 +23,14 @@ import requests
 
 from sentinel import aws
 from sentinel.config import get_settings
-from sentinel.data import SourceError, cmc, exchange, feargreed, flow, newsapi
+from sentinel.data import SourceError, cmc, exchange, feargreed, flow, news_rss, newsapi
 from sentinel.data.exchange import NotListed
 from sentinel.signals import btc_regime, indicators, schema
 
 DAILY_LIMIT = 300  # SMA200 plus 90 days for beta
 HOURLY_LIMIT = 200  # 7 days of hourly closes, with room to spare
 NEWS_LIMIT = 3
+MARKET_NEWS_LIMIT = 5
 TITLE_WIDTH = 120
 
 log = logging.getLogger(__name__)
@@ -41,6 +44,7 @@ def build(symbol: str) -> schema.Snapshot:
         "btc_hourly": lambda: exchange.candles("BTC", "1h", HOURLY_LIMIT),
         "feargreed": feargreed.latest,
         "cmc_global": cmc.global_metrics,
+        "rss": lambda: news_rss.recent(now),
         "news": lambda: newsapi.headlines(symbol, NEWS_LIMIT),
         "flow": lambda: flow.flow(symbol),
     }
@@ -58,7 +62,11 @@ def build(symbol: str) -> schema.Snapshot:
     daily, hourly = got.get("daily"), got.get("hourly")
     if symbol != "BTC" and (daily is None or hourly is None):
         missing.append("candles")
-    missing += [name for name in ("feargreed", "cmc_global", "news", "flow") if name not in got]
+    sources = ("feargreed", "cmc_global", "rss", "news", "flow")
+    missing += [name for name in sources if name not in got]
+    feeds = got.get("rss")
+    if feeds:
+        missing += [f"rss:{name}" for name in feeds.failed]
     macro = _macro(now)
     if macro is None:
         missing.append("fomc_calendar")
@@ -77,8 +85,10 @@ def build(symbol: str) -> schema.Snapshot:
             fear_greed=got["feargreed"].value if "feargreed" in got else None,
             total_mcap_chg_24h=rounded(metrics.total_mcap_chg_24h) if metrics else None,
             stablecoin_share=rounded(metrics.stablecoin_share, 1) if metrics else None,
+            headlines=[_headline(h) for h in feeds.market(MARKET_NEWS_LIMIT)] if feeds else None,
         ),
         macro=macro,
+        coin_news_fresh=[_headline(h) for h in feeds.coin(symbol, NEWS_LIMIT)] if feeds else None,
         coin_news=[_headline(h) for h in got["news"]] if "news" in got else None,
         flow=_flow(got["flow"]) if "flow" in got else None,
         technicals=coin_technicals,
