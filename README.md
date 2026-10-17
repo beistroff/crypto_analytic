@@ -16,7 +16,7 @@ flowchart LR
 
     Sentinel -->|"3. reads keys"| SSM[("SSM Parameter Store<br/>API keys")]
     Sentinel -->|"4. keyed data"| Keyed["CoinMarketCap, NewsAPI"]
-    Sentinel -->|"4. public data, no key"| Public["OKX, Kraken,<br/>Fear and Greed index"]
+    Sentinel -->|"4. public data, no key"| Public["OKX, Kraken,<br/>Fear and Greed index,<br/>news RSS feeds"]
     EC2 -->|"daily backup"| S3[("S3 bucket")]
     User -.->|"trades by hand"| Exchange["Crypto exchange"]
 ```
@@ -50,9 +50,9 @@ Before you begin, ensure you have the following:
 *   **Python 3.12**: the `sentinel` package (the agent's data tools) runs on Python 3.12 or newer.
 *   **Messaging Platform Bot**: A bot for your preferred messaging service (e.g., Slack, Discord) to communicate with the agent. You will need its API token.
 *   **API Keys**:
-    *   **NewsAPI.org**: For news headlines (the free developer plan delivers articles about 24 h late).
+    *   **NewsAPI.org**: For news headlines (the free developer plan delivers articles about 24 h late). Fresh headlines come from free crypto news RSS feeds (CoinDesk, Cointelegraph, The Block, Decrypt), which need no key.
     *   **CoinMarketCap**: For market data (the free Basic plan is enough).
-    *   **Google Gemini**: The agent's model (an AI Studio API key).
+    *   **A model provider for the agent**: OpenClaw works with many models (Claude, Gemini, ChatGPT, Grok, DeepSeek and others) and can fall back to other models. This setup uses Claude Haiku through an Anthropic API key, with free Gemini models as fallbacks.
 
 ### 2. Configuration: Managing Secrets
 
@@ -84,11 +84,11 @@ Commands (JSON by default, `--format telegram` for 5 lines or fewer):
 
 | Command | What it returns |
 | --- | --- |
-| `sentinel snapshot SYM` | Computed signals for one coin, BTC first: BTC regime, market mood, next FOMC, news, funding and open interest, RSI, moving averages, ATR, returns, range levels (wick and close, with UTC dates), strength and beta against BTC. Missing sources are `null` and listed in `missing`. |
+| `sentinel snapshot SYM` | Computed signals for one coin, BTC first: BTC regime, market mood and headlines, next FOMC, the coin's news (fresh from RSS feeds, plus NewsAPI's day-old headlines), funding and open interest, RSI, moving averages, ATR, returns, range levels (wick and close, with UTC dates), strength and beta against BTC. Missing sources are `null` and listed in `missing`. |
 | `sentinel market scan [--limit 50]` | One row of computed signals per top coin, BTC's regime first: price, 24 h and 7 d change, RSI, position against SMA50 and SMA200, strength against BTC, distance to the 7-day wick low and high, funding |
 | `sentinel market overview [--symbol BTC,SOL]` | Fear & Greed, BTC dominance, market cap change, stablecoin share, quotes |
 | `sentinel market top [--limit 15]`, `market scalp [--limit 50]`, `market whales SYM` | Legacy rule signals, scalp candidates, a rough whale check |
-| `sentinel news long SYM [--limit 3]` | NewsAPI headlines that name the coin (about 24 h delayed) |
+| `sentinel news long SYM [--limit 3]` | NewsAPI headlines that name the coin (about 24 h delayed; the snapshot adds fresh ones from free RSS feeds, no key) |
 | `sentinel watch levels SYM --below X --above Y`, `watch move SYM --entry P` | Price checks for monitoring |
 | `sentinel health`, `sentinel config show` | Readiness checks, settings |
 

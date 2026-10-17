@@ -272,7 +272,7 @@ Why (agent runs of 16 and 17 Oct): the agent fetched raw data and eyeballed it. 
 - [x] Daily, 4-hour and hourly candles. Daily candles **always** use `bar=1Dutc`: OKX's default `1D` runs on Hong Kong time (16:00 to 16:00 UTC), which put the agent's dates a day off. Fix the example URL in `openclaw/workspace/AGENTS.md` too.
 - [x] 5-minute file cache; every result carries its candle timestamps (UTC open time per candle, and whether it is closed).
 - [x] Plain `requests` through `sentinel.net`, not `ccxt`: two endpoints only, the same timeouts, retries, rate limits and logging as every other source, no large dependency to import on each CLI call, and the scoring job (3.6) can reuse it as it is.
-- [ ] **First**, run a live check from the EC2 instance in `us-east-1` (candles and the 2.5 flow endpoints: `pytest -m live tests/test_exchange.py`). Binance blocks many cloud IP ranges with HTTP 451, so do not use Binance as a data source.
+- [x] **First**, run a live check from the EC2 instance in `us-east-1` (candles and the 2.5 flow endpoints: `pytest -m live tests/test_exchange.py`; 17 Oct: OKX, Kraken, CMC and NewsAPI all answer from the instance). Binance blocks many cloud IP ranges with HTTP 451, so do not use Binance as a data source.
 
 **Accept:** hourly and daily candles for BTC and 10 coins in under 10 s (7 s from a laptop on 17 Oct); switching the exchange is a config change (`exchanges` in `config.py`).
 
@@ -288,9 +288,9 @@ Why (agent runs of 16 and 17 Oct): the agent fetched raw data and eyeballed it. 
 - [x] Output: `regime` (`risk_on`, `neutral`, `risk_off`) plus the numbers. Document the rule in the docstring.
 
 ### 2.4 News (`sentinel/data/news_rss.py`, `gdelt.py`)
-- [ ] RSS feed list in config; parse with `feedparser`; dedupe by link; filter by coin aliases (`XRP`, `Ripple`); last 24 h; at most 5 headlines per section.
+- [x] RSS feed list in config (CoinDesk, Cointelegraph, The Block, Decrypt; checked 17 Oct); parse with `feedparser`; dedupe by link; filter by coin aliases (`XRP`, `Ripple`); last 24 h; at most 5 headlines per section. The snapshot shows market headlines in `market.headlines` and the coin's in `coin_news_fresh`; a failing feed is listed in `missing` as `rss:<name>`.
 - [ ] GDELT market-wide tone (P1, can come later).
-- [ ] Sentiment is judged by the LLM, not by code.
+- [x] Sentiment is judged by the LLM, not by code.
 
 ### 2.5 Flow and whales (`sentinel/data/flow.py`, `whales.py`) [Core: funding and open interest; whale proxy Later]
 - [x] Funding rate, open interest and its 7-day change, long/short account ratio from OKX public endpoints (verified in the OKX API docs; access from `us-east-1` is checked with 2.1's live check).
@@ -558,15 +558,16 @@ All items carry `type` and `created_at`. Keys are strings.
 
 ## Appendix C: Snapshot example (compact, hierarchy order)
 
-`sentinel snapshot SOL` as built in 2.6 (a live run on 17 Oct 2026, about 1,500 characters; the CMC market fields and the headline are filled in for the example). Market headlines (2.4 RSS), `whales` (2.5) and `portfolio` (1.7) join when their tasks land.
+`sentinel snapshot SOL` as built in 2.6 (a live run on 17 Oct 2026, about 1,500 characters; the CMC market fields and the headlines are filled in for the example). Market headlines and `coin_news_fresh` come from the 2.4 RSS feeds (up to 5 and 3 headlines; a live SOL snapshot with them was about 1,900 characters). `whales` (2.5) and `portfolio` (1.7) join when their tasks land.
 
 ```json
 {
   "schema_version": 1, "as_of": "2026-10-17T08:31:53Z", "symbol": "SOL", "price": 104.92,
   "prices_at": "2026-10-17T08:31:53Z", "exchange": "okx",
   "btc": {"price": 81698.0, "chg_24h": -0.66, "chg_7d": -1.39, "sma50": 81361.6, "sma200": 72466.0, "above_sma50": true, "above_sma200": true, "dominance": 58.1, "regime": "neutral", "regime_points": 2},
-  "market": {"fear_greed": 55, "total_mcap_chg_24h": -0.8, "stablecoin_share": 7.9},
+  "market": {"fear_greed": 55, "total_mcap_chg_24h": -0.8, "stablecoin_share": 7.9, "headlines": [{"title": "...", "source": "CoinDesk"}]},
   "macro": {"next_fomc": "2026-10-28", "days_to_fomc": 11},
+  "coin_news_fresh": [{"title": "...", "source": "Cointelegraph"}],
   "coin_news": [{"title": "...", "source": "..."}], "news_delayed_24h": true,
   "flow": {"funding_pct": -0.0012, "funding_interval_h": 8.0, "oi_usd": 313875577.0, "oi_chg_7d": -3.21, "long_short": 2.21},
   "technicals": {"rsi14": 39.7, "sma20": 113.206, "sma50": 109.425, "sma200": 87.5164, "above_sma50": false, "above_sma200": true, "atr14_pct": 4.65, "vol_z30": -0.43, "chg_1h": -0.16, "chg_24h": -1.78, "chg_7d": -4.62},
