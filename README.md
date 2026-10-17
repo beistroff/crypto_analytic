@@ -4,51 +4,21 @@ This project is a low-risk automated agent for spot trading cryptocurrencies. It
 
 ## Architecture Diagram
 
-The diagram below outlines the infrastructure and data flow for the `openclaw` agent.
+You chat with the agent on Telegram. The agent (OpenClaw on an EC2 instance) never calls APIs or holds keys itself: it runs `sentinel` commands, which fetch the data, compute the signals and return a short summary for the agent to reason over. You place trades yourself.
 
 ```mermaid
-graph TD
-    subgraph "Actors"
-        User("User")
+flowchart LR
+    User(("You")) <-->|"1. ask / 5. answer (Telegram)"| Agent
+
+    subgraph EC2["AWS EC2 (Terraform)"]
+        Agent["OpenClaw agent"] -->|"2. runs"| Sentinel["sentinel CLI<br/>fetches data, computes signals"]
     end
 
-    subgraph "AWS Cloud (Provisioned by Terraform)"
-        direction LR
-        IAM("IAM Role\n(Least Privilege)")
-        Compute("Compute (e.g., EC2)") -- "Assumes" --> IAM
-        SSM("SSM Parameter Store\n(API Keys)")
-        S3("S3 Bucket\n(Backups)")
-        IAM -- "Grants access to" --> SSM & S3
-    end
-
-    subgraph "External Services"
-        direction LR
-        NewsAPI("[NewsAPI.org]")
-        CoinMarketCap("[CoinMarketCap API]")
-        MessagingPlatform("Messaging Platform API\n(e.g., Telegram, Discord)")
-        CryptoExchange("Crypto Exchange")
-    end
-
-    subgraph "Trading Agent"
-        OpenClaw("openclaw script")
-    end
-
-    %% Define interactions
-    User -- "1. Sends commands (e.g., find scalps)" --> MessagingPlatform
-    MessagingPlatform -- "2. Forwards command" --> OpenClaw    
-    Compute -- "Runs" --> OpenClaw
-
-    subgraph "Agent Logic"
-        direction TB
-        OpenClaw -- "3. Fetches API keys via IAM" --> SSM
-        OpenClaw -- "4. Gets market data" --> CoinMarketCap
-        OpenClaw -- "5. Gets news data" --> NewsAPI
-        OpenClaw -- "6. Sends analysis/suggestions" --> MessagingPlatform
-        OpenClaw -- "Stores backups via IAM" --> S3
-    end
-
-    MessagingPlatform -- "7. Delivers analysis" --> User
-    User -- "8. Manually executes trades" --> CryptoExchange
+    Sentinel -->|"3. reads keys"| SSM[("SSM Parameter Store<br/>API keys")]
+    Sentinel -->|"4. keyed data"| Keyed["CoinMarketCap, NewsAPI"]
+    Sentinel -->|"4. public data, no key"| Public["OKX, Kraken,<br/>Fear and Greed index"]
+    EC2 -->|"daily backup"| S3[("S3 bucket")]
+    User -.->|"trades by hand"| Exchange["Crypto exchange"]
 ```
 
 ### Agent Mindset
@@ -108,8 +78,21 @@ make install                                        # pip install -c constraints
 sentinel --help
 sentinel health --format telegram                   # needs AWS credentials for SSM
 sentinel market overview --symbol BTC,SOL
+sentinel snapshot SOL --format telegram
 ```
-`make test` and `make lint` run the tests (no network) and ruff.
+Commands (JSON by default, `--format telegram` for 5 lines or fewer):
+
+| Command | What it returns |
+| --- | --- |
+| `sentinel snapshot SYM` | Computed signals for one coin, BTC first: BTC regime, market mood, next FOMC, news, funding and open interest, RSI, moving averages, ATR, returns, range levels (wick and close, with UTC dates), strength and beta against BTC. Missing sources are `null` and listed in `missing`. |
+| `sentinel market scan [--limit 50]` | One row of computed signals per top coin, BTC's regime first: price, 24 h and 7 d change, RSI, position against SMA50 and SMA200, strength against BTC, distance to the 7-day wick low and high, funding |
+| `sentinel market overview [--symbol BTC,SOL]` | Fear & Greed, BTC dominance, market cap change, stablecoin share, quotes |
+| `sentinel market top [--limit 15]`, `market scalp [--limit 50]`, `market whales SYM` | Legacy rule signals, scalp candidates, a rough whale check |
+| `sentinel news long SYM [--limit 3]` | NewsAPI headlines that name the coin (about 24 h delayed) |
+| `sentinel watch levels SYM --below X --above Y`, `watch move SYM --entry P` | Price checks for monitoring |
+| `sentinel health`, `sentinel config show` | Readiness checks, settings |
+
+Candles come from OKX's and Kraken's public APIs (no key; daily candles are UTC days) and are cached for 5 minutes in `~/.cache/sentinel` (`SENTINEL_CACHE_DIR`). `make test` and `make lint` run the tests (no network) and ruff; `pytest -m live` runs the smoke tests against the real APIs.
 
 ### 3. Deployment
 

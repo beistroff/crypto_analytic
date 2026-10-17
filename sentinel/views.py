@@ -16,10 +16,14 @@ import requests
 
 from sentinel.data import SourceError, cmc, feargreed, newsapi
 from sentinel.eval.rules import is_scalp_candidate, rules_signal
+from sentinel.signals import scan as signals_scan
+from sentinel.signals import snapshot as signals_snapshot
+from sentinel.signals.snapshot import rounded, sig
 
 # Legacy whale_monitor.py: a 1 h pump above this many percent is worth an alert.
 WHALE_PUMP_1H_PCT = 1.5
 TELEGRAM_MAX_LINES = 5
+NO_NEWS = "no relevant headlines"
 
 log = logging.getLogger(__name__)
 
@@ -78,15 +82,97 @@ def whales(symbol: str) -> View:
 
 
 def news(symbol: str, limit: int) -> View:
-    """Recent headlines; the agent judges their sentiment."""
+    """Recent headlines that name the coin; the agent judges their sentiment."""
     items = newsapi.headlines(symbol, limit)
-    data = {
+    data: dict[str, Any] = {
         "symbol": symbol.upper(),
         "delayed_24h": True,
         "headlines": [{"title": h.title, "source": h.source, "url": h.url} for h in items],
     }
+    if not items:
+        data["note"] = NO_NEWS
+        return View(data, f"{symbol.upper()} news (about 24 h delayed): {NO_NEWS}")
     lines = [f"{symbol.upper()} news (about 24 h delayed): {len(items)}"]
     lines += [f"- {_short(h.title)} ({h.source})" for h in items]
+    return View(data, _lines(lines))
+
+
+def scan(limit: int) -> View:
+    """One row of computed signals per top coin; the text names the stand-outs."""
+    result = signals_scan.build(limit)
+    rows, btc = result.rows, result.btc
+    head = f"Top {limit} scan, {len(rows)} coins"
+    if btc:
+        head += (
+            f": BTC {_usd(btc.price)} {btc.regime} "
+            f"({_pct_or(btc.chg_24h)} 24h, {_pct_or(btc.chg_7d)} 7d)"
+        )
+    if result.missing:
+        head += f"; no data: {', '.join(result.missing)}"
+    ranked = sorted((r for r in rows if r.rs_7d is not None), key=lambda r: r.rs_7d, reverse=True)
+    near_low = sorted(
+        (r for r in rows if r.to_low_7d is not None), key=lambda r: r.to_low_7d, reverse=True
+    )
+    hot = [f"{r.sym} {r.rsi14:.0f}" for r in rows if r.rsi14 is not None and r.rsi14 > 70]
+    cold = [f"{r.sym} {r.rsi14:.0f}" for r in rows if r.rsi14 is not None and r.rsi14 < 30]
+    # The weakest come from the coins not already among the strongest.
+    strongest, weakest = ranked[:3], ranked[3:][::-1][:3]
+    lines = [
+        head,
+        "Strongest vs BTC 7d: " + ", ".join(f"{r.sym} {r.rs_7d:+.1f}" for r in strongest),
+        "Weakest vs BTC 7d: " + (", ".join(f"{r.sym} {r.rs_7d:+.1f}" for r in weakest) or "none"),
+        "Near 7d wick low: " + ", ".join(f"{r.sym} ({r.to_low_7d:+.1f}%)" for r in near_low[:3]),
+        f"RSI over 70: {_some(hot)}; under 30: {_some(cold)}",
+    ]
+    return View(result.data(), _lines(lines))
+
+
+def _some(items: list[str], shown: int = 5) -> str:
+    if not items:
+        return "none"
+    more = f" (+{len(items) - shown} more)" if len(items) > shown else ""
+    return ", ".join(items[:shown]) + more
+
+
+def snapshot(symbol: str) -> View:
+    """The coin in the signal hierarchy: BTC, market, macro, news, flow, technicals."""
+    snap = signals_snapshot.build(symbol)
+    data = snap.model_dump(mode="json")
+    tech, btc, vs = snap.technicals, snap.btc, snap.vs_btc
+    head = f"{snap.symbol} {_usd(snap.price)}"
+    if tech:
+        rsi = "?" if tech.rsi14 is None else tech.rsi14
+        head += f" ({_pct_or(tech.chg_24h)} 24h, {_pct_or(tech.chg_7d)} 7d), RSI {rsi}"
+    if vs and vs.rs_7d is not None:
+        head += f", vs BTC 7d {vs.rs_7d:+.1f} pts"
+    lines = [head]
+    if btc:
+        mood = snap.market.fear_greed if snap.market else None
+        lines.append(
+            f"BTC {_usd(btc.price)} {btc.regime}: {_pct_or(btc.chg_24h)} 24h, "
+            f"{_side(btc.above_sma50)} SMA50, {_side(btc.above_sma200)} SMA200"
+            + (f"; F&G {mood}" if mood is not None else "")
+        )
+    week = snap.levels.d7 if snap.levels else None
+    if week:
+        lines.append(
+            f"7d range: wicks {_usd(week.wick_low)} ({week.wick_low_date:%d %b}) to "
+            f"{_usd(week.wick_high)} ({week.wick_high_date:%d %b}); "
+            f"closes {_usd(week.close_low)} to {_usd(week.close_high)}"
+        )
+    extra = []
+    if snap.flow:
+        f = snap.flow
+        extra.append(
+            f"funding {f.funding_pct:+.4f}%/{f.funding_interval_h:g}h, "
+            f"OI {_pct_or(f.oi_chg_7d)} 7d, L/S {f.long_short}"
+        )
+    if snap.macro:
+        extra.append(f"FOMC {snap.macro.next_fomc:%d %b} (in {snap.macro.days_to_fomc} d)")
+    if extra:
+        lines.append("; ".join(extra))
+    if snap.missing:
+        lines.append("Missing: " + ", ".join(snap.missing))
     return View(data, _lines(lines))
 
 
@@ -100,7 +186,7 @@ def watch_levels(symbol: str, below: float | None, above: float | None) -> View:
         zone = "sell"
     data = {
         "symbol": coin.symbol,
-        "price": _round(coin.price),
+        "price": sig(coin.price),
         "below": below,
         "above": above,
         "zone": zone,
@@ -121,7 +207,7 @@ def watch_move(symbol: str, entry: float, min_pct: float) -> View:
     alert = abs(change) >= min_pct
     data = {
         "symbol": coin.symbol,
-        "price": _round(coin.price),
+        "price": sig(coin.price),
         "entry": entry,
         "chg_pct": round(change, 2),
         "alert": alert,
@@ -145,9 +231,9 @@ def _market_context() -> tuple[dict[str, Any], list[str]]:
         _skip("feargreed", exc, missing)
     try:
         metrics = cmc.global_metrics()
-        market["btc_dominance"] = _round(metrics.btc_dominance, 1)
-        market["total_mcap_chg_24h"] = _round(metrics.total_mcap_chg_24h, 2)
-        market["stablecoin_share"] = _round(metrics.stablecoin_share, 1)
+        market["btc_dominance"] = rounded(metrics.btc_dominance, 1)
+        market["total_mcap_chg_24h"] = rounded(metrics.total_mcap_chg_24h, 2)
+        market["stablecoin_share"] = rounded(metrics.stablecoin_share, 1)
     except (SourceError, requests.RequestException) as exc:
         _skip("cmc_global", exc, missing)
     return market, missing
@@ -176,9 +262,9 @@ def _quote(symbol: str) -> cmc.Coin:
 def _coin(coin: cmc.Coin) -> dict[str, Any]:
     return {
         "symbol": coin.symbol,
-        "price": _round(coin.price),
-        "chg_1h": _round(coin.change_1h, 2),
-        "chg_24h": _round(coin.change_24h, 2),
+        "price": sig(coin.price),
+        "chg_1h": rounded(coin.change_1h, 2),
+        "chg_24h": rounded(coin.change_24h, 2),
         "vol_mc": round(coin.vol_mc, 3),
     }
 
@@ -196,13 +282,6 @@ def _market_line(market: dict[str, Any]) -> str:
     return "Market: " + (", ".join(parts) if parts else "no data")
 
 
-def _round(value: float | None, digits: int | None = None) -> float | None:
-    """Prices to 6 significant digits (works for BTC and for tiny coins alike)."""
-    if value is None:
-        return None
-    return round(value, digits) if digits is not None else float(f"{value:.6g}")
-
-
 def _usd(value: float | None) -> str:
     if value is None:
         return "?"
@@ -215,6 +294,14 @@ def _usd(value: float | None) -> str:
 
 def _pct(value: float) -> str:
     return f"{value:+.1f}%"
+
+
+def _pct_or(value: float | None) -> str:
+    return "?" if value is None else _pct(value)
+
+
+def _side(above: bool | None) -> str:
+    return "?" if above is None else ("above" if above else "below")
 
 
 def _short(text: str, width: int = 90) -> str:

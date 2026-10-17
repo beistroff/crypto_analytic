@@ -22,6 +22,8 @@ class Coin:
     change_24h: float
     volume_24h: float
     market_cap: float
+    change_7d: float | None = None
+    is_stablecoin: bool = False  # CMC's "stablecoin" tag
 
     @property
     def vol_mc(self) -> float:
@@ -90,4 +92,6 @@ def _coin(raw: dict[str, Any]) -> Coin:
         change_24h=usd["percent_change_24h"],
         volume_24h=usd.get("volume_24h") or 0.0,
         market_cap=usd.get("market_cap") or 0.0,
+        change_7d=usd.get("percent_change_7d"),
+        is_stablecoin="stablecoin" in (raw.get("tags") or []),
     )

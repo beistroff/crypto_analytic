@@ -1,12 +1,12 @@
 # Crypto Sentinel: Implementation Plan
 
-Version 1, 10 October 2026.
+Version 2, 16 October 2026: core first, then the research track, the rest later (see 0.2).
 
 ## How to use this file
 
 - Commit it to the repo as `docs/IMPLEMENTATION_PLAN.md`.
 - Start every Claude Code session with: *"Read `docs/IMPLEMENTATION_PLAN.md`. Work on task X.Y only. Follow section 3 (Conventions). Stop when its acceptance criteria pass, tick its checkbox, and add a note to `docs/project_notes.md`."*
-- Work top to bottom. Phases 1 to 4 are P0 (needed to pass), 5 to 7 are P1, 8 is P2 (optional), 9 is the experiment.
+- Follow the order in 0.2 (Roadmap): the core first, then the research track (target: done by 30 Nov). Tasks marked Later have no date. Each phase heading says which track it belongs to.
 - After each task, append 3 to 5 lines to `docs/project_notes.md`: what changed, why, and any before/after number (lines of code, latency, tokens, bugs fixed). These notes feed the final write-up.
 
 ---
@@ -21,8 +21,8 @@ Version 1, 10 October 2026.
 | --- | --- |
 | Gateway | OpenClaw stays. Pin the version, gateway on localhost, no ClawHub skills. Hermes Agent is out of scope (possible later comparison). |
 | Agent | By default one agent with the existing SOUL / IDENTITY persona ("the best crypto analyst"). Chat model: Claude Haiku 5.5, with the free Gemini models (3.8, 3.7, 3.6 Flash, then 3.5 and 3.1 Flash Lite) as fallbacks. Decided at bring-up (2026-10-16): free Gemini Flash allows 5 requests a minute and 20 a day, which one agent turn plus OpenClaw's retries can use up. |
-| Priorities (2026-10-16) | 1. Bring the agent back: history from the old backup, daily backup and market scan, `web_fetch`. 2. Phase 2 data plus the CMC pass-through (2.7). 3. Trade journal (1.4, 1.5, 1.7). 4. Predictions, alerts, Telegram UX. Deep analysis stays on Haiku with more thinking; Sonnet is not used for chat (cost). |
-| Data access | `sentinel` commands for structured, compact data; `web_fetch` for public, keyless sources (OKX candles, funding, open interest); the CMC pass-through for any other CMC endpoint. The agent never holds an API key: whatever is in its context can end up in replies, memory files and the S3 backup. |
+| Priorities (2026-10-16) | Core first: the agent useful day to day (market data, trade journal, lessons, a light prediction journal). Then the research track (the measured experiment) by 30 Nov. Everything else later. Order and dates in 0.2. Deep analysis stays on Haiku with more thinking; Sonnet is not used for chat (cost). |
+| Data access | `sentinel` commands for structured, compact data; `web_fetch` for public, keyless sources (OKX candles, funding, open interest); later, when a question needs it, the CMC pass-through (2.7) for any other CMC endpoint. The agent never holds an API key: whatever is in its context can end up in replies, memory files and the S3 backup. |
 | Claude models | Sonnet 5.5 (`claude-sonnet-5-5`) and Haiku 5.5 (`claude-haiku-5-5`) through an **Anthropic API key** with $5 of prepaid credit, a $5 monthly spend limit and no auto-reload (created 2026-10-16). A Claude Pro subscription does not include API usage, and Anthropic cut subscriptions off from third-party agents like OpenClaw in April 2026, so do not depend on it. |
 | Data store | DynamoDB is the source of truth: `sentinel-real` (real trades) and `sentinel-sim` (predictions, snapshots, outcomes). Provisioned capacity (2 RCU/WCU per table and index) stays inside the always-free tier; point-in-time recovery is off. Backup is the nightly JSON export to S3 (plus a `portfolio.json` fallback on the instance); the existing daily S3 backups stay as well. Keep S3 under 5 GB with a lifecycle rule on `backups/`. |
 | Lambda | Only for jobs that need no LLM: market scans and alerts, prediction scoring, Naive Bayes retraining. Cost is effectively $0. All LLM calls run on EC2. |
@@ -48,6 +48,20 @@ Notes:
 - "Use the latest OpenClaw" and "pin the version" do not conflict: install the newest release at first bring-up, record its exact version, and pin to it from then on. Check its current docs and release notes for config keys at that point, because they change often.
 - Security hardening for Stage A (task 1.3): no inbound security-group rules (access only via SSM Session Manager), IMDSv2 required, encrypted EBS, least-privilege IAM, gateway on localhost, no ClawHub skills, no secrets in user data, Terraform state in a private encrypted bucket.
 - Before the first `terraform apply`, check which resources survived the destroy (the S3 backup bucket, SSM parameters, any old DynamoDB table, remote state) so Terraform neither recreates nor fails on them.
+
+### 0.2 Roadmap (2026-10-16): core first, then the research track
+The plan is split in three. **Core** makes the agent useful day to day. The **research track** is the measured experiment, targeted to finish by 30 Nov. **Later** has no date. Task numbers stay as they are.
+
+| When | Track | Tasks |
+| --- | --- | --- |
+| Now | Core: bring-up close-out | Daily S3 backup (system crontab), daily market scan (OpenClaw automation), merge the bring-up PR |
+| 17 to 25 Oct | Core: market data | 2.1 candles, 2.2 indicators, 2.3 BTC regime, 2.4 news (RSS and coin aliases), 2.5 funding and open interest, 2.6 snapshot |
+| 26 Oct to 1 Nov | Core: trade journal | 1.4, 1.5, 1.7 (trades, positions, bids, balance, nightly DynamoDB export); the agent adds a lesson to `memory/lessons_learned.md` after each closed trade; 1.3 S3 lifecycle rule |
+| 2 to 8 Nov | Core: prediction journal | 3.3 validator, 3.4 chat path, 3.6 scoring on the instance, 3.7 weekly hit rate. The research track reuses all of it. |
+| 9 to 15 Nov | Research | 3.1 clients, 3.2 prompts, 3.5 runner, 5.1 to 5.4 Naive Bayes and gate; freeze on 15 Nov |
+| 16 to 29 Nov | Research | 14-day run (9.2) |
+| 30 Nov | Research | 5.5 and 9.3 analysis |
+| No date | Later | 1.6, 1.7 `lesson share`, 2.4 GDELT, 2.5 whale proxy, 2.6 `--save`, 2.7 CMC pass-through, 5.6, Phases 4, 6, 7 and 8, `openclaw/configure.sh` (before the next rebuild) |
 
 ---
 
@@ -158,11 +172,11 @@ crypto_analytic/
 
 ---
 
-## Phase 1: Foundation, polish and DynamoDB (W1 to W2, 12 to 25 Oct) [P0]
+## Phase 1: Foundation, polish and DynamoDB [Core; 1.6 Later]
 
 ### 1.0 Accounts and API keys (manual, done by you, about 30 minutes)
-- [ ] Follow Appendix F.1 to F.2 and F.4 to F.5: dedicated Google account, Gemini key from AI Studio, stored in SSM.
-- [ ] **Deferred:** the Anthropic key (F.3) is created later, not now. Do it before the Phase 3.5 pilot day (when the Haiku and Sonnet arms first run live), and ideally run a few Haiku test calls well before the 30 Nov freeze. Until then, develop `sentinel/llm/anthropic_.py` against mocks and recorded fixtures. Spend limit: $5 (see F.3).
+- [x] Follow Appendix F.1 to F.2 and F.4 to F.5: dedicated Google account, Gemini key from AI Studio, stored in SSM.
+- [x] The Anthropic key (F.3), created 2026-10-16 with $5 of prepaid credit and a $5 monthly spend limit; OpenClaw uses it for chat (Haiku 5.5).
 
 **Accept (Stage A, no EC2 needed):** the Gemini test call in Appendix F returns text when run from your laptop (read the key from SSM with the AWS CLI, as in F.5); `aws ssm get-parameters-by-path --path /sentinel --with-decryption --query "Parameters[].Name"` lists the Gemini key. The Anthropic key and its test call are checked later, before Phase 3.5.
 
@@ -229,7 +243,7 @@ Only the lessons move over. Positions, bids and the baseline are entered fresh a
 ### 1.7 Switch the trade journal to DynamoDB
 - [ ] Commands: `sentinel trade add --side buy|sell --symbol SOL --qty 1.35 --price 72.6 [--fee 0.1]`, `sentinel portfolio summary --format telegram|json`, `sentinel lesson add|list`, `sentinel bid add|list|remove`, `sentinel backup export` (DynamoDB to JSON in S3, nightly, next to the existing file backups).
 - [ ] New skill folder `openclaw/workspace/skills/trade-journal/SKILL.md`; update `TOOLS.md`; stop all JSON portfolio writes.
-- [ ] `sentinel lesson share` (daily, after the backup): renders the approved `LESSON` items as `beistroff_lessons_learned.md`, redacts dollar amounts, quantities and the baseline (rules and % results stay), and replaces yesterday's copy in your own subfolder of the shared Google Drive folder (F.9). `sentinel lesson auth` runs the one-time Google consent from the laptop. Defaults chosen 2026-10-15, change if you prefer: redacted, folder owned by the dedicated Google account.
+- [ ] [Later] `sentinel lesson share` (daily, after the backup): renders the approved `LESSON` items as `beistroff_lessons_learned.md`, redacts dollar amounts, quantities and the baseline (rules and % results stay), and replaces yesterday's copy in your own subfolder of the shared Google Drive folder (F.9). `sentinel lesson auth` runs the one-time Google consent from the laptop. Defaults chosen 2026-10-15, change if you prefer: redacted, folder owned by the dedicated Google account.
 
 **Accept (Stage B, after first bring-up; the CLI and tests are done in Stage A):** in Telegram, "I bought 100 XRP at 1.20" creates a trade and updates the position; "show my balance" returns a short table; the nightly S3 backup still runs.
 
@@ -244,42 +258,64 @@ Only the checks the agent cannot work without. Others join with their own task (
 
 ---
 
-## Phase 2: Market data and signal hierarchy (W3 to W4, 26 Oct to 8 Nov) [P0]
+## Phase 2: Market data and signal hierarchy [Core, 17 to 25 Oct; parts Later]
+
+Why (agent runs of 16 and 17 Oct): the agent fetched raw data and eyeballed it. A top-50 scan took about 33 `web_fetch` calls and read levels off 10 daily candles; the daily BTC scan named $80.4k as support although BTC wicked to 79,775 on 15 Oct UTC, mixed wick and close levels, had no moving averages, and its news was unrelated to the coin. From here on code computes the signals and the agent reads them.
+
+### 2.0 News query fix (`sentinel/data/newsapi.py`)
+- [x] `sentinel news long SOL` returned unrelated headlines (housing, programming, fantasy sports). Query with coin aliases (ticker plus full name, e.g. `SOL` / `Solana`), English only, and keep only headlines that name the coin; when nothing relevant is found the output says so plainly.
+
+**Accept:** a test with an unrelated headline in the fixture shows it dropped, and an empty result says "no relevant headlines".
 
 ### 2.1 Exchange candles (`sentinel/data/exchange.py`)
-- [ ] Use `ccxt` with OKX as default and Kraken as fallback; symbol map from CMC ticker to exchange pair (e.g. `XRP` to `XRP/USDT`).
-- [ ] `fetch_ohlcv(symbol, timeframe="1h"|"1d", limit)` with a 5-minute file cache.
-- [ ] **First**, run a live check from the EC2 instance in `us-east-1`. Binance blocks many cloud IP ranges with HTTP 451, so do not use Binance as a data source.
+- [x] OKX as default and Kraken as fallback (for coins not on OKX, e.g. XMR); symbol map from CMC ticker to exchange pair (`XRP` to `XRP-USDT` on OKX, `XRPUSD` on Kraken).
+- [x] Daily, 4-hour and hourly candles. Daily candles **always** use `bar=1Dutc`: OKX's default `1D` runs on Hong Kong time (16:00 to 16:00 UTC), which put the agent's dates a day off. Fix the example URL in `openclaw/workspace/AGENTS.md` too.
+- [x] 5-minute file cache; every result carries its candle timestamps (UTC open time per candle, and whether it is closed).
+- [x] Plain `requests` through `sentinel.net`, not `ccxt`: two endpoints only, the same timeouts, retries, rate limits and logging as every other source, no large dependency to import on each CLI call, and the scoring job (3.6) can reuse it as it is.
+- [ ] **First**, run a live check from the EC2 instance in `us-east-1` (candles and the 2.5 flow endpoints: `pytest -m live tests/test_exchange.py`). Binance blocks many cloud IP ranges with HTTP 451, so do not use Binance as a data source.
 
-**Accept:** hourly and daily candles for BTC and 10 coins in under 10 s; switching the exchange is a config change.
+**Accept:** hourly and daily candles for BTC and 10 coins in under 10 s (7 s from a laptop on 17 Oct); switching the exchange is a config change (`exchanges` in `config.py`).
 
 ### 2.2 Indicators (`sentinel/signals/indicators.py`)
-- [ ] RSI(14), SMA(50) and SMA(200) on daily candles, ATR(14), returns over 1 h, 24 h and 7 d, volume z-score over 30 days.
+- [x] RSI(14), SMA20, SMA50 and SMA200 on daily candles, ATR(14), returns over 1 h, 24 h and 7 d, volume z-score over 30 days.
+- [x] Range edges computed in code: 7-day and 30-day wick high and low with their UTC dates, plus the close range, clearly labelled.
+- [x] Relative strength against BTC (return difference over 7, 14 and 30 days) and beta to BTC (90 days).
 
 **Accept:** unit tests against hand-checked values on a fixture series.
 
 ### 2.3 BTC regime (`sentinel/signals/btc_regime.py`)
-- [ ] Inputs: BTC 24 h and 7 d change, price versus SMA50 and SMA200, BTC dominance (CMC global metrics, `sentinel.data.cmc.global_metrics`).
-- [ ] Output: `regime` (`risk_on`, `neutral`, `risk_off`) plus the numbers. Document the rule in the docstring.
+- [x] Inputs: BTC 24 h and 7 d change, price versus SMA50 and SMA200, BTC dominance (CMC global metrics, `sentinel.data.cmc.global_metrics`; reported, but it does not change the label without a dominance history).
+- [x] Output: `regime` (`risk_on`, `neutral`, `risk_off`) plus the numbers. Document the rule in the docstring.
 
 ### 2.4 News (`sentinel/data/news_rss.py`, `gdelt.py`)
 - [ ] RSS feed list in config; parse with `feedparser`; dedupe by link; filter by coin aliases (`XRP`, `Ripple`); last 24 h; at most 5 headlines per section.
 - [ ] GDELT market-wide tone (P1, can come later).
 - [ ] Sentiment is judged by the LLM, not by code.
 
-### 2.5 Flow and whales (`sentinel/data/flow.py`, `whales.py`) [P1, schema now]
-- [ ] Funding rate, open interest, taker buy vs sell volume, long/short ratio from OKX public endpoints (verify the endpoints in OKX API docs; check access from `us-east-1`).
-- [ ] Whale proxy: share of volume from trades of $100k or more among recent trades.
+### 2.5 Flow and whales (`sentinel/data/flow.py`, `whales.py`) [Core: funding and open interest; whale proxy Later]
+- [x] Funding rate, open interest and its 7-day change, long/short account ratio from OKX public endpoints (verified in the OKX API docs; access from `us-east-1` is checked with 2.1's live check).
+- [ ] [Later] Taker buy vs sell volume.
+- [ ] [Later] Whale proxy: share of volume from trades of $100k or more among recent trades.
 
 ### 2.6 Snapshot builder (`sentinel/signals/snapshot.py`)
-- [ ] `sentinel snapshot SYM [--save] [--format json]` returns the pydantic `Snapshot` in hierarchy order (Appendix C): BTC, market news and mood, coin news, flow, whales, coin technicals, portfolio context.
-- [ ] Missing sources become `null` and are listed in `missing`.
-- [ ] Keep the JSON under about 1,500 tokens; add a size test.
-- [ ] `--save` stores it as a `SNAP` item in `sentinel-sim` with a 180-day TTL.
+- [x] `sentinel snapshot SYM [--format json|telegram]` returns the pydantic `Snapshot` in hierarchy order (Appendix C) with an `as_of` timestamp: BTC, market mood, macro, coin news, flow, coin technicals, range levels, strength against BTC. Whales (2.5) and portfolio context (1.7) join when their tasks land.
+- [x] Macro line: the next FOMC meeting from a static list in config (Federal Reserve calendar, update it once a year).
+- [ ] [Later] Spot ETF net flows: no free, documented, machine-readable source confirmed (17 Oct: Farside and TFTC are web pages; NewHedge's API needs a token; no free terms found for SoSoValue's or CoinGlass's APIs; scrapers on Apify are paid). Add them when one turns up.
+- [x] Missing sources become `null` and are listed in `missing`.
+- [x] Keep the JSON under about 1,500 tokens; add a size test.
+- [ ] [Later] `--save` stores it as a `SNAP` item in `sentinel-sim` with a 180-day TTL.
 
-**Accept:** snapshots for 10 coins in under 20 s; tests for missing sources and the size budget.
+**Accept:** snapshots for 10 coins in under 20 s (17 Oct, laptop: 19 s as 10 separate CLI calls, most of it Python start-up; about 0.8 s per snapshot); tests for missing sources and the size budget.
 
-### 2.7 CMC pass-through (`sentinel cmc get`)
+### 2.8 Market scan (`sentinel/signals/scan.py`)
+Replaces the agent's own top-50 scan (about 33 `web_fetch` calls, levels read off raw candles).
+- [x] `sentinel market scan [--limit 50] [--format json|telegram]`: one CMC listings call, then per coin its daily candles and OKX funding rate in parallel, in one process; BTC's regime first.
+- [x] One row per coin under `columns`: price, 24 h and 7 d change (CMC, rolling), RSI14, above SMA50 and SMA200, strength against BTC over 7 days, distance to the 7-day wick low and high, funding. Stablecoins and wrapped BTC or ETH are skipped; coins without candles are listed in `missing`.
+- [x] The Telegram form names the stand-outs: strongest and weakest against BTC, nearest the 7-day wick low, RSI extremes.
+
+**Accept:** top 50 in about 5 s (17 Oct, laptop: 5.3 s, 3.1 s with cached candles; about 3,200 characters of JSON); a test for the rows, skipped and missing coins and the size budget.
+
+### 2.7 CMC pass-through (`sentinel cmc get`) [Later: build it when a question needs more than `web_fetch` and the fixed commands give]
 So the agent can ask CMC for more than the fixed commands without ever holding the key.
 - [ ] `sentinel cmc get <endpoint> [--param key=value ...]`: read-only endpoints from an allowlist in config; `sentinel` adds the key header, trims the response to the requested fields and a size budget, and reports the credits used.
 - [ ] A per-day credit budget in settings; the command refuses once it is spent (the free plan has a monthly credit limit).
@@ -288,7 +324,7 @@ So the agent can ask CMC for more than the fixed commands without ever holding t
 
 ---
 
-## Phase 3: Prediction journal and models (W4 to W5, 2 to 15 Nov) [P0]
+## Phase 3: Prediction journal and models [Core: 3.3, 3.4, 3.6, 3.7, 2 to 8 Nov; Research: 3.1, 3.2, 3.5, 9 to 15 Nov]
 
 ### 3.1 LLM clients (`sentinel/llm/`)
 - [ ] One interface `call(system, user, schema) -> (parsed, usage)` for Gemini (`google-genai`), Anthropic (`anthropic`, models `claude-sonnet-5-5` and `claude-haiku-5-5`) and OpenRouter (OpenAI-compatible).
@@ -304,6 +340,7 @@ So the agent can ask CMC for more than the fixed commands without ever holding t
 Runs on every answer before anything else:
 - [ ] `btc_context` not empty, and its direction agrees with the snapshot's BTC 24 h sign.
 - [ ] `entry` within 1% of the snapshot price.
+- [ ] Levels stated in an answer match the snapshot's computed levels: a stated range low above the snapshot's 7-day wick low (or a range high below its wick high) is rejected, and a level called a close level must match the close range.
 - [ ] BUY: `target > entry > stop`; SELL: `target < entry < stop`; HOLD: no target or stop needed.
 - [ ] `horizon_h` in {1, 6, 24, 48}; `confidence` between 0 and 1; reward-to-risk of 1 or more (warning only).
 - [ ] On failure: one retry with the error list; if it fails again, store with `valid = false` (counted in the results).
@@ -318,7 +355,8 @@ Runs on every answer before anything else:
 - [ ] Idempotency key: date + slot + symbol + arm (re-runs skip existing items).
 - [ ] System cron on EC2 at 09:00 and 21:00 UTC. This runs outside OpenClaw on purpose, so every arm gets an identical prompt and exact token logging.
 
-### 3.6 Scoring job (Lambda, hourly, no LLM)
+### 3.6 Scoring job (hourly, no LLM)
+Core version: runs on the instance from the system crontab. The Lambda version waits for Phase 6.
 - [ ] `score_handler` queries `GSI2` for `OPEN` items with `due_at <= now`, fetches hourly candles since the prediction (plain `requests` to the exchange REST API, no `ccxt` in Lambda), and fills each horizon in `checks`: price, return, hit.
 - [ ] Records `target_hit_first` (target touched before stop, or the reverse, or neither) and `max_adverse_pct`.
 - [ ] Sets the next `due_at`; after the 48 h check, sets `status = DONE` and removes the `GSI2` attributes.
@@ -331,10 +369,10 @@ Runs on every answer before anything else:
 
 ---
 
-## Phase 4: Telegram UX and short replies (W4, 2 to 8 Nov) [P0]
+## Phase 4: Telegram UX and short replies [Later]
 
 ### 4.1 Reply format
-- [ ] Rule in `AGENTS.md` and every skill: 5 lines or fewer, fixed template, full reasoning saved in DynamoDB and sent only on "details <id>". Cap output tokens at about 250 for chat replies.
+- [ ] Rule in `AGENTS.md` and every skill: 5 lines or fewer, fixed template, full reasoning saved in DynamoDB and sent only on "details <id>". Cap output tokens at about 250 for chat replies. (Changed 2026-10-16: replies are short by default and longer when the user asks or the market needs explaining; see the Telegram row in section 0.)
 
 ```text
 XRP: BUY, confidence 0.64, 24 h
@@ -354,13 +392,13 @@ Reply "details a3f" for the full analysis
 - [ ] `/menu` replies with one button per watchlist coin; every analysis reply carries [Details] [Sim trade 24 h] [NB check].
 
 ### 4.4 Lock the bot down
-- [ ] Only your Telegram user id may talk to the bot (DM allowlist in the Telegram channel config).
+- [x] Only your Telegram user id may talk to the bot (DM allowlist in the Telegram channel config; done at bring-up).
 
 **Accept:** tapping "XRP" in `/menu` gives a 5-line analysis with buttons; "Details" returns the full text.
 
 ---
 
-## Phase 5: Naive Bayes model and gate (W5 to W6, 9 to 22 Nov) [P1]
+## Phase 5: Naive Bayes model and gate [Research, 9 to 15 Nov; 5.6 Later]
 
 ### 5.1 Historical dataset
 - [ ] `sentinel nb build-dataset --days 730`: daily candles for the watchlist and BTC from the exchange, full Fear & Greed history (alternative.me supports `?limit=0`). BTC dominance history is dropped (CMC history needs a paid plan) unless a free source turns up. Save Parquet to S3 `datasets/`.
@@ -392,7 +430,7 @@ Reply "details a3f" for the full analysis
 
 ---
 
-## Phase 6: Lambda alerts through SQS to OpenClaw (W6, 16 to 22 Nov) [P1]
+## Phase 6: Lambda alerts through SQS to OpenClaw [Later; the daily market scan covers alerts for now]
 
 ### 6.1 Terraform
 - [ ] SQS queue plus dead-letter queue; Lambda functions `scan`, `score`, `nb_train` (arm64, python3.12); EventBridge Scheduler schedules; least-privilege IAM; log retention 14 days; AWS Budgets alarm at $5.
@@ -417,7 +455,7 @@ Reply "details a3f" for the full analysis
 
 ---
 
-## Phase 7: Session hygiene and cost logging (W6) [P1]
+## Phase 7: Session hygiene and cost logging [Later]
 
 - [ ] **7.1 Baseline first:** record input tokens per chat turn over about 30 normal messages (OpenClaw logs or `/status`).
 - [ ] **7.2** Move scheduled work from the heartbeat and main session to OpenClaw cron jobs (fresh session per run). Keep `HEARTBEAT.md` minimal.
@@ -426,7 +464,7 @@ Reply "details a3f" for the full analysis
 
 ---
 
-## Phase 8: Optional extensions (W7, 23 to 29 Nov) [P2]
+## Phase 8: Optional extensions [Later]
 
 ### 8.1 `cluster-prediction`
 - [ ] `sentinel cluster run SYM`: Gemini Flash (technical role), one free OpenRouter model (sentiment role; model id in config), Claude Sonnet or Haiku (risk role), called in parallel.
@@ -452,9 +490,9 @@ Other users share their lessons the same way (`<user>_lessons_learned.md`), so t
 
 ---
 
-## Phase 9: Experiment freeze, run and analysis (30 Nov to 28 Dec)
+## Phase 9: Experiment freeze, run and analysis [Research: freeze 15 Nov, run 16 to 29 Nov, analysis 30 Nov]
 
-### 9.1 Freeze (30 Nov)
+### 9.1 Freeze (15 Nov)
 - [ ] `experiment.yaml` committed with arms, coin list, exact model ids, validator and gate thresholds, NB model version, prompt hashes. Git tag `experiment-v1`.
 - [ ] Reflection and NB retraining switched off.
 
@@ -469,6 +507,8 @@ Other users share their lessons the same way (`<user>_lessons_learned.md`), so t
 | RULES | Legacy fixed rules | none | n/a |
 
 Daily volume: 20 snapshots, so about 40 Flash calls plus gate re-checks, 20 Haiku and 20 Sonnet. Expected cost for 28 days: Sonnet about $6 (about $3 through the Batch API), Haiku about $0.30, Flash free.
+
+Shortened (2026-10-16): the run is 14 days, so it ends by 30 Nov. The final arms are chosen at the freeze to fit the $5 monthly Anthropic limit (S1 only if the budget allows) and the free Gemini quota (5 requests a minute and 20 a day for 3.x Flash, so the Gemini arms may need a Flash Lite model).
 
 ### 9.2 Run
 - [ ] Daily report check; watch for missing data and free-tier 429 errors; never change the frozen config mid-run (log incidents in `project_notes.md` instead).
@@ -518,16 +558,23 @@ All items carry `type` and `created_at`. Keys are strings.
 
 ## Appendix C: Snapshot example (compact, hierarchy order)
 
+`sentinel snapshot SOL` as built in 2.6 (a live run on 17 Oct 2026, about 1,500 characters; the CMC market fields and the headline are filled in for the example). Market headlines (2.4 RSS), `whales` (2.5) and `portfolio` (1.7) join when their tasks land.
+
 ```json
 {
-  "schema_version": 1, "ts": "2026-11-03T09:00:00Z", "symbol": "XRP", "price": 1.183,
-  "btc": {"price": 81250, "chg_24h": 1.2, "chg_7d": -3.4, "above_sma50": true, "above_sma200": true, "dominance": 58.1, "regime": "neutral"},
-  "market": {"fear_greed": 41, "total_mcap_chg_24h": 1.2, "stablecoin_share": 7.9, "headlines": ["...", "..."]},
-  "coin_news": ["...", "..."],
-  "flow": {"funding_8h": 0.006, "oi_chg_24h": 3.1, "taker_buy_sell": 1.08, "long_short": 1.32},
-  "whales": {"large_trade_share": 0.12},
-  "technicals": {"rsi14": 54, "above_sma50": true, "above_sma200": false, "atr14_pct": 4.2, "vol_z": 0.8, "chg_1h": 0.3, "chg_24h": 2.1},
-  "portfolio": {"has_position": false, "exposure_pct": 0, "weekday": "Tue"},
+  "schema_version": 1, "as_of": "2026-10-17T08:31:53Z", "symbol": "SOL", "price": 104.92,
+  "prices_at": "2026-10-17T08:31:53Z", "exchange": "okx",
+  "btc": {"price": 81698.0, "chg_24h": -0.66, "chg_7d": -1.39, "sma50": 81361.6, "sma200": 72466.0, "above_sma50": true, "above_sma200": true, "dominance": 58.1, "regime": "neutral", "regime_points": 2},
+  "market": {"fear_greed": 55, "total_mcap_chg_24h": -0.8, "stablecoin_share": 7.9},
+  "macro": {"next_fomc": "2026-10-28", "days_to_fomc": 11},
+  "coin_news": [{"title": "...", "source": "..."}], "news_delayed_24h": true,
+  "flow": {"funding_pct": -0.0012, "funding_interval_h": 8.0, "oi_usd": 313875577.0, "oi_chg_7d": -3.21, "long_short": 2.21},
+  "technicals": {"rsi14": 39.7, "sma20": 113.206, "sma50": 109.425, "sma200": 87.5164, "above_sma50": false, "above_sma200": true, "atr14_pct": 4.65, "vol_z30": -0.43, "chg_1h": -0.16, "chg_24h": -1.78, "chg_7d": -4.62},
+  "levels": {
+    "d7": {"wick_low": 100.56, "wick_low_date": "2026-10-15", "wick_high": 113.4, "wick_high_date": "2026-10-12", "close_low": 104.29, "close_high": 111.34},
+    "d30": {"wick_low": 100.56, "wick_low_date": "2026-10-15", "wick_high": 124.96, "wick_high_date": "2026-09-27", "close_low": 104.29, "close_high": 122.16}
+  },
+  "vs_btc": {"rs_7d": -3.15, "rs_14d": -8.69, "rs_30d": -3.67, "beta_90d": 1.24},
   "missing": []
 }
 ```

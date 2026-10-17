@@ -84,7 +84,7 @@ def health_cmd(ctx: click.Context, wait_s: float, fmt: str) -> None:
 
 @cli.group()
 def market() -> None:
-    """Market data from CoinMarketCap and Fear & Greed."""
+    """Market data and computed signals (CoinMarketCap, Fear & Greed, exchanges)."""
 
 
 @market.command("overview")
@@ -114,6 +114,16 @@ def market_scalp(limit: int, fmt: str) -> None:
     _emit(views.scalp(limit), fmt)
 
 
+@market.command("scan")
+@click.option("--limit", type=click.IntRange(1, 100), default=50)
+@FORMAT
+@_source_errors
+def market_scan(limit: int, fmt: str) -> None:
+    """One row of computed signals per top coin (RSI, averages, strength against BTC,
+    7-day range, funding), BTC's regime first."""
+    _emit(views.scan(limit), fmt)
+
+
 @market.command("whales")
 @click.argument("symbol")
 @FORMAT
@@ -121,6 +131,16 @@ def market_scalp(limit: int, fmt: str) -> None:
 def market_whales(symbol: str, fmt: str) -> None:
     """Rough whale check for one coin (a sharp 1 h pump)."""
     _emit(views.whales(symbol), fmt)
+
+
+@cli.command("snapshot")
+@click.argument("symbol")
+@FORMAT
+@_source_errors
+def snapshot_cmd(symbol: str, fmt: str) -> None:
+    """Computed signals for one coin, BTC first: regime, market, macro, news, flow,
+    technicals, range levels and strength against BTC."""
+    _emit(views.snapshot(symbol), fmt)
 
 
 @cli.group()
