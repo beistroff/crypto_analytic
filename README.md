@@ -4,51 +4,21 @@ This project is a low-risk automated agent for spot trading cryptocurrencies. It
 
 ## Architecture Diagram
 
-The diagram below outlines the infrastructure and data flow for the `openclaw` agent.
+You chat with the agent on Telegram. The agent (OpenClaw on an EC2 instance) never calls APIs or holds keys itself: it runs `sentinel` commands, which fetch the data, compute the signals and return a short summary for the agent to reason over. You place trades yourself.
 
 ```mermaid
-graph TD
-    subgraph "Actors"
-        User("User")
+flowchart LR
+    User(("You")) <-->|"1. ask / 5. answer (Telegram)"| Agent
+
+    subgraph EC2["AWS EC2 (Terraform)"]
+        Agent["OpenClaw agent<br/>Claude Haiku"] -->|"2. runs"| Sentinel["sentinel CLI<br/>fetches data, computes signals"]
     end
 
-    subgraph "AWS Cloud (Provisioned by Terraform)"
-        direction LR
-        IAM("IAM Role\n(Least Privilege)")
-        Compute("Compute (e.g., EC2)") -- "Assumes" --> IAM
-        SSM("SSM Parameter Store\n(API Keys)")
-        S3("S3 Bucket\n(Backups)")
-        IAM -- "Grants access to" --> SSM & S3
-    end
-
-    subgraph "External Services"
-        direction LR
-        NewsAPI("[NewsAPI.org]")
-        CoinMarketCap("[CoinMarketCap API]")
-        MessagingPlatform("Messaging Platform API\n(e.g., Telegram, Discord)")
-        CryptoExchange("Crypto Exchange")
-    end
-
-    subgraph "Trading Agent"
-        OpenClaw("openclaw script")
-    end
-
-    %% Define interactions
-    User -- "1. Sends commands (e.g., find scalps)" --> MessagingPlatform
-    MessagingPlatform -- "2. Forwards command" --> OpenClaw    
-    Compute -- "Runs" --> OpenClaw
-
-    subgraph "Agent Logic"
-        direction TB
-        OpenClaw -- "3. Fetches API keys via IAM" --> SSM
-        OpenClaw -- "4. Gets market data" --> CoinMarketCap
-        OpenClaw -- "5. Gets news data" --> NewsAPI
-        OpenClaw -- "6. Sends analysis/suggestions" --> MessagingPlatform
-        OpenClaw -- "Stores backups via IAM" --> S3
-    end
-
-    MessagingPlatform -- "7. Delivers analysis" --> User
-    User -- "8. Manually executes trades" --> CryptoExchange
+    Sentinel -->|"3. reads keys"| SSM[("SSM Parameter Store<br/>API keys")]
+    Sentinel -->|"4. keyed data"| Keyed["CoinMarketCap, NewsAPI"]
+    Sentinel -->|"4. public data, no key"| Public["OKX, Kraken,<br/>Fear and Greed index"]
+    EC2 -->|"daily backup"| S3[("S3 bucket")]
+    User -.->|"trades by hand"| Exchange["Crypto exchange"]
 ```
 
 ### Agent Mindset
