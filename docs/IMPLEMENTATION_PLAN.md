@@ -260,15 +260,26 @@ Only the checks the agent cannot work without. Others join with their own task (
 
 ## Phase 2: Market data and signal hierarchy [Core, 17 to 25 Oct; parts Later]
 
+Why (agent runs of 16 and 17 Oct): the agent fetched raw data and eyeballed it. A top-50 scan took about 33 `web_fetch` calls and read levels off 10 daily candles; the daily BTC scan named $80.4k as support although BTC wicked to 79,775 on 15 Oct UTC, mixed wick and close levels, had no moving averages, and its news was unrelated to the coin. From here on code computes the signals and the agent reads them.
+
+### 2.0 News query fix (`sentinel/data/newsapi.py`)
+- [ ] `sentinel news long SOL` returned unrelated headlines (housing, programming, fantasy sports). Query with coin aliases (ticker plus full name, e.g. `SOL` / `Solana`), English only, and keep only headlines that name the coin; when nothing relevant is found the output says so plainly.
+
+**Accept:** a test with an unrelated headline in the fixture shows it dropped, and an empty result says "no relevant headlines".
+
 ### 2.1 Exchange candles (`sentinel/data/exchange.py`)
-- [ ] Use `ccxt` with OKX as default and Kraken as fallback; symbol map from CMC ticker to exchange pair (e.g. `XRP` to `XRP/USDT`).
-- [ ] `fetch_ohlcv(symbol, timeframe="1h"|"1d", limit)` with a 5-minute file cache.
+- [ ] OKX as default and Kraken as fallback (for coins not on OKX, e.g. XMR); symbol map from CMC ticker to exchange pair (`XRP` to `XRP-USDT` on OKX, `XRPUSD` on Kraken).
+- [ ] Daily, 4-hour and hourly candles. Daily candles **always** use `bar=1Dutc`: OKX's default `1D` runs on Hong Kong time (16:00 to 16:00 UTC), which put the agent's dates a day off. Fix the example URL in `openclaw/workspace/AGENTS.md` too.
+- [ ] 5-minute file cache; every result carries its candle timestamps (UTC open time per candle, and whether it is closed).
+- [ ] Plain `requests` through `sentinel.net`, not `ccxt`: two endpoints only, the same timeouts, retries, rate limits and logging as every other source, no large dependency to import on each CLI call, and the scoring job (3.6) can reuse it as it is.
 - [ ] **First**, run a live check from the EC2 instance in `us-east-1`. Binance blocks many cloud IP ranges with HTTP 451, so do not use Binance as a data source.
 
 **Accept:** hourly and daily candles for BTC and 10 coins in under 10 s; switching the exchange is a config change.
 
 ### 2.2 Indicators (`sentinel/signals/indicators.py`)
-- [ ] RSI(14), SMA(50) and SMA(200) on daily candles, ATR(14), returns over 1 h, 24 h and 7 d, volume z-score over 30 days.
+- [ ] RSI(14), SMA20, SMA50 and SMA200 on daily candles, ATR(14), returns over 1 h, 24 h and 7 d, volume z-score over 30 days.
+- [ ] Range edges computed in code: 7-day and 30-day wick high and low with their UTC dates, plus the close range, clearly labelled.
+- [ ] Relative strength against BTC (return difference over 7, 14 and 30 days) and beta to BTC.
 
 **Accept:** unit tests against hand-checked values on a fixture series.
 
@@ -282,14 +293,17 @@ Only the checks the agent cannot work without. Others join with their own task (
 - [ ] Sentiment is judged by the LLM, not by code.
 
 ### 2.5 Flow and whales (`sentinel/data/flow.py`, `whales.py`) [Core: funding and open interest; whale proxy Later]
-- [ ] Funding rate, open interest, taker buy vs sell volume, long/short ratio from OKX public endpoints (verify the endpoints in OKX API docs; check access from `us-east-1`).
-- [ ] Whale proxy: share of volume from trades of $100k or more among recent trades.
+- [ ] Funding rate, open interest and its 7-day change, long/short account ratio from OKX public endpoints (verify the endpoints in OKX API docs; check access from `us-east-1`).
+- [ ] [Later] Taker buy vs sell volume.
+- [ ] [Later] Whale proxy: share of volume from trades of $100k or more among recent trades.
 
 ### 2.6 Snapshot builder (`sentinel/signals/snapshot.py`)
-- [ ] `sentinel snapshot SYM [--save] [--format json]` returns the pydantic `Snapshot` in hierarchy order (Appendix C): BTC, market news and mood, coin news, flow, whales, coin technicals, portfolio context.
+- [ ] `sentinel snapshot SYM [--format json|telegram]` returns the pydantic `Snapshot` in hierarchy order (Appendix C) with an `as_of` timestamp: BTC, market mood, macro, coin news, flow, whales, coin technicals, portfolio context.
+- [ ] Macro line: the next FOMC meeting from a static list in config (Federal Reserve calendar, update it once a year).
+- [ ] [Later] Spot ETF net flows: no free, documented, machine-readable source confirmed (17 Oct: Farside and TFTC are web pages; NewHedge's API needs a token; no free terms found for SoSoValue's or CoinGlass's APIs; scrapers on Apify are paid). Add them when one turns up.
 - [ ] Missing sources become `null` and are listed in `missing`.
 - [ ] Keep the JSON under about 1,500 tokens; add a size test.
-- [ ] `--save` stores it as a `SNAP` item in `sentinel-sim` with a 180-day TTL.
+- [ ] [Later] `--save` stores it as a `SNAP` item in `sentinel-sim` with a 180-day TTL.
 
 **Accept:** snapshots for 10 coins in under 20 s; tests for missing sources and the size budget.
 
@@ -318,6 +332,7 @@ So the agent can ask CMC for more than the fixed commands without ever holding t
 Runs on every answer before anything else:
 - [ ] `btc_context` not empty, and its direction agrees with the snapshot's BTC 24 h sign.
 - [ ] `entry` within 1% of the snapshot price.
+- [ ] Levels stated in an answer match the snapshot's computed levels: a stated range low above the snapshot's 7-day wick low (or a range high below its wick high) is rejected, and a level called a close level must match the close range.
 - [ ] BUY: `target > entry > stop`; SELL: `target < entry < stop`; HOLD: no target or stop needed.
 - [ ] `horizon_h` in {1, 6, 24, 48}; `confidence` between 0 and 1; reward-to-risk of 1 or more (warning only).
 - [ ] On failure: one retry with the error list; if it fails again, store with `valid = false` (counted in the results).
