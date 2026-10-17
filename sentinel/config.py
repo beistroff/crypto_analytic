@@ -42,6 +42,32 @@ class HttpSettings(BaseModel):
     min_interval_s: MinIntervals = Field(default_factory=MinIntervals)
 
 
+# Names a coin goes by in headlines, besides its ticker. A ticker alone matches unrelated
+# words ("SOL" in Spanish, "ONE", "LINK"), so news queries search for both.
+COIN_NAMES: dict[str, tuple[str, ...]] = {
+    "BTC": ("Bitcoin",),
+    "ETH": ("Ethereum", "Ether"),
+    "SOL": ("Solana",),
+    "XRP": ("Ripple",),
+    "BNB": ("Binance Coin",),
+    "DOGE": ("Dogecoin",),
+    "ADA": ("Cardano",),
+    "TRX": ("Tron",),
+    "AVAX": ("Avalanche",),
+    "LINK": ("Chainlink",),
+    "DOT": ("Polkadot",),
+    "TON": ("Toncoin",),
+    "SUI": ("Sui",),
+    "LTC": ("Litecoin",),
+    "XLM": ("Stellar",),
+    "HBAR": ("Hedera",),
+    "XMR": ("Monero",),
+    "NEAR": ("NEAR Protocol",),
+    "APT": ("Aptos",),
+    "UNI": ("Uniswap",),
+}
+
+
 class Settings(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -52,6 +78,7 @@ class Settings(BaseModel):
     # WARNING keeps CLI calls quiet; services set INFO.
     log_level: LogLevel = "WARNING"
     http: HttpSettings = Field(default_factory=HttpSettings)
+    coin_names: dict[str, tuple[str, ...]] = Field(default_factory=lambda: dict(COIN_NAMES))
 
     @field_validator("log_level", mode="before")
     @classmethod

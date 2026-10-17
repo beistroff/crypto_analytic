@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 from types import SimpleNamespace
+from urllib.parse import parse_qs, urlsplit
 
 import boto3
 import pytest
@@ -79,10 +80,14 @@ def test_global_metrics_tolerate_missing_fields(apis):
     assert cmc.global_metrics() == cmc.Market(None, None, None)
 
 
-def test_news_key_goes_in_a_header(apis):
-    items = newsapi.headlines("SOL", limit=2)
+def test_news_asks_for_ticker_and_name_and_drops_unrelated_titles(apis):
+    items = newsapi.headlines("SOL", limit=3)
+    # "Puerta del Sol" is dropped: the ticker counts only in capitals.
     assert [h.source for h in items] == ["Example Wire", "Example Markets"]
     request = apis.news.seen[0]
+    query = parse_qs(urlsplit(request.path).query)
+    terms = '("SOL" OR "Solana") AND (crypto OR cryptocurrency OR blockchain OR token)'
+    assert (query["q"], query["language"]) == ([terms], ["en"])
     assert request.headers["X-Api-Key"] == NEWS_KEY
     assert NEWS_KEY not in request.path
 
@@ -191,8 +196,14 @@ def test_watch_move(apis):
 def test_news_telegram(apis):
     result = _run("news", "long", "SOL", "--format", "telegram")
     lines = result.stdout.strip().splitlines()
-    assert lines[0] == "SOL news (about 24 h delayed): 3"
+    assert lines[0] == "SOL news (about 24 h delayed): 2"
     assert len(lines) <= 5
+
+
+def test_news_says_when_nothing_is_relevant(apis):
+    apis.news.routes["/v2/everything"] = (200, {}, {"status": "ok", "articles": []})
+    data = _json(_run("news", "long", "SOL"))
+    assert (data["headlines"], data["note"]) == ([], "no relevant headlines")
 
 
 def test_source_error_is_one_json_line_and_exit_1(apis):
@@ -240,4 +251,4 @@ def test_live_fear_and_greed():
 
 @pytest.mark.live
 def test_live_newsapi():
-    assert newsapi.headlines("bitcoin", limit=1)
+    assert newsapi.headlines("BTC", limit=1)

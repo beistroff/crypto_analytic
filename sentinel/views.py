@@ -20,6 +20,7 @@ from sentinel.eval.rules import is_scalp_candidate, rules_signal
 # Legacy whale_monitor.py: a 1 h pump above this many percent is worth an alert.
 WHALE_PUMP_1H_PCT = 1.5
 TELEGRAM_MAX_LINES = 5
+NO_NEWS = "no relevant headlines"
 
 log = logging.getLogger(__name__)
 
@@ -78,13 +79,16 @@ def whales(symbol: str) -> View:
 
 
 def news(symbol: str, limit: int) -> View:
-    """Recent headlines; the agent judges their sentiment."""
+    """Recent headlines that name the coin; the agent judges their sentiment."""
     items = newsapi.headlines(symbol, limit)
-    data = {
+    data: dict[str, Any] = {
         "symbol": symbol.upper(),
         "delayed_24h": True,
         "headlines": [{"title": h.title, "source": h.source, "url": h.url} for h in items],
     }
+    if not items:
+        data["note"] = NO_NEWS
+        return View(data, f"{symbol.upper()} news (about 24 h delayed): {NO_NEWS}")
     lines = [f"{symbol.upper()} news (about 24 h delayed): {len(items)}"]
     lines += [f"- {_short(h.title)} ({h.source})" for h in items]
     return View(data, _lines(lines))
