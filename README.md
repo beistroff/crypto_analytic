@@ -84,8 +84,8 @@ Commands (JSON by default, `--format telegram` for 5 lines or fewer):
 
 | Command | What it returns |
 | --- | --- |
-| `sentinel snapshot SYM` | Computed signals for one coin, BTC first: BTC regime, market mood and headlines, next FOMC, the coin's news (fresh from RSS feeds, plus NewsAPI's day-old headlines), funding and open interest, RSI, moving averages, ATR, returns, range levels (wick and close, with UTC dates), strength and beta against BTC. Missing sources are `null` and listed in `missing`. |
-| `sentinel market scan [--limit 50]` | One row of computed signals per top coin, BTC's regime first: price, 24 h and 7 d change, RSI, position against SMA50 and SMA200, strength against BTC, distance to the 7-day wick low and high, funding, news counts (RSS last 24 h, NewsAPI a day old) |
+| `sentinel snapshot SYM` | Computed signals for one coin, BTC first: BTC regime, market mood and BTC's latest headlines, next FOMC, the coin's news (fresh from RSS feeds, plus NewsAPI's day-old headlines), funding and open interest, RSI, moving averages, ATR, returns, range levels (wick and close, with UTC dates), strength and beta against BTC. Missing sources are `null` and listed in `missing`. |
+| `sentinel market scan [--limit 50]` | One row of computed signals per top coin, BTC's regime first: price, 24 h and 7 d change, RSI, position against SMA50 and SMA200, strength against BTC, distance to the 7-day wick low and high, funding, RSS news count (last 24 h) |
 | `sentinel market overview [--symbol BTC,SOL]` | Fear & Greed, BTC dominance, market cap change, stablecoin share, quotes |
 | `sentinel market top [--limit 15]`, `market scalp [--limit 50]`, `market whales SYM` | Legacy rule signals, scalp candidates, a rough whale check |
 | `sentinel news long SYM [--limit 3]` | NewsAPI headlines that name the coin (about 24 h delayed; the snapshot adds fresh ones from free RSS feeds, no key) |

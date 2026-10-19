@@ -33,7 +33,7 @@ class Market(BaseModel):
     fear_greed: int | None
     total_mcap_chg_24h: float | None
     stablecoin_share: float | None
-    headlines: list[Headline] | None  # RSS, last 24 h, newest first
+    headlines: list[Headline] | None  # BTC's, from RSS, last 24 h, newest first
 
 
 class Macro(BaseModel):

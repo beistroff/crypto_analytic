@@ -19,7 +19,7 @@ def test_feeds_merge_each_link_once_from_the_last_day(apis):
     assert {item.headline.source for item in feeds.items} == {"Cointelegraph"}
     assert feeds.failed == []
     assert [h.title for h in feeds.coin("SOL")] == [titles[0]]
-    assert [h.title for h in feeds.market(2)] == titles[:2]
+    assert [h.title for h in feeds.market()] == [titles[3]]  # the one Bitcoin headline
 
 
 def test_items_dated_after_now_are_dropped(apis):
@@ -38,4 +38,4 @@ def test_no_feeds_configured(apis, monkeypatch):
 def test_live_rss():
     feeds = news_rss.recent()
     assert feeds.failed == []
-    assert feeds.market()
+    assert feeds.items

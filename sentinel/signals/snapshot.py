@@ -1,7 +1,7 @@
 """One coin's snapshot in the signal hierarchy (plan, Appendix C).
 
-BTC first (its regime outweighs the coin's own signal), then market mood and headlines,
-macro, the coin's news (fresh from RSS, then NewsAPI's day-old headlines), derivatives
+BTC first (its regime outweighs the coin's own signal), then market mood and BTC's latest
+headlines, macro, the coin's news (fresh from RSS, then NewsAPI's day-old headlines), derivatives
 flow and the coin's technicals, range levels and strength against BTC. Code computes
 every number; the agent reads them and decides.
 
@@ -30,7 +30,7 @@ from sentinel.signals import btc_regime, indicators, schema
 DAILY_LIMIT = 300  # SMA200 plus 90 days for beta
 HOURLY_LIMIT = 200  # 7 days of hourly closes, with room to spare
 NEWS_LIMIT = 3
-MARKET_NEWS_LIMIT = 5
+MARKET_NEWS_LIMIT = 2
 TITLE_WIDTH = 120
 
 log = logging.getLogger(__name__)

@@ -40,11 +40,12 @@ class Feeds:
     items: list[Item]  # newest first
     failed: list[str]
 
-    def market(self, limit: int = 5, skip: frozenset[str] = frozenset()) -> list[Headline]:
-        """The newest headlines across all feeds, leaving out the links in ``skip``
-        (as ``plain_link`` gives them)."""
-        found = [i.headline for i in self.items if plain_link(i.headline.url) not in skip]
-        return found[:limit]
+    def market(self, limit: int = 2, skip: frozenset[str] = frozenset()) -> list[Headline]:
+        """BTC's newest headlines (BTC's trend leads the market; the newest of all feeds
+        were mostly unrelated stories), leaving out the links in ``skip`` (as
+        ``plain_link`` gives them)."""
+        btc = self.coin("BTC", len(self.items))
+        return [h for h in btc if plain_link(h.url) not in skip][:limit]
 
     def coin(self, symbol: str, limit: int = 5) -> list[Headline]:
         """The newest headlines that name the coin (its ticker in capitals, or its name)."""
