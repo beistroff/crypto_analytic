@@ -28,7 +28,7 @@ Version 2, 16 October 2026: core first, then the research track, the rest later 
 | Lambda | Only for jobs that need no LLM: market scans and alerts, prediction scoring, Naive Bayes retraining. Cost is effectively $0. All LLM calls run on EC2. |
 | Alerts | Lambda puts alerts on SQS; a small poller on EC2 posts them to OpenClaw's local webhook; OpenClaw writes a short warning to Telegram. No inbound ports. |
 | Naive Bayes | A sanity gate and an optional skill, never the source of truth. A deterministic validator runs before it and catches absurd answers more cheaply. |
-| Telegram | Short summaries and signals (about 5 lines); longer when the user asks for detail, when the agent needs to ask questions, or when the market situation needs explaining. A `/` command menu plus inline buttons for the common actions. |
+| Telegram | Compact per coin (a verdict, one reason line, one line with trigger, stop and size), with no total line limit; longer when the user asks for detail, when the agent needs to ask questions, or when the market situation needs explaining. A `/` command menu plus inline buttons for the common actions. |
 | Real money | No automated trading. Simulated trades only for the experiment. Real trades are journaled but are not experiment results. |
 | Cost ceiling | Public IPv4 about $3.60 a month, DynamoDB $0 (free tier), plus at most $5 a month of Anthropic API usage (the key's spend limit). AWS Budgets alarm at $5. |
 | Platform | `us-east-1`, Ubuntu 24.04 LTS (22.04 standard support ends mid-2027). Instance type is a variable (t4g.small today); the architecture and AMI follow from it, so another free-tier type needs no code change. Lambda arm64 python3.12; EC2 runs Python 3.12 as well. |
@@ -58,8 +58,8 @@ The plan is split in three. **Core** makes the agent useful day to day: good mar
 | 2 | Core | Market data: 2.0 to 2.6, 2.8 scan, 2.4 RSS | Done |
 | 3 | Core | 2.9 agent instructions refresh (workspace text only) | Done |
 | 4 | Core | Trade journal, part 1: 1.4 item layouts, 1.5 data layer, `trade add`, `portfolio summary` | Next |
-| 5 | Core | Trade journal, part 2: 1.7 bids, lessons, nightly export, `trade-journal` skill, import from the markdown journal; 1.3 S3 lifecycle rule | |
-| 6 | Core | 1.9 position sizing and trigger checks | |
+| 5 | Core | 1.9 watches and alerts | |
+| 6 | Core | Trade journal, part 2: 1.7 lessons, nightly export, `trade-journal` skill, import from the markdown journal; 1.3 S3 lifecycle rule | |
 | 7 | Core | 2.10 setup block in the snapshot | |
 | 8 | Core | 2.4 NewsAPI rework and `news world`, CMC coin names, no-swap flow out of `missing` | |
 | 9 | Core | 2.11 scan watchlist | |
@@ -238,7 +238,7 @@ Read each legacy script first and keep its behaviour, then improve.
 ### 1.6 Migration of lessons from the S3 backup (Stage B: needs the tables applied)
 **Deferred (2026-10-16):** the lessons stay a workspace file (`memory/lessons_learned.md`, copied at bring-up and backed up daily); this migration waits until shared lessons (8.4) need `LESSON` items.
 
-Only the lessons move over. Positions, bids and the baseline are entered fresh at bring-up with the 1.7 commands; the May 2026 portfolio in the backup is not migrated.
+Only the lessons move over. Positions and the baseline are entered fresh at bring-up with the 1.7 commands; the May 2026 portfolio in the backup is not migrated.
 - [ ] `sentinel migrate fetch --bucket openclaw-files --prefix <backup prefix>` downloads `lessons_learned.md` from the latest backup to a local folder.
 - [ ] `sentinel migrate draft` turns its Principles, Success Cases and Mistakes sections into `migration/lessons.csv` for manual review. Use regex for obvious lines and leave anything unclear for the user to fill in.
 - [ ] `sentinel migrate import --dry-run` then `import` writes the reviewed rows as `LESSON` items to `sentinel-real`.
@@ -246,11 +246,11 @@ Only the lessons move over. Positions, bids and the baseline are entered fresh a
 **Accept:** the dry run prints the count; `sentinel lesson list` shows every reviewed lesson.
 
 ### 1.7 Switch the trade journal to DynamoDB
-- [ ] Commands: `sentinel trade add --side buy|sell --symbol SOL --qty 1.35 --price 72.6 [--fee 0.1]`, `sentinel portfolio summary --format telegram|json`, `sentinel lesson add|list`, `sentinel bid add|list|remove`, `sentinel backup export` (DynamoDB to JSON in S3, nightly, next to the existing file backups).
+- [ ] Commands: `sentinel trade add --side buy|sell --symbol SOL --qty 1.35 --price 72.6 [--fee 0.1]`, `sentinel portfolio summary --format telegram|json`, `sentinel lesson add|list`, `sentinel backup export` (DynamoDB to JSON in S3, nightly, next to the existing file backups).
 - [ ] New skill folder `openclaw/workspace/skills/trade-journal/SKILL.md`; update `TOOLS.md`; stop all JSON portfolio writes.
 - [ ] [Later] `sentinel lesson share` (daily, after the backup): renders the approved `LESSON` items as `beistroff_lessons_learned.md`, redacts dollar amounts, quantities and the baseline (rules and % results stay), and replaces yesterday's copy in your own subfolder of the shared Google Drive folder (F.9). `sentinel lesson auth` runs the one-time Google consent from the laptop. Defaults chosen 2026-10-15, change if you prefer: redacted, folder owned by the dedicated Google account.
 
-**Accept (Stage B, after first bring-up; the CLI and tests are done in Stage A):** in Telegram, "I bought 100 XRP at 1.20" creates a trade and updates the position; "show my balance" returns a short table; the nightly S3 backup still runs. **Merge gate:** manual test cases against `sentinel-sim` (as in 1.5) for bids, lessons and the export, and a dry run of the markdown-journal import whose counts match the file, before the real import.
+**Accept (Stage B, after first bring-up; the CLI and tests are done in Stage A):** in Telegram, "I bought 100 XRP at 1.20" creates a trade and updates the position; "show my balance" returns a short table; the nightly S3 backup still runs. **Merge gate:** manual test cases against `sentinel-sim` (as in 1.5) for lessons and the export, and a dry run of the markdown-journal import whose counts match the file, before the real import.
 
 ### 1.8 Readiness gate
 Only the checks the agent cannot work without. Others join with their own task (the exchange in 2.1); OpenClaw and Telegram are checked after the manual onboarding.
@@ -261,13 +261,14 @@ Only the checks the agent cannot work without. Others join with their own task (
 
 **Accept (Stage A):** `pytest` covers pass, fatal and transient cases for every check, the wait loop, and that no key shows up in any output. **Accept (Stage B):** the first boot ends with `~/sentinel/.ready`; `cloud-init status --long` shows done.
 
-### 1.9 Position sizing and trigger checks (with 1.7)
-Why (chat of 19 Oct): the agent did the sizing in its head and gave DOT and ADA "70 USDT at yellow" but WLD "35 USDT, half of the usual 70 at yellow". It took the plan file's caps for deployed money, and re-checked every planned trigger by hand in each message. Code does the arithmetic and the bookkeeping; the agent explains.
-- [ ] `sentinel portfolio size SYM --stop PRICE [--entry PRICE]`: the size in USDT from cash (1.7), the per-coin and total caps, the BTC gate multiplier (1.0 at `risk_on`, 0.5 at `neutral`, 0 at `risk_off`, the same labels as `btc.regime`), and a risk per trade in config. Prints the size, the risk in USDT and the stop distance in % and in ATR. Caps and risk live in config, not in a workspace file.
-- [ ] Planned entries are `BID` items with a trigger type (`close_above`, `close_below`, `touch_below`) and a stop. `sentinel bid check [--format telegram]` reads them against daily closes (UTC, closed candles only) and lists which fired, which are within 2 %, and which are far.
+### 1.9 Watches and alerts (after 1.5)
+Why (chat of 19 Oct): the agent kept a plan file of per-coin budgets, took its caps for deployed money, and re-checked every planned entry by hand in each message. Budgets set aside per coin are noise (decided 19 Oct): the flow is analyse, then watch a level, then get pinged when it is reached. Until this lands the agent notes watches in `memory/watchlist.md` (2.9) and checks them on request.
+- [ ] A watch is a logged prediction (the 3.4 `PRED` item with a `watch` map: trigger `touch_below`, `close_below` or `close_above`, stop, target, status, alerted_at), so the 3.6 scorer grades it: `sentinel watch add|list|remove`.
+- [ ] `sentinel watch check`: code only, no LLM, from the instance's system crontab every 15 minutes (closed UTC candles for the close triggers). On a hit it marks the watch and posts once to OpenClaw's local hook (the 6.5 config, brought forward), so the agent re-checks the snapshot and pings the user; a quiet check costs no tokens.
+- [ ] Amounts: no formula and no per-coin caps. The agent suggests its conviction as a % of cash (never above 20 % per coin; BTC `neutral` caps it at high, `risk_off` means no new buys) and the user decides; code at most converts the % to USDT and enforces the 20 % ceiling. The tier is logged with each prediction so the scorer can check calibration.
 - [ ] `sentinel portfolio summary` states the cash and open positions first, so "nothing is deployed" is never in doubt.
 
-**Accept:** tests for each gate label, the caps, a size that the caps cut down, each trigger type on a fixture series, and a bid with no candles.
+**Accept:** tests for each trigger type on a fixture series, a watch with no candles, one hook post per hit (mocked), and the 20 % ceiling.
 
 ---
 
@@ -336,10 +337,10 @@ Replaces the agent's own top-50 scan (about 33 `web_fetch` calls, levels read of
 Why (chat of 19 Oct): replies ran 15 to 20 lines, repeated the BTC gate and unchanged coins in every message, quoted tool internals ("41 rows, not 50"), and the workspace files contradict each other. An early, light version of 4.1.
 - [x] Reply template in `AGENTS.md`: one verdict line per coin (`COIN price: buy / wait / avoid`), then at most 3 lines (one reason with two numbers at most, the trigger, the stop and size). One stop; alternatives only when asked. The BTC gate once, in one line, only when it changed since the last reply. Unchanged coins in one line ("No change: XMR, BNB"). No tool internals unless missing data changes the answer. A follow-up offer at most once per topic.
 - [x] One BTC gate: green, yellow and red are `btc.regime` (`risk_on`, `neutral`, `risk_off`) from `sentinel`, not a second rule kept in `HEARTBEAT.md`.
-- [x] Portfolio questions: read the trade journal before answering, and say "cash N USDT, no open positions" when that is the case. The plan file starts with that state line until 1.7 replaces it.
+- [x] Portfolio questions: read the trade journal before answering, and say "cash N USDT, no open positions" when that is the case. No per-coin budgets; watches are noted in `memory/watchlist.md` until 1.9.
 - [x] Remove the contradictions: `SOUL.md` and `IDENTITY.md` still lead with volume to market cap and Fear & Greed (BTC first now); `memory/lessons_learned.md` names Binance as the price benchmark (blocked from AWS; OKX now) and a 10 % "take initial out" rule while the old skill says 3 %; delete `skills/market_analyzer.md` (B11: old scripts, tables and buttons).
 
-**Accept:** in Telegram, a two-coin question gets 8 lines or fewer, and a follow-up only repeats what changed.
+**Accept:** in Telegram, a multi-coin question gets a compact block per coin (a verdict, one reason line, one line with trigger, stop and size) with no total line limit, and a follow-up only repeats what changed.
 
 ### 2.10 Setup block in the snapshot (`sentinel/signals/snapshot.py`)
 Why (chat of 19 Oct): the agent improvised triggers and stops per coin and argued in prose that a stop 3.7 % away sat inside one day's range. Code computes these the same way every time.
@@ -416,7 +417,7 @@ Changed 2026-10-19: no report crons and no reviews by the agent. The user review
 ## Phase 4: Telegram UX and short replies [Later]
 
 ### 4.1 Reply format
-- [ ] Rule in `AGENTS.md` and every skill: 5 lines or fewer, fixed template, full reasoning saved in DynamoDB and sent only on "details <id>". Cap output tokens at about 250 for chat replies. (Changed 2026-10-16: replies are short by default and longer when the user asks or the market needs explaining; see the Telegram row in section 0.)
+- [ ] Rule in `AGENTS.md` and every skill: compact per coin with no total line limit, fixed template, full reasoning saved in DynamoDB and sent only on "details <id>". Cap output tokens at about 250 for chat replies. (Changed 2026-10-16: replies are short by default and longer when the user asks or the market needs explaining; see the Telegram row in section 0.)
 
 ```text
 XRP: BUY, confidence 0.64, 24 h
@@ -483,7 +484,7 @@ Reply "details a3f" for the full analysis
 - [ ] `make build-lambda`: `pip install --platform manylinux2014_aarch64 --only-binary=:all: --target build/ ".[lambda]"`, then zip. Keep the zip small (no `ccxt`, no pandas).
 
 ### 6.3 Scan rules (`sentinel/alerts/scan.py`, every 2 h)
-- [ ] BTC move above 2% in 1 h or 5% in 24 h; watchlist coin above 4% in 1 h; funding rate above 0.05% per 8 h; Fear & Greed crossing 25 or 75; price within 1% of an active bid (`BID` items in `sentinel-real`).
+- [ ] BTC move above 2% in 1 h or 5% in 24 h; watchlist coin above 4% in 1 h; funding rate above 0.05% per 8 h; Fear & Greed crossing 25 or 75; price within 1% of an active watch (1.9).
 - [ ] Cooldown of 6 h per rule and symbol, stored as `ALERT` items with TTL.
 - [ ] Send `{type, symbol, rule, value, ts}` to SQS. No LLM.
 
@@ -584,7 +585,6 @@ All items carry `type` and `created_at`. Keys are strings.
 | TRADE | `TRADE#{SYM}` | `{ts}#{trade_id}` | `SYM#{SYM}` / `{ts}` | symbol, side (BUY/SELL), qty, price, quote_amount, fee, fee_asset, venue, note, source (telegram/import) |
 | POSITION | `POS#{SYM}` | `CURRENT` | `SYM#{SYM}` / `POS` | qty, avg_price, cost_basis, realised_pnl, version, updated_at |
 | LESSON | `LESSON` | `{date}#{slug}` | none | text, tags, status (approved/proposed), source (manual/reflection) |
-| BID | `BID#{SYM}` | `{bid_id}` | `SYM#{SYM}` / `BID#{bid_id}` | qty, price, status (active/filled/cancelled) |
 | META | `META` | `BASELINE` | none | baseline_usdt, since |
 
 **`sentinel-sim`**
@@ -592,7 +592,7 @@ All items carry `type` and `created_at`. Keys are strings.
 | Type | PK | SK | Indexes | Attributes |
 | --- | --- | --- | --- | --- |
 | SNAP | `SNAP#{SYM}` | `{ts}` | none | schema_version, payload (JSON string), missing, ttl (180 days) |
-| PRED | `PRED#{date}` | `{ts}#{SYM}#{arm}` | GSI1: `SYM#{SYM}` / `{ts}`; GSI2 (sparse): `OPEN` / `{due_at}` | pred_id, symbol, arm, model, model_version, variant, source (chat/scheduled), action, direction, confidence, horizon_h, entry, target, stop, btc_context, btc_regime, reasons, rationale_full, prompt_hash, snapshot_ref, tokens_in, tokens_out, cost_usd, latency_ms, valid, validator_errors, nb_p_up, gate_triggered, original_action, revised, status (OPEN/DONE), due_at, checks (map: `h1`, `h6`, `h24`, `h48` each with price, return_pct, hit), target_hit_first, max_adverse_pct |
+| PRED | `PRED#{date}` | `{ts}#{SYM}#{arm}` | GSI1: `SYM#{SYM}` / `{ts}`; GSI2 (sparse): `OPEN` / `{due_at}` | pred_id, symbol, arm, model, model_version, variant, source (chat/scheduled), action, direction, confidence, horizon_h, entry, target, stop, btc_context, btc_regime, reasons, rationale_full, prompt_hash, snapshot_ref, tokens_in, tokens_out, cost_usd, latency_ms, valid, validator_errors, nb_p_up, gate_triggered, original_action, revised, status (OPEN/DONE), due_at, checks (map: `h1`, `h6`, `h24`, `h48` each with price, return_pct, hit), target_hit_first, max_adverse_pct, watch (map, 1.9: trigger, status active/hit/removed, alerted_at) |
 | VOTE | `PRED#{date}` | `{ts}#{SYM}#cluster#VOTE#{model}#{round}` | none | role, action, confidence, reason, tokens, cost_usd |
 | ALERT | `ALERT#{rule}#{SYM}` | `{ts}` | none | value, ttl (6 h cooldown) |
 | REPORT | `REPORT#{daily|weekly}` | `{date}` | none | text, metrics (map) |
@@ -641,7 +641,7 @@ All items carry `type` and `created_at`. Keys are strings.
 
 | Skill folder | Trigger | Commands it runs |
 | --- | --- | --- |
-| `trade-journal` | "I bought/sold ...", "balance", "/balance" | `sentinel trade add`, `sentinel portfolio summary`, `sentinel bid ...`, `sentinel lesson ...` |
+| `trade-journal` | "I bought/sold ...", "balance", "/balance" | `sentinel trade add`, `sentinel portfolio summary`, `sentinel lesson ...` |
 | `analyse` | "analyse X", `/analyse`, `act:analyse:X` | `sentinel snapshot X --format json` |
 | `test-trade-scenario` | "test trade X 24h", `/predict`, `act:predict:X:24` | `sentinel snapshot`, `sentinel predict log`, `sentinel predict show` |
 | `review-predictions` (in the repo's `.claude/skills/`, used in Claude Code or a Claude chat, not by the agent) | the user, with a `sentinel predict export` | none; drafts lessons for `memory/prediction_lessons.md` |
