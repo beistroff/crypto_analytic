@@ -78,10 +78,12 @@ def test_btc_snapshot_has_no_comparison_with_itself(trending):
     assert data["vs_btc"] is None
     assert data["technicals"]["rsi14"] == 100.0
     # The other feed still answers. At 12:20 the feed's newest item (12:58) is still in
-    # the future, and of its two Bitcoin headlines one is over 24 h old.
+    # the future, and of its two Bitcoin headlines one is over 24 h old. That one is shown
+    # as coin news only, not again among the market headlines.
     assert data["missing"] == ["rss:Mirror"]
-    assert len(data["market"]["headlines"]) == 3
     assert [h["title"][:20] for h in data["coin_news_fresh"]] == ["Bitcoin price steadi"]
+    assert len(data["market"]["headlines"]) == 2
+    assert data["coin_news_fresh"][0] not in data["market"]["headlines"]
 
 
 def test_missing_sources_become_null(trending):

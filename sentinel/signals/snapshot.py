@@ -74,6 +74,7 @@ def build(symbol: str) -> schema.Snapshot:
     metrics = got.get("cmc_global")
     coin_technicals = technicals(daily, hourly) if daily and hourly else None
     btc_technicals = technicals(btc_daily, btc_hourly) if btc_daily and btc_hourly else None
+    news = _news(symbol, feeds, got.get("news"))
     return schema.Snapshot(
         as_of=iso(now),
         symbol=symbol,
@@ -85,11 +86,11 @@ def build(symbol: str) -> schema.Snapshot:
             fear_greed=got["feargreed"].value if "feargreed" in got else None,
             total_mcap_chg_24h=rounded(metrics.total_mcap_chg_24h) if metrics else None,
             stablecoin_share=rounded(metrics.stablecoin_share, 1) if metrics else None,
-            headlines=[_headline(h) for h in feeds.market(MARKET_NEWS_LIMIT)] if feeds else None,
+            headlines=news["market"],
         ),
         macro=macro,
-        coin_news_fresh=[_headline(h) for h in feeds.coin(symbol, NEWS_LIMIT)] if feeds else None,
-        coin_news=[_headline(h) for h in got["news"]] if "news" in got else None,
+        coin_news_fresh=news["fresh"],
+        coin_news=news["delayed"],
         flow=_flow(got["flow"]) if "flow" in got else None,
         technicals=coin_technicals,
         levels=_levels(daily) if daily else None,
@@ -174,6 +175,23 @@ def _macro(now: datetime) -> schema.Macro | None:
     if not upcoming:
         return None
     return schema.Macro(next_fomc=upcoming[0], days_to_fomc=(upcoming[0] - today).days)
+
+
+def _news(
+    symbol: str, feeds: news_rss.Feeds | None, delayed: list[newsapi.Headline] | None
+) -> dict[str, list[schema.Headline] | None]:
+    """The coin's fresh headlines, then market headlines and NewsAPI's day-old ones, each
+    article once: a link already shown in an earlier section is left out of later ones."""
+    fresh = feeds.coin(symbol, NEWS_LIMIT) if feeds else []
+    shown = frozenset(news_rss.plain_link(h.url) for h in fresh)
+    market = feeds.market(MARKET_NEWS_LIMIT, skip=shown) if feeds else []
+    shown |= {news_rss.plain_link(h.url) for h in market}
+    late = [h for h in delayed or [] if news_rss.plain_link(h.url) not in shown]
+    return {
+        "fresh": [_headline(h) for h in fresh] if feeds else None,
+        "market": [_headline(h) for h in market] if feeds else None,
+        "delayed": [_headline(h) for h in late] if delayed is not None else None,
+    }
 
 
 def _headline(item: newsapi.Headline) -> schema.Headline:

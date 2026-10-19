@@ -39,9 +39,11 @@ class Feeds:
     items: list[Item]  # newest first
     failed: list[str]
 
-    def market(self, limit: int = 5) -> list[Headline]:
-        """The newest headlines across all feeds."""
-        return [item.headline for item in self.items[:limit]]
+    def market(self, limit: int = 5, skip: frozenset[str] = frozenset()) -> list[Headline]:
+        """The newest headlines across all feeds, leaving out the links in ``skip``
+        (as ``plain_link`` gives them)."""
+        found = [i.headline for i in self.items if plain_link(i.headline.url) not in skip]
+        return found[:limit]
 
     def coin(self, symbol: str, limit: int = 5) -> list[Headline]:
         """The newest headlines that name the coin (its ticker in capitals, or its name)."""
@@ -70,7 +72,7 @@ def recent(now: datetime | None = None) -> Feeds:
         raise SourceError("RSS: every feed failed")
     seen, merged = set(), []
     for item in sorted(items, key=lambda i: i.published, reverse=True):
-        link = _plain_link(item.headline.url)
+        link = plain_link(item.headline.url)
         if now - WINDOW <= item.published <= now and link not in seen:
             seen.add(link)
             merged.append(item)
@@ -99,7 +101,7 @@ def _read(name: str, url: str) -> list[Item]:
     return items
 
 
-def _plain_link(url: str) -> str:
+def plain_link(url: str) -> str:
     """The link without query, fragment or trailing slash (feeds add tracking tags)."""
     parts = urlsplit(url)
     return f"{parts.netloc.lower()}{parts.path.rstrip('/')}"
