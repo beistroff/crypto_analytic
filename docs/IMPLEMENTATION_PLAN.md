@@ -15,7 +15,7 @@ Version 2, 16 October 2026: core first, then the research track, the rest later 
 
 **What this is.** An OpenClaw agent on AWS EC2 that acts as a senior crypto analyst for one user over Telegram. It reads market data and news, keeps a trade journal, and suggests trades; the user executes them manually. The project extends it into a measured, low-cost prediction system.
 
-**Research question.** Which cheap model, Gemini Flash or Claude Sonnet (plus Haiku as a cheap control), makes better short-term crypto predictions from the same data, and how much does a fixed "BTC first" signal hierarchy help?
+**Research question.** Which cheap model, Gemini Flash, DeepSeek or Claude Sonnet (plus Haiku as a cheap control), makes better short-term crypto predictions from the same data, and how much does a fixed "BTC first" signal hierarchy help?
 
 | Topic | Decision |
 | --- | --- |
@@ -67,7 +67,7 @@ The plan is split in three. **Core** makes the agent useful day to day: good mar
 | 11 | Research | 3.1 clients, 3.2 prompts, 3.5 runner | |
 | 12 | Research | Phase 5 Naive Bayes (5.1 to 5.5), graded by the same outcome scorer | |
 | 13 | Research | Phase 9 freeze, run and analysis | |
-| - | Later | 1.6, 1.7 `lesson share`, 2.4 GDELT, 2.4 scheduled world-news watcher (Lambda or instance timer that flags major events), 2.5 whale proxy, 2.6 `--save`, 2.7 CMC pass-through, 5.6, Phases 4, 6, 7 and 8, `openclaw/configure.sh` (before the next rebuild) | |
+| - | Later | revisit the chat model order once the agent is stable (free Gemini first, Haiku as the fallback; DeepSeek as a fallback if the experiment shows it is good), 1.6, 1.7 `lesson share`, 2.4 GDELT, 2.4 scheduled world-news watcher (Lambda or instance timer that flags major events), 2.5 whale proxy, 2.6 `--save`, 2.7 CMC pass-through, 5.6, Phases 4, 6, 7 and 8, `openclaw/configure.sh` (before the next rebuild) | |
 
 ---
 
@@ -367,7 +367,7 @@ So the agent can ask CMC for more than the fixed commands without ever holding t
 ## Phase 3: Prediction journal and models [Core: 3.3, 3.4, 3.6, 3.7; Research: 3.1, 3.2, 3.5]
 
 ### 3.1 LLM clients (`sentinel/llm/`)
-- [ ] One interface `call(system, user, schema) -> (parsed, usage)` for Gemini (`google-genai`), Anthropic (`anthropic`, models `claude-sonnet-5-5` and `claude-haiku-5-5`) and OpenRouter (OpenAI-compatible).
+- [ ] One interface `call(system, user, schema) -> (parsed, usage)` for Gemini (`google-genai`), Anthropic (`anthropic`, models `claude-sonnet-5-5` and `claude-haiku-5-5`) and OpenRouter (OpenAI-compatible), which also serves the DeepSeek arm (model id in config). Check DeepSeek's price and data terms when the client is built; the arms only ever see market snapshots, never portfolio or personal data.
 - [ ] JSON output mode, retries on 429 with backoff, and logged tokens in and out, latency and cost (prices in `config.py`: Sonnet 5.5 $2 / $10 per million tokens in / out, Haiku 5.5 $0.10 / $0.50, Gemini free tier $0).
 - [ ] Record the exact model id string returned by each API.
 
@@ -547,12 +547,13 @@ Other users share their lessons the same way (`<user>_lessons_learned.md`), so t
 | F1G | Gemini Flash | structured (reuses F1's answer) | on; an extra call only when triggered |
 | H1 | Claude Haiku 5.5 | structured | off |
 | S1 | Claude Sonnet 5.5 | structured | off |
+| D1 | DeepSeek (through OpenRouter) | structured | off |
 | NB | Naive Bayes only | none | n/a |
 | RULES | Legacy fixed rules | none | n/a |
 
 Daily volume: 20 snapshots, so about 40 Flash calls plus gate re-checks, 20 Haiku and 20 Sonnet. Expected cost for 28 days: Sonnet about $6 (about $3 through the Batch API), Haiku about $0.30, Flash free.
 
-Shortened (2026-10-16): the run is 14 days. The final arms are chosen at the freeze to fit the $5 monthly Anthropic limit (S1 only if the budget allows) and the free Gemini quota (5 requests a minute and 20 a day for 3.x Flash, so the Gemini arms may need a Flash Lite model).
+Shortened (2026-10-16): the run is 14 days. The final arms are chosen at the freeze to fit the $5 monthly Anthropic limit (S1 only if the budget allows), DeepSeek's price on OpenRouter (D1 only if a free variant exists or the credit it needs is small) and the free Gemini quota (5 requests a minute and 20 a day for 3.x Flash, so the Gemini arms may need a Flash Lite model).
 
 ### 9.2 Run
 - [ ] Daily report check; watch for missing data and free-tier 429 errors; never change the frozen config mid-run (log incidents in `project_notes.md` instead).
@@ -725,7 +726,7 @@ Both should return a short JSON answer containing "OK". A 403 from Google usuall
 - OpenClaw needs the key in its own config or environment (the Gemini SDKs read `GEMINI_API_KEY`). Load it from SSM at service start rather than writing it into a file in the repo; check the OpenClaw model-provider docs for the exact key name in `openclaw.json`.
 - Set Gemini Flash as the default model for the agent. Sonnet and Haiku are called by the `sentinel` package directly for the experiment, so OpenClaw only needs the Anthropic key if you also want to chat with Claude.
 
-### F.7 Optional: OpenRouter (only for `cluster-prediction`)
+### F.7 Optional: OpenRouter (for `cluster-prediction` and the DeepSeek arm D1)
 1. Create an account at openrouter.ai, then a key named `sentinel-cluster`; do not buy credits, so only `:free` models can run.
 2. Free models allow 20 requests a minute and 50 a day (1,000 a day after $10 of lifetime credit purchases). Store it as `/sentinel/openrouter_api_key` the same way as F.4.
 
