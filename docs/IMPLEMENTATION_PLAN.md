@@ -55,8 +55,8 @@ The plan is split in three. **Core** makes the agent useful day to day. The **re
 | When | Track | Tasks |
 | --- | --- | --- |
 | Now | Core: bring-up close-out | Daily S3 backup (system crontab), daily market scan (OpenClaw automation), merge the bring-up PR |
-| 17 to 25 Oct | Core: market data | 2.1 candles, 2.2 indicators, 2.3 BTC regime, 2.4 news (RSS and coin aliases), 2.5 funding and open interest, 2.6 snapshot |
-| 26 Oct to 1 Nov | Core: trade journal | 1.4, 1.5, 1.7 (trades, positions, bids, balance, nightly DynamoDB export); the agent adds a lesson to `memory/lessons_learned.md` after each closed trade; 1.3 S3 lifecycle rule |
+| 17 to 25 Oct | Core: market data and agent reasoning | 2.1 candles, 2.2 indicators, 2.3 BTC regime, 2.4 news (RSS done; NewsAPI rework and CMC coin names next), 2.5 funding and open interest, 2.6 snapshot, 2.8 scan; then 2.9 agent instructions, 2.10 setup block, 2.11 scan watchlist |
+| 26 Oct to 1 Nov | Core: trade journal | 1.4, 1.5, 1.7 (trades, positions, bids, balance, nightly DynamoDB export), 1.9 position sizing and trigger checks; the agent adds a lesson to `memory/lessons_learned.md` after each closed trade; 1.3 S3 lifecycle rule |
 | 2 to 8 Nov | Core: prediction journal | 3.3 validator, 3.4 chat path, 3.6 scoring on the instance, 3.7 weekly hit rate. The research track reuses all of it. |
 | 9 to 15 Nov | Research | 3.1 clients, 3.2 prompts, 3.5 runner, 5.1 to 5.4 Naive Bayes and gate; freeze on 15 Nov |
 | 16 to 29 Nov | Research | 14-day run (9.2) |
@@ -81,7 +81,7 @@ Fix or retire each of these during Phase 1. File paths are relative to the repo 
 | B8 | `openclaw/analysis/news_aggregator.py` | NewsAPI.org free plan delivers articles 24 h late and is for development use only, so "news from yesterday" is mostly stale. README names a different service (NewsAPI.ai). |
 | B9 | `openclaw/analysis/whale_monitor.py` | Hard-wired to SUI; only checks 1 h price change; unused `API_URL`. |
 | B10 | Signals | Fixed thresholds (Fear & Greed below 30 and 24 h change below -5% gives DCA BUY); nothing recorded, so accuracy is unknown. No OHLCV, so no RSI or moving averages. |
-| B11 | `openclaw/workspace/skills/market_analyzer.md` | Single file with hard-coded `/home/ubuntu/sentinel/...` paths; skill folder format not used. |
+| B11 | `openclaw/workspace/skills/market_analyzer.md` | Single file with hard-coded `/home/ubuntu/sentinel/...` paths; skill folder format not used. Removed in 2.9. |
 | B12 | `openclaw/bootstrap.sh` | Installs the latest OpenClaw unpinned via `curl | bash`; writes scripts as heredocs from Terraform templates. |
 
 ---
@@ -256,6 +256,14 @@ Only the checks the agent cannot work without. Others join with their own task (
 
 **Accept (Stage A):** `pytest` covers pass, fatal and transient cases for every check, the wait loop, and that no key shows up in any output. **Accept (Stage B):** the first boot ends with `~/sentinel/.ready`; `cloud-init status --long` shows done.
 
+### 1.9 Position sizing and trigger checks (with 1.7)
+Why (chat of 19 Oct): the agent did the sizing in its head and gave DOT and ADA "70 USDT at yellow" but WLD "35 USDT, half of the usual 70 at yellow". It took the plan file's caps for deployed money, and re-checked every planned trigger by hand in each message. Code does the arithmetic and the bookkeeping; the agent explains.
+- [ ] `sentinel portfolio size SYM --stop PRICE [--entry PRICE]`: the size in USDT from cash (1.7), the per-coin and total caps, the BTC gate multiplier (1.0 at `risk_on`, 0.5 at `neutral`, 0 at `risk_off`, the same labels as `btc.regime`), and a risk per trade in config. Prints the size, the risk in USDT and the stop distance in % and in ATR. Caps and risk live in config, not in a workspace file.
+- [ ] Planned entries are `BID` items with a trigger type (`close_above`, `close_below`, `touch_below`) and a stop. `sentinel bid check [--format telegram]` reads them against daily closes (UTC, closed candles only) and lists which fired, which are within 2 %, and which are far.
+- [ ] `sentinel portfolio summary` states the cash and open positions first, so "nothing is deployed" is never in doubt.
+
+**Accept:** tests for each gate label, the caps, a size that the caps cut down, each trigger type on a fixture series, and a bid with no candles.
+
 ---
 
 ## Phase 2: Market data and signal hierarchy [Core, 17 to 25 Oct; parts Later]
@@ -318,6 +326,29 @@ Replaces the agent's own top-50 scan (about 33 `web_fetch` calls, levels read of
 - [x] News count per coin (2.4): `news_24h`, the coin's headlines in the RSS feeds over the last 24 h (the feeds are read once per scan). No NewsAPI requests: one per coin would take about 50 s and half of the free plan's 100 a day. Titles come from `sentinel snapshot` for the coins worth a closer look.
 
 **Accept:** top 50 in about 5 s without NewsAPI (17 Oct, laptop: 5.3 s, 3.1 s with cached candles; about 3,200 characters of JSON); a test for the rows, skipped and missing coins and the size budget.
+
+### 2.9 Agent instructions refresh (`openclaw/workspace/`)
+Why (chat of 19 Oct): replies ran 15 to 20 lines, repeated the BTC gate and unchanged coins in every message, quoted tool internals ("41 rows, not 50"), and the workspace files contradict each other. An early, light version of 4.1.
+- [ ] Reply template in `AGENTS.md`: one verdict line per coin (`COIN price: buy / wait / avoid`), then at most 3 lines (one reason with two numbers at most, the trigger, the stop and size). One stop; alternatives only when asked. The BTC gate once, in one line, only when it changed since the last reply. Unchanged coins in one line ("No change: XMR, BNB"). No tool internals unless missing data changes the answer. A follow-up offer at most once per topic.
+- [ ] One BTC gate: green, yellow and red are `btc.regime` (`risk_on`, `neutral`, `risk_off`) from `sentinel`, not a second rule kept in `HEARTBEAT.md`.
+- [ ] Portfolio questions: read the trade journal before answering, and say "cash N USDT, no open positions" when that is the case. The plan file starts with that state line until 1.7 replaces it.
+- [ ] Remove the contradictions: `SOUL.md` and `IDENTITY.md` still lead with volume to market cap and Fear & Greed (BTC first now); `memory/lessons_learned.md` names Binance as the price benchmark (blocked from AWS; OKX now) and a 10 % "take initial out" rule while the old skill says 3 %; delete `skills/market_analyzer.md` (B11: old scripts, tables and buttons).
+
+**Accept:** in Telegram, a two-coin question gets 8 lines or fewer, and a follow-up only repeats what changed.
+
+### 2.10 Setup block in the snapshot (`sentinel/signals/snapshot.py`)
+Why (chat of 19 Oct): the agent improvised triggers and stops per coin and argued in prose that a stop 3.7 % away sat inside one day's range. Code computes these the same way every time.
+- [ ] `setup` after `levels`: breakout trigger (daily close above the 7-day close high), pullback zone (SMA50 to the 7-day close low, when the price is above SMA50), stop (below the 7-day wick low), stop distance in % and in ATR, and room to the 30-day wick high in %. A stop under 1 ATR away is flagged `stop_in_noise`.
+- [ ] `AGENTS.md`: quote `setup`; change it only with a stated reason.
+
+**Accept:** hand-checked values on the `trending` fixture; the size test still passes.
+
+### 2.11 Scan watchlist (`sentinel/signals/scan.py`)
+Why (chat of 19 Oct): DOT was asked about but missing from "top 15" (it ranks lower), and the agent reported row counts instead of naming what was skipped.
+- [ ] `sentinel market scan --symbol DOT,ADA` adds coins outside the top N, in the same rows.
+- [ ] The output names the skipped stablecoins and wrapped coins (`skipped`), so a short row count needs no explanation.
+
+**Accept:** a test with an extra symbol outside the listing and the `skipped` list.
 
 ### 2.7 CMC pass-through (`sentinel cmc get`) [Later: build it when a question needs more than `web_fetch` and the fixed commands give]
 So the agent can ask CMC for more than the fixed commands without ever holding the key.
