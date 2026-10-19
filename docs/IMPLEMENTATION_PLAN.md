@@ -56,8 +56,8 @@ The plan is split in three. **Core** makes the agent useful day to day: good mar
 | --- | --- | --- | --- |
 | 1 | Core | Bring-up: instance, OpenClaw, Telegram, daily S3 backup, daily market scan | Done |
 | 2 | Core | Market data: 2.0 to 2.6, 2.8 scan, 2.4 RSS | Done |
-| 3 | Core | 2.9 agent instructions refresh (workspace text only) | Next |
-| 4 | Core | Trade journal, part 1: 1.4 item layouts, 1.5 data layer, `trade add`, `portfolio summary` | |
+| 3 | Core | 2.9 agent instructions refresh (workspace text only) | Done |
+| 4 | Core | Trade journal, part 1: 1.4 item layouts, 1.5 data layer, `trade add`, `portfolio summary` | Next |
 | 5 | Core | Trade journal, part 2: 1.7 bids, lessons, nightly export, `trade-journal` skill, import from the markdown journal; 1.3 S3 lifecycle rule | |
 | 6 | Core | 1.9 position sizing and trigger checks | |
 | 7 | Core | 2.10 setup block in the snapshot | |
@@ -334,10 +334,10 @@ Replaces the agent's own top-50 scan (about 33 `web_fetch` calls, levels read of
 
 ### 2.9 Agent instructions refresh (`openclaw/workspace/`)
 Why (chat of 19 Oct): replies ran 15 to 20 lines, repeated the BTC gate and unchanged coins in every message, quoted tool internals ("41 rows, not 50"), and the workspace files contradict each other. An early, light version of 4.1.
-- [ ] Reply template in `AGENTS.md`: one verdict line per coin (`COIN price: buy / wait / avoid`), then at most 3 lines (one reason with two numbers at most, the trigger, the stop and size). One stop; alternatives only when asked. The BTC gate once, in one line, only when it changed since the last reply. Unchanged coins in one line ("No change: XMR, BNB"). No tool internals unless missing data changes the answer. A follow-up offer at most once per topic.
-- [ ] One BTC gate: green, yellow and red are `btc.regime` (`risk_on`, `neutral`, `risk_off`) from `sentinel`, not a second rule kept in `HEARTBEAT.md`.
-- [ ] Portfolio questions: read the trade journal before answering, and say "cash N USDT, no open positions" when that is the case. The plan file starts with that state line until 1.7 replaces it.
-- [ ] Remove the contradictions: `SOUL.md` and `IDENTITY.md` still lead with volume to market cap and Fear & Greed (BTC first now); `memory/lessons_learned.md` names Binance as the price benchmark (blocked from AWS; OKX now) and a 10 % "take initial out" rule while the old skill says 3 %; delete `skills/market_analyzer.md` (B11: old scripts, tables and buttons).
+- [x] Reply template in `AGENTS.md`: one verdict line per coin (`COIN price: buy / wait / avoid`), then at most 3 lines (one reason with two numbers at most, the trigger, the stop and size). One stop; alternatives only when asked. The BTC gate once, in one line, only when it changed since the last reply. Unchanged coins in one line ("No change: XMR, BNB"). No tool internals unless missing data changes the answer. A follow-up offer at most once per topic.
+- [x] One BTC gate: green, yellow and red are `btc.regime` (`risk_on`, `neutral`, `risk_off`) from `sentinel`, not a second rule kept in `HEARTBEAT.md`.
+- [x] Portfolio questions: read the trade journal before answering, and say "cash N USDT, no open positions" when that is the case. The plan file starts with that state line until 1.7 replaces it.
+- [x] Remove the contradictions: `SOUL.md` and `IDENTITY.md` still lead with volume to market cap and Fear & Greed (BTC first now); `memory/lessons_learned.md` names Binance as the price benchmark (blocked from AWS; OKX now) and a 10 % "take initial out" rule while the old skill says 3 %; delete `skills/market_analyzer.md` (B11: old scripts, tables and buttons).
 
 **Accept:** in Telegram, a two-coin question gets 8 lines or fewer, and a follow-up only repeats what changed.
 

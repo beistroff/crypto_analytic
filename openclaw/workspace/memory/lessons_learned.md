@@ -2,7 +2,7 @@
 
 ## Principles & Strategies
 - **Default Exit:** All sales are into **USDT**.
-- **Platform:** **Binance** is the primary exchange for price benchmarking.
+- **Market data:** prices and signals come from `sentinel`.
 - **Risk Management:** ROI > 10% triggers a "Take Initial Out" recommendation.
 - **Baseline:** Performance is measured against the **configured** baseline (Updated 2026-04-09).
 - **DCA Strategy:** Layer entries. Tier 1 = Small test, Tier 2 = Major support buy.
