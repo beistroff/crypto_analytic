@@ -1,11 +1,13 @@
 """One coin's snapshot in the signal hierarchy (plan, Appendix C).
 
-BTC first (its regime outweighs the coin's own signal), then market mood, macro, the
-coin's news, derivatives flow and the coin's technicals, range levels and strength
-against BTC. Code computes every number; the agent reads them and decides.
+BTC first (its regime outweighs the coin's own signal), then market mood and BTC's latest
+headlines, macro, the coin's news (fresh from RSS, then NewsAPI's day-old headlines), derivatives
+flow and the coin's technicals, range levels and strength against BTC. Code computes
+every number; the agent reads them and decides.
 
 Sources are fetched in parallel. A source that fails becomes ``null`` and is named in
-``missing``, so one bad source never fails the whole snapshot. Candles come from
+``missing`` (a single news feed as ``rss:<name>``), so one bad source never fails the
+whole snapshot. Candles come from
 ``sentinel.data.exchange`` (cached for 5 minutes, so BTC is fetched once per scan).
 """
 
@@ -21,13 +23,14 @@ import requests
 
 from sentinel import aws
 from sentinel.config import get_settings
-from sentinel.data import SourceError, cmc, exchange, feargreed, flow, newsapi
+from sentinel.data import SourceError, cmc, exchange, feargreed, flow, news_rss, newsapi
 from sentinel.data.exchange import NotListed
 from sentinel.signals import btc_regime, indicators, schema
 
 DAILY_LIMIT = 300  # SMA200 plus 90 days for beta
 HOURLY_LIMIT = 200  # 7 days of hourly closes, with room to spare
 NEWS_LIMIT = 3
+MARKET_NEWS_LIMIT = 2
 TITLE_WIDTH = 120
 
 log = logging.getLogger(__name__)
@@ -41,6 +44,7 @@ def build(symbol: str) -> schema.Snapshot:
         "btc_hourly": lambda: exchange.candles("BTC", "1h", HOURLY_LIMIT),
         "feargreed": feargreed.latest,
         "cmc_global": cmc.global_metrics,
+        "rss": lambda: news_rss.recent(now),
         "news": lambda: newsapi.headlines(symbol, NEWS_LIMIT),
         "flow": lambda: flow.flow(symbol),
     }
@@ -58,7 +62,11 @@ def build(symbol: str) -> schema.Snapshot:
     daily, hourly = got.get("daily"), got.get("hourly")
     if symbol != "BTC" and (daily is None or hourly is None):
         missing.append("candles")
-    missing += [name for name in ("feargreed", "cmc_global", "news", "flow") if name not in got]
+    sources = ("feargreed", "cmc_global", "rss", "news", "flow")
+    missing += [name for name in sources if name not in got]
+    feeds = got.get("rss")
+    if feeds:
+        missing += [f"rss:{name}" for name in feeds.failed]
     macro = _macro(now)
     if macro is None:
         missing.append("fomc_calendar")
@@ -66,6 +74,7 @@ def build(symbol: str) -> schema.Snapshot:
     metrics = got.get("cmc_global")
     coin_technicals = technicals(daily, hourly) if daily and hourly else None
     btc_technicals = technicals(btc_daily, btc_hourly) if btc_daily and btc_hourly else None
+    news = _news(symbol, feeds, got.get("news"))
     return schema.Snapshot(
         as_of=iso(now),
         symbol=symbol,
@@ -77,9 +86,11 @@ def build(symbol: str) -> schema.Snapshot:
             fear_greed=got["feargreed"].value if "feargreed" in got else None,
             total_mcap_chg_24h=rounded(metrics.total_mcap_chg_24h) if metrics else None,
             stablecoin_share=rounded(metrics.stablecoin_share, 1) if metrics else None,
+            headlines=news["market"],
         ),
         macro=macro,
-        coin_news=[_headline(h) for h in got["news"]] if "news" in got else None,
+        coin_news_fresh=news["fresh"],
+        coin_news=news["delayed"],
         flow=_flow(got["flow"]) if "flow" in got else None,
         technicals=coin_technicals,
         levels=_levels(daily) if daily else None,
@@ -164,6 +175,23 @@ def _macro(now: datetime) -> schema.Macro | None:
     if not upcoming:
         return None
     return schema.Macro(next_fomc=upcoming[0], days_to_fomc=(upcoming[0] - today).days)
+
+
+def _news(
+    symbol: str, feeds: news_rss.Feeds | None, delayed: list[newsapi.Headline] | None
+) -> dict[str, list[schema.Headline] | None]:
+    """The coin's fresh headlines, then market headlines and NewsAPI's day-old ones, each
+    article once: a link already shown in an earlier section is left out of later ones."""
+    fresh = feeds.coin(symbol, NEWS_LIMIT) if feeds else []
+    shown = frozenset(news_rss.plain_link(h.url) for h in fresh)
+    market = feeds.market(MARKET_NEWS_LIMIT, skip=shown) if feeds else []
+    shown |= {news_rss.plain_link(h.url) for h in market}
+    late = [h for h in delayed or [] if news_rss.plain_link(h.url) not in shown]
+    return {
+        "fresh": [_headline(h) for h in fresh] if feeds else None,
+        "market": [_headline(h) for h in market] if feeds else None,
+        "delayed": [_headline(h) for h in late] if delayed is not None else None,
+    }
 
 
 def _headline(item: newsapi.Headline) -> schema.Headline:

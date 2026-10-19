@@ -33,6 +33,7 @@ class MinIntervals(BaseModel):
     gemini: float = 0.0  # readiness check only; model calls go through the SDK
     okx: float = 0.05  # OKX public market data: 40 candle requests per 2 s per IP
     kraken: float = 1.0  # Kraken public API: about 1 request per second
+    rss: float = 0.0  # news feeds on different sites, each read once per call
 
 
 class HttpSettings(BaseModel):
@@ -72,6 +73,15 @@ COIN_NAMES: dict[str, tuple[str, ...]] = {
     "UNI": ("Uniswap",),
 }
 
+# Free crypto news feeds (no key, minutes old, unlike NewsAPI's free plan), by the name
+# shown as a headline's source. All four answered with valid RSS 2.0 on 2026-10-17.
+NEWS_FEEDS: dict[str, str] = {
+    "CoinDesk": "https://www.coindesk.com/arc/outboundfeeds/rss/",
+    "Cointelegraph": "https://cointelegraph.com/rss",
+    "The Block": "https://www.theblock.co/rss.xml",
+    "Decrypt": "https://decrypt.co/feed",
+}
+
 
 # FOMC rate decisions (the second day of each meeting), from the Federal Reserve's
 # calendar (federalreserve.gov/monetarypolicy/fomccalendars.htm, checked 2026-10-17).
@@ -101,6 +111,7 @@ class Settings(BaseModel):
     log_level: LogLevel = "WARNING"
     http: HttpSettings = Field(default_factory=HttpSettings)
     coin_names: dict[str, tuple[str, ...]] = Field(default_factory=lambda: dict(COIN_NAMES))
+    news_feeds: dict[str, str] = Field(default_factory=lambda: dict(NEWS_FEEDS))
     # Candle sources in the order tried. Binance answers HTTP 451 from AWS, so it is not one.
     exchanges: tuple[Exchange, ...] = ("okx", "kraken")
     candle_cache_s: float = 300.0

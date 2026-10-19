@@ -15,6 +15,9 @@ candles and its OKX funding rate, fetched in parallel, plus BTC's hourly candles
   candles on any exchange are listed in ``missing``; coins without an OKX swap have no
   funding rate (``null``). When a rate could not be read (rate limit, outage),
   ``missing`` also names ``funding``.
+- News is counted, not listed (titles for 50 coins would not fit the agent's context):
+  ``news_24h`` is the coin's headlines in the RSS feeds over the last 24 h (one read of
+  each feed for the whole scan). Feeds that cannot be read are ``rss`` in ``missing``.
 
 Rows are arrays under ``columns`` to keep the output small for the agent's context.
 """
@@ -29,7 +32,7 @@ from typing import Any
 
 import requests
 
-from sentinel.data import SourceError, cmc, exchange, flow
+from sentinel.data import SourceError, cmc, exchange, flow, news_rss
 from sentinel.data.exchange import NotListed
 from sentinel.eval.rules import STABLECOINS
 from sentinel.signals import indicators, schema, snapshot
@@ -55,6 +58,7 @@ class Row:
     to_low_7d: float | None
     to_high_7d: float | None
     funding_pct: float | None
+    news_24h: int | None  # RSS headlines in the last 24 h
 
 
 COLUMNS = list(Row.__dataclass_fields__)
@@ -84,13 +88,16 @@ def build(limit: int) -> Scan:
         for c in cmc.listings(limit)
         if not c.is_stablecoin and c.symbol not in STABLECOINS | WRAPPED
     ]
+    symbols = [c.symbol for c in coins]
     with ThreadPoolExecutor(max_workers=WORKERS) as pool:
-        daily_jobs = {c.symbol: pool.submit(_candles, c.symbol, "1d") for c in coins}
-        funding_jobs = {c.symbol: pool.submit(_funding, c.symbol) for c in coins}
+        feeds_job = pool.submit(_feeds, now)
+        daily_jobs = {sym: pool.submit(_candles, sym, "1d") for sym in symbols}
+        funding_jobs = {sym: pool.submit(_funding, sym) for sym in symbols}
         btc_hourly_job = pool.submit(_candles, "BTC", "1h")
     daily = {sym: job.result() for sym, job in daily_jobs.items()}
     funding = {sym: job.result() for sym, job in funding_jobs.items()}
     btc_daily, btc_hourly = daily.get("BTC"), btc_hourly_job.result()
+    feeds = feeds_job.result()
 
     rows, missing = [], []
     for coin in coins:
@@ -98,9 +105,15 @@ def build(limit: int) -> Scan:
         if candles is None:
             missing.append(coin.symbol)
             continue
-        rows.append(_row(coin, candles, btc_daily, funding[coin.symbol][0]))
+        # Every headline counts, not just the first few a snapshot would list.
+        news_24h = len(feeds.coin(coin.symbol, len(feeds.items))) if feeds else None
+        rows.append(_row(coin, candles, btc_daily, funding[coin.symbol][0], news_24h))
     if not all(read for _, read in funding.values()):
         missing.append("funding")  # some rates failed; their null is not "no swap"
+    if feeds is None:
+        missing.append("rss")
+    else:
+        missing += [f"rss:{name}" for name in feeds.failed]
     btc = None
     if btc_daily and btc_hourly:
         # The snapshot's own calculation, so both commands give the same regime.
@@ -143,11 +156,20 @@ def _funding(symbol: str) -> tuple[float | None, bool]:
         return None, False
 
 
+def _feeds(now: datetime) -> news_rss.Feeds | None:
+    try:
+        return news_rss.recent(now)
+    except SourceError:
+        log.warning("news feeds unavailable")
+        return None
+
+
 def _row(
     coin: cmc.Coin,
     daily: exchange.Candles,
     btc_daily: exchange.Candles | None,
     funding_pct: float | None,
+    news_24h: int | None,
 ) -> Row:
     closes = [c.close for c in daily.candles]
     price = daily.price
@@ -168,4 +190,5 @@ def _row(
         to_low_7d=rounded(indicators.pct(week["wick_low"], price)) if week else None,
         to_high_7d=rounded(indicators.pct(week["wick_high"], price)) if week else None,
         funding_pct=None if funding_pct is None else round(funding_pct, 4),
+        news_24h=news_24h,
     )

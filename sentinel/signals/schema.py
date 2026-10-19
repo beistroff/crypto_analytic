@@ -24,20 +24,21 @@ class BtcContext(BaseModel):
     regime_points: int
 
 
+class Headline(BaseModel):
+    title: str
+    source: str
+
+
 class Market(BaseModel):
     fear_greed: int | None
     total_mcap_chg_24h: float | None
     stablecoin_share: float | None
+    headlines: list[Headline] | None  # BTC's, from RSS, last 24 h, newest first
 
 
 class Macro(BaseModel):
     next_fomc: date
     days_to_fomc: int
-
-
-class Headline(BaseModel):
-    title: str
-    source: str
 
 
 class Flow(BaseModel):
@@ -99,7 +100,8 @@ class Snapshot(BaseModel):
     btc: BtcContext | None
     market: Market | None
     macro: Macro | None
-    coin_news: list[Headline] | None
+    coin_news_fresh: list[Headline] | None  # RSS, last 24 h
+    coin_news: list[Headline] | None  # NewsAPI, about a day old
     news_delayed_24h: bool = True
     flow: Flow | None
     technicals: Technicals | None

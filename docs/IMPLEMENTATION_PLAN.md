@@ -61,7 +61,7 @@ The plan is split in three. **Core** makes the agent useful day to day. The **re
 | 9 to 15 Nov | Research | 3.1 clients, 3.2 prompts, 3.5 runner, 5.1 to 5.4 Naive Bayes and gate; freeze on 15 Nov |
 | 16 to 29 Nov | Research | 14-day run (9.2) |
 | 30 Nov | Research | 5.5 and 9.3 analysis |
-| No date | Later | 1.6, 1.7 `lesson share`, 2.4 GDELT, 2.5 whale proxy, 2.6 `--save`, 2.7 CMC pass-through, 5.6, Phases 4, 6, 7 and 8, `openclaw/configure.sh` (before the next rebuild) |
+| No date | Later | 1.6, 1.7 `lesson share`, 2.4 GDELT, 2.4 scheduled world-news watcher (Lambda or instance timer that flags major events), 2.5 whale proxy, 2.6 `--save`, 2.7 CMC pass-through, 5.6, Phases 4, 6, 7 and 8, `openclaw/configure.sh` (before the next rebuild) |
 
 ---
 
@@ -272,7 +272,7 @@ Why (agent runs of 16 and 17 Oct): the agent fetched raw data and eyeballed it. 
 - [x] Daily, 4-hour and hourly candles. Daily candles **always** use `bar=1Dutc`: OKX's default `1D` runs on Hong Kong time (16:00 to 16:00 UTC), which put the agent's dates a day off. Fix the example URL in `openclaw/workspace/AGENTS.md` too.
 - [x] 5-minute file cache; every result carries its candle timestamps (UTC open time per candle, and whether it is closed).
 - [x] Plain `requests` through `sentinel.net`, not `ccxt`: two endpoints only, the same timeouts, retries, rate limits and logging as every other source, no large dependency to import on each CLI call, and the scoring job (3.6) can reuse it as it is.
-- [ ] **First**, run a live check from the EC2 instance in `us-east-1` (candles and the 2.5 flow endpoints: `pytest -m live tests/test_exchange.py`). Binance blocks many cloud IP ranges with HTTP 451, so do not use Binance as a data source.
+- [x] **First**, run a live check from the EC2 instance in `us-east-1` (candles and the 2.5 flow endpoints: `pytest -m live tests/test_exchange.py`; 17 Oct: OKX, Kraken, CMC and NewsAPI all answer from the instance). Binance blocks many cloud IP ranges with HTTP 451, so do not use Binance as a data source.
 
 **Accept:** hourly and daily candles for BTC and 10 coins in under 10 s (7 s from a laptop on 17 Oct); switching the exchange is a config change (`exchanges` in `config.py`).
 
@@ -288,9 +288,11 @@ Why (agent runs of 16 and 17 Oct): the agent fetched raw data and eyeballed it. 
 - [x] Output: `regime` (`risk_on`, `neutral`, `risk_off`) plus the numbers. Document the rule in the docstring.
 
 ### 2.4 News (`sentinel/data/news_rss.py`, `gdelt.py`)
-- [ ] RSS feed list in config; parse with `feedparser`; dedupe by link; filter by coin aliases (`XRP`, `Ripple`); last 24 h; at most 5 headlines per section.
+- [x] RSS feed list in config (CoinDesk, Cointelegraph, The Block, Decrypt; checked 17 Oct); parse with `feedparser`; dedupe by link; filter by coin aliases (`XRP`, `Ripple`); last 24 h; at most 5 headlines per section. The snapshot shows BTC's 2 freshest headlines in `market.headlines` (the newest of all feeds were mostly unrelated stories) and up to 3 of the coin's in `coin_news_fresh`, each article once; a failing feed is listed in `missing` as `rss:<name>`.
+- [ ] NewsAPI rework (next PR): the coin's news over 14 days, most read first (`sortBy=popularity`), at most 2 in the snapshot; a separate `sentinel news world` for what moves markets beyond crypto (rates, recession, US policy, bans, AI), which the agent runs only when a question needs it (macro questions, before a buy), never on every snapshot. The agent writes a one-line dated note of a major market event to memory and reads it there instead of fetching it again.
+- [ ] Coin names from CMC (next PR): headlines are matched by ticker and by the names in `config.COIN_NAMES`, which has 20 coins; any other coin is matched by its ticker alone (19 Oct: two "Zcash" headlines were missed for ZEC). Take the name from CMC's listing instead, with `COIN_NAMES` only for extra aliases.
 - [ ] GDELT market-wide tone (P1, can come later).
-- [ ] Sentiment is judged by the LLM, not by code.
+- [x] Sentiment is judged by the LLM, not by code.
 
 ### 2.5 Flow and whales (`sentinel/data/flow.py`, `whales.py`) [Core: funding and open interest; whale proxy Later]
 - [x] Funding rate, open interest and its 7-day change, long/short account ratio from OKX public endpoints (verified in the OKX API docs; access from `us-east-1` is checked with 2.1's live check).
@@ -302,6 +304,7 @@ Why (agent runs of 16 and 17 Oct): the agent fetched raw data and eyeballed it. 
 - [x] Macro line: the next FOMC meeting from a static list in config (Federal Reserve calendar, update it once a year).
 - [ ] [Later] Spot ETF net flows: no free, documented, machine-readable source confirmed (17 Oct: Farside and TFTC are web pages; NewHedge's API needs a token; no free terms found for SoSoValue's or CoinGlass's APIs; scrapers on Apify are paid). Add them when one turns up.
 - [x] Missing sources become `null` and are listed in `missing`.
+- [ ] A coin without an OKX perpetual (XMR, VET, TON) has no flow by design: keep `flow` `null` but leave it out of `missing`, as the scan already does for funding (next PR).
 - [x] Keep the JSON under about 1,500 tokens; add a size test.
 - [ ] [Later] `--save` stores it as a `SNAP` item in `sentinel-sim` with a 180-day TTL.
 
@@ -312,8 +315,9 @@ Replaces the agent's own top-50 scan (about 33 `web_fetch` calls, levels read of
 - [x] `sentinel market scan [--limit 50] [--format json|telegram]`: one CMC listings call, then per coin its daily candles and OKX funding rate in parallel, in one process; BTC's regime first.
 - [x] One row per coin under `columns`: price, 24 h and 7 d change (CMC, rolling), RSI14, above SMA50 and SMA200, strength against BTC over 7 days, distance to the 7-day wick low and high, funding. Stablecoins and wrapped BTC or ETH are skipped; coins without candles are listed in `missing`.
 - [x] The Telegram form names the stand-outs: strongest and weakest against BTC, nearest the 7-day wick low, RSI extremes.
+- [x] News count per coin (2.4): `news_24h`, the coin's headlines in the RSS feeds over the last 24 h (the feeds are read once per scan). No NewsAPI requests: one per coin would take about 50 s and half of the free plan's 100 a day. Titles come from `sentinel snapshot` for the coins worth a closer look.
 
-**Accept:** top 50 in about 5 s (17 Oct, laptop: 5.3 s, 3.1 s with cached candles; about 3,200 characters of JSON); a test for the rows, skipped and missing coins and the size budget.
+**Accept:** top 50 in about 5 s without NewsAPI (17 Oct, laptop: 5.3 s, 3.1 s with cached candles; about 3,200 characters of JSON); a test for the rows, skipped and missing coins and the size budget.
 
 ### 2.7 CMC pass-through (`sentinel cmc get`) [Later: build it when a question needs more than `web_fetch` and the fixed commands give]
 So the agent can ask CMC for more than the fixed commands without ever holding the key.
@@ -558,15 +562,16 @@ All items carry `type` and `created_at`. Keys are strings.
 
 ## Appendix C: Snapshot example (compact, hierarchy order)
 
-`sentinel snapshot SOL` as built in 2.6 (a live run on 17 Oct 2026, about 1,500 characters; the CMC market fields and the headline are filled in for the example). Market headlines (2.4 RSS), `whales` (2.5) and `portfolio` (1.7) join when their tasks land.
+`sentinel snapshot SOL` as built in 2.6 (a live run on 17 Oct 2026, about 1,500 characters; the CMC market fields and the headlines are filled in for the example). Market headlines (BTC's) and `coin_news_fresh` come from the 2.4 RSS feeds (up to 2 and 3 headlines; a live SOL snapshot with 5 market headlines was about 1,900 characters). `whales` (2.5) and `portfolio` (1.7) join when their tasks land.
 
 ```json
 {
   "schema_version": 1, "as_of": "2026-10-17T08:31:53Z", "symbol": "SOL", "price": 104.92,
   "prices_at": "2026-10-17T08:31:53Z", "exchange": "okx",
   "btc": {"price": 81698.0, "chg_24h": -0.66, "chg_7d": -1.39, "sma50": 81361.6, "sma200": 72466.0, "above_sma50": true, "above_sma200": true, "dominance": 58.1, "regime": "neutral", "regime_points": 2},
-  "market": {"fear_greed": 55, "total_mcap_chg_24h": -0.8, "stablecoin_share": 7.9},
+  "market": {"fear_greed": 55, "total_mcap_chg_24h": -0.8, "stablecoin_share": 7.9, "headlines": [{"title": "...", "source": "CoinDesk"}]},
   "macro": {"next_fomc": "2026-10-28", "days_to_fomc": 11},
+  "coin_news_fresh": [{"title": "...", "source": "Cointelegraph"}],
   "coin_news": [{"title": "...", "source": "..."}], "news_delayed_24h": true,
   "flow": {"funding_pct": -0.0012, "funding_interval_h": 8.0, "oi_usd": 313875577.0, "oi_chg_7d": -3.21, "long_short": 2.21},
   "technicals": {"rsi14": 39.7, "sma20": 113.206, "sma50": 109.425, "sma200": 87.5164, "above_sma50": false, "above_sma200": true, "atr14_pct": 4.65, "vol_z30": -0.43, "chg_1h": -0.16, "chg_24h": -1.78, "chg_7d": -4.62},
