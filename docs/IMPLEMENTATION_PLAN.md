@@ -312,8 +312,9 @@ Replaces the agent's own top-50 scan (about 33 `web_fetch` calls, levels read of
 - [x] `sentinel market scan [--limit 50] [--format json|telegram]`: one CMC listings call, then per coin its daily candles and OKX funding rate in parallel, in one process; BTC's regime first.
 - [x] One row per coin under `columns`: price, 24 h and 7 d change (CMC, rolling), RSI14, above SMA50 and SMA200, strength against BTC over 7 days, distance to the 7-day wick low and high, funding. Stablecoins and wrapped BTC or ETH are skipped; coins without candles are listed in `missing`.
 - [x] The Telegram form names the stand-outs: strongest and weakest against BTC, nearest the 7-day wick low, RSI extremes.
+- [x] News counts per coin (2.4): `news_24h` from the RSS feeds (read once per scan) and `news_late` from NewsAPI (one request per coin, paced at 1 per second, so a top-50 scan takes about 50 s and half of the free plan's 100 requests a day). The first NewsAPI failure (a used-up quota) stops its requests; the rest are `null` and `missing` names `news`. Titles come from `sentinel snapshot` for the coins worth a closer look.
 
-**Accept:** top 50 in about 5 s (17 Oct, laptop: 5.3 s, 3.1 s with cached candles; about 3,200 characters of JSON); a test for the rows, skipped and missing coins and the size budget.
+**Accept:** top 50 in about 5 s without NewsAPI (17 Oct, laptop: 5.3 s, 3.1 s with cached candles; about 3,200 characters of JSON); a test for the rows, skipped and missing coins and the size budget.
 
 ### 2.7 CMC pass-through (`sentinel cmc get`) [Later: build it when a question needs more than `web_fetch` and the fixed commands give]
 So the agent can ask CMC for more than the fixed commands without ever holding the key.
