@@ -13,7 +13,6 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from urllib.parse import urlsplit
 
-import feedparser
 import requests
 
 from sentinel import net
@@ -22,6 +21,9 @@ from sentinel.data import SourceError
 from sentinel.data.newsapi import Headline, names_coin
 
 WINDOW = timedelta(hours=24)
+# Feeds are optional extras: give up sooner than the 10 s default so one slow feed does
+# not hold up the whole snapshot.
+TIMEOUT_S = 5
 
 log = logging.getLogger(__name__)
 
@@ -53,6 +55,8 @@ def recent(now: datetime | None = None) -> Feeds:
     """Every configured feed's items from the 24 h before ``now``."""
     now = now or datetime.now(UTC)
     feeds = get_settings().news_feeds
+    if not feeds:
+        return Feeds([], [])
     with ThreadPoolExecutor(max_workers=len(feeds)) as pool:
         futures = {name: pool.submit(_read, name, url) for name, url in feeds.items()}
     items, failed = [], []
@@ -67,14 +71,17 @@ def recent(now: datetime | None = None) -> Feeds:
     seen, merged = set(), []
     for item in sorted(items, key=lambda i: i.published, reverse=True):
         link = _plain_link(item.headline.url)
-        if item.published >= now - WINDOW and link not in seen:
+        if now - WINDOW <= item.published <= now and link not in seen:
             seen.add(link)
             merged.append(item)
     return Feeds(merged, failed)
 
 
 def _read(name: str, url: str) -> list[Item]:
-    response = net.session("rss").get(url)
+    # Imported here: it takes about 0.4 s, which commands that read no feed should not pay.
+    import feedparser
+
+    response = net.session("rss").get(url, timeout=TIMEOUT_S)
     if response.status_code != 200:
         raise SourceError(f"RSS {name}: HTTP {response.status_code}")
     parsed = feedparser.parse(response.content)

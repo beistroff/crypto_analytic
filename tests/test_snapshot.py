@@ -77,9 +77,10 @@ def test_btc_snapshot_has_no_comparison_with_itself(trending):
     data = json.loads(_run("BTC"))
     assert data["vs_btc"] is None
     assert data["technicals"]["rsi14"] == 100.0
-    # The other feed still answers; of its two Bitcoin headlines one is over 24 h old.
+    # The other feed still answers. At 12:20 the feed's newest item (12:58) is still in
+    # the future, and of its two Bitcoin headlines one is over 24 h old.
     assert data["missing"] == ["rss:Mirror"]
-    assert len(data["market"]["headlines"]) == 4
+    assert len(data["market"]["headlines"]) == 3
     assert [h["title"][:20] for h in data["coin_news_fresh"]] == ["Bitcoin price steadi"]
 
 
