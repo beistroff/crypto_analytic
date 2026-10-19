@@ -45,6 +45,7 @@ def test_scan_one_row_per_coin_within_budget(top50):
     out = _run()
     data = json.loads(out)
     assert len(out) < MAX_CHARS
+    assert top50.news.seen == []  # NewsAPI is not asked: its quota is for the snapshot
     # The same BTC block as the snapshot's (which also has CMC's dominance).
     snapshot_btc = json.loads(CliRunner().invoke(cli, ["snapshot", "BTC"]).stdout)["btc"]
     assert data["btc"] == {**snapshot_btc, "dominance": None}
@@ -54,8 +55,7 @@ def test_scan_one_row_per_coin_within_budget(top50):
     assert [r["sym"] for r in rows[:2]] == ["BTC", "C00"]  # no USDT, USDG or WBTC
     assert len(rows) == 47
     assert rows[0]["rs_7d"] is None
-    # One Bitcoin headline in the feed's last 24 h; none in the NewsAPI fixture.
-    assert (rows[0]["news_24h"], rows[0]["news_late"]) == (1, 0)
+    assert rows[0]["news_24h"] == 1  # one Bitcoin headline in the feed's last 24 h
     # Uptrend of 0.1% a day: the 7-day wick low is 6 days back, 0.99 x its close.
     assert rows[1] == {
         "sym": "C00",
@@ -70,7 +70,6 @@ def test_scan_one_row_per_coin_within_budget(top50):
         "to_high_7d": 1.0,
         "funding_pct": -0.0011,
         "news_24h": 0,
-        "news_late": 0,
     }
     lines = _run("--format", "telegram").strip().splitlines()
     assert lines[0] == (
@@ -91,13 +90,3 @@ def test_failed_funding_is_missing_but_no_swap_is_not(top50):
     assert data["missing"] == ["NOPE"]
     funding = data["columns"].index("funding_pct")
     assert {row[funding] for row in data["rows"]} == {None}
-
-
-def test_newsapi_stops_at_the_first_failure(top50):
-    quota = {"status": "error", "code": "rateLimited"}
-    top50.news.routes["/v2/everything"] = (429, {}, quota)
-    data = json.loads(_run())
-    assert data["missing"] == ["NOPE", "news"]
-    late = data["columns"].index("news_late")
-    assert {row[late] for row in data["rows"]} == {None}
-    assert len(top50.news.seen) == 4  # the first coin and its 3 retries, then no more
