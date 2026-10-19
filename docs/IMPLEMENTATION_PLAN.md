@@ -57,8 +57,8 @@ The plan is split in three. **Core** makes the agent useful day to day: good mar
 | 1 | Core | Bring-up: instance, OpenClaw, Telegram, daily S3 backup, daily market scan | Done |
 | 2 | Core | Market data: 2.0 to 2.6, 2.8 scan, 2.4 RSS | Done |
 | 3 | Core | 2.9 agent instructions refresh (workspace text only) | Done |
-| 4 | Core | Trade journal, part 1: 1.4 item layouts, 1.5 data layer, `trade add`, `portfolio summary` | Next |
-| 5 | Core | 1.9 watches and alerts | |
+| 4 | Core | Trade journal, part 1: 1.4 item layouts, 1.5 data layer, `trade add`, `portfolio summary` | Done |
+| 5 | Core | 1.9 watches and alerts | Next |
 | 6 | Core | Trade journal, part 2: 1.7 lessons, nightly export, `trade-journal` skill, import from the markdown journal; 1.3 S3 lifecycle rule | |
 | 7 | Core | 2.10 setup block in the snapshot | |
 | 8 | Core | 2.4 NewsAPI rework and `news world`, CMC coin names, no-swap flow out of `missing` | |
@@ -223,15 +223,15 @@ Read each legacy script first and keep its behaviour, then improve.
 
 ### 1.4 DynamoDB tables in Terraform
 - [x] Two tables, provisioned capacity (2 RCU/WCU, free tier), `PK` (S) + `SK` (S), `GSI1` (`GSI1PK`, `GSI1SK`) on both, `GSI2` (`GSI2PK`, `GSI2SK`) on `sentinel-sim`, TTL attribute `ttl` on `sentinel-sim`, `deletion_protection_enabled = true` on `sentinel-real`. Point-in-time recovery is off to keep the cost at $0; the nightly export is the backup.
-- [ ] Item layouts exactly as in Appendix A.
+- [x] Item layouts exactly as in Appendix A.
 
 **Accept:** tables exist; the EC2 role can put and query; `tests/conftest.py` creates identical tables in `moto` from one shared spec.
 
 ### 1.5 Data access layer (`sentinel/store/dynamo.py`, `sentinel/portfolio/service.py`)
-- [ ] Repositories: `TradeRepo`, `PositionRepo`, `LessonRepo`, `BidRepo`, `PredictionRepo`, `SnapshotRepo`, `VoteRepo`, `ReportRepo`.
-- [ ] Buy and sell write the trade and update the position in one `TransactWriteItems`, with a condition on `version` (optimistic locking).
-- [ ] Average cost method: a buy updates `avg_price`; a sell keeps `avg_price` and adds `(sell_price - avg_price) * qty - fee` to `realised_pnl`; position closes when `qty` is below 1e-9.
-- [ ] Every read uses `Query` (by `PK` or `GSI1`), never `Scan`.
+- [x] Repositories: `TradeRepo`, `PositionRepo` and the starting balance (`BaselineRepo`). The others (`LessonRepo`, `PredictionRepo`, `SnapshotRepo`, `VoteRepo`, `ReportRepo`) come with the tasks that use them.
+- [x] Buy and sell write the trade and update the position in one `TransactWriteItems`, with a condition on `version` (optimistic locking).
+- [x] Average cost method: a buy updates `avg_price`; a sell keeps `avg_price` and adds `(sell_price - avg_price) * qty - fee` to `realised_pnl`; position closes when `qty` is below 1e-9.
+- [x] Every read uses `Query` (by `PK` or `GSI1`), never `Scan`.
 
 **Accept:** tests for buy, second buy, partial sell, full sell, realised P&L, fee handling, and a failed transaction on a version conflict. **Merge gate:** the same steps as manual test cases against the real AWS table `sentinel-sim` (the `SENTINEL_REAL_TABLE` override, under aws-vault), from starting cash through a full sell and the summary, ending with a cleanup step that deletes the test items.
 
@@ -583,7 +583,7 @@ All items carry `type` and `created_at`. Keys are strings.
 | Type | PK | SK | GSI1PK / GSI1SK | Attributes |
 | --- | --- | --- | --- | --- |
 | TRADE | `TRADE#{SYM}` | `{ts}#{trade_id}` | `SYM#{SYM}` / `{ts}` | symbol, side (BUY/SELL), qty, price, quote_amount, fee, fee_asset, venue, note, source (telegram/import) |
-| POSITION | `POS#{SYM}` | `CURRENT` | `SYM#{SYM}` / `POS` | qty, avg_price, cost_basis, realised_pnl, version, updated_at |
+| POSITION | `POS` | `{SYM}` | `SYM#{SYM}` / `POS` | qty, avg_price, cost_basis, realised_pnl, version, updated_at |
 | LESSON | `LESSON` | `{date}#{slug}` | none | text, tags, status (approved/proposed), source (manual/reflection) |
 | META | `META` | `BASELINE` | none | baseline_usdt, since |
 
