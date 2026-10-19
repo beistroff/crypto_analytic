@@ -193,6 +193,39 @@ def apis(make_server, monkeypatch):
         yield servers
 
 
+def _index(name, key_prefix):
+    return {
+        "IndexName": name,
+        "KeySchema": [
+            {"AttributeName": f"{key_prefix}PK", "KeyType": "HASH"},
+            {"AttributeName": f"{key_prefix}SK", "KeyType": "RANGE"},
+        ],
+        "Projection": {"ProjectionType": "ALL"},
+    }
+
+
+@pytest.fixture
+def tables():
+    """Mocked `sentinel-real` and `sentinel-sim` with the keys and indexes of
+    terraform/env/dynamodb: PK + SK, GSI1 on both, GSI2 on the sim table."""
+    names = {"sentinel-real": ["GSI1"], "sentinel-sim": ["GSI1", "GSI2"]}
+    with mock_aws():
+        dynamodb = boto3.client("dynamodb", region_name="us-east-1")
+        for table, indexes in names.items():
+            keys = ["PK", "SK", *(f"{i}{k}" for i in indexes for k in ("PK", "SK"))]
+            dynamodb.create_table(
+                TableName=table,
+                KeySchema=[
+                    {"AttributeName": "PK", "KeyType": "HASH"},
+                    {"AttributeName": "SK", "KeyType": "RANGE"},
+                ],
+                AttributeDefinitions=[{"AttributeName": k, "AttributeType": "S"} for k in keys],
+                GlobalSecondaryIndexes=[_index(i, i) for i in indexes],
+                BillingMode="PAY_PER_REQUEST",
+            )
+        yield dynamodb
+
+
 # 17 Oct 2026, 12:20 UTC, for the `trending` fixture.
 TRENDING_NOW = datetime(2026, 10, 17, 12, 20, tzinfo=UTC)
 

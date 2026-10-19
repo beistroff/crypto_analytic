@@ -10,12 +10,14 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+from decimal import Decimal
 from typing import Any
 
 import requests
 
 from sentinel.data import SourceError, cmc, feargreed, newsapi
 from sentinel.eval.rules import is_scalp_candidate, rules_signal
+from sentinel.portfolio import service
 from sentinel.signals import scan as signals_scan
 from sentinel.signals import snapshot as signals_snapshot
 from sentinel.signals.snapshot import rounded, sig
@@ -216,6 +218,73 @@ def watch_move(symbol: str, entry: float, min_pct: float) -> View:
     return View(data, f"{coin.symbol} {_usd(coin.price)}: {flag}{_pct(change)} from {_usd(entry)}")
 
 
+def trade_added(result: dict[str, Any]) -> View:
+    """The journalled trade and the position it left."""
+    position = result["position"]
+    data: dict[str, Any] = {
+        "trade_id": result["trade_id"],
+        "symbol": result["symbol"],
+        "side": result["side"],
+        "qty": _num(result["qty"]),
+        "price": _num(result["price"]),
+        "fee": _num(result["fee"]),
+        "position": {"qty": _num(position.qty), "avg_price": _num(position.avg_price)},
+    }
+    line = f"{result['side']} {_num(result['qty'])} {result['symbol']} at {_usd(data['price'])}."
+    if result["realised_pnl"] is not None:
+        data["realised_pnl"] = _num(result["realised_pnl"])
+        line += f" Realised {_signed_usd(data['realised_pnl'])}."
+    if position.qty > 0:
+        line += f" Now {_num(position.qty)} at avg {_usd(data['position']['avg_price'])}."
+    else:
+        line += " Position closed."
+    return View(data, line)
+
+
+def baseline_set(result: dict[str, Any]) -> View:
+    data = {"baseline_usdt": _num(result["baseline_usdt"]), "since": result["since"]}
+    return View(data, f"Starting cash set to {_usd(data['baseline_usdt'])}.")
+
+
+def portfolio_summary() -> View:
+    """Cash and open positions first, so "nothing is deployed" is never in doubt."""
+    state = service.summary()
+    cash = None if state.cash_usdt is None else _num(state.cash_usdt)
+    data: dict[str, Any] = {
+        "cash_usdt": cash,
+        "invested_usdt": _num(state.invested_usdt),
+        "open_positions": [
+            {
+                "symbol": p.symbol,
+                "qty": _num(p.qty),
+                "avg_price": _num(p.avg_price),
+                "cost_basis": _num(p.cost_basis),
+            }
+            for p in state.open_positions
+        ],
+        "realised_pnl": _num(state.realised_pnl),
+        "baseline_usdt": None if state.baseline_usdt is None else _num(state.baseline_usdt),
+        "since": state.since,
+    }
+    lines = ["Cash: " + ("not known, no starting cash set" if cash is None else _usd(cash))]
+    if state.open_positions:
+        count = len(state.open_positions)
+        lines.append(
+            f"Deployed: {_usd(data['invested_usdt'])} in {count} "
+            f"position{'s' if count > 1 else ''}, realised {_signed_usd(data['realised_pnl'])}"
+        )
+        rows = [
+            f"{p['symbol']} {p['qty']} at avg {_usd(p['avg_price'])}"
+            for p in data["open_positions"]
+        ]
+        if len(rows) > 3:
+            rows = [*rows[:2], f"+{len(rows) - 2} more"]
+        lines += rows
+    else:
+        lines.append(f"Nothing deployed, realised {_signed_usd(data['realised_pnl'])}")
+    return View(data, _lines(lines))
+
+
 def _market_context() -> tuple[dict[str, Any], list[str]]:
     missing: list[str] = []
     market: dict[str, Any] = {
@@ -290,6 +359,14 @@ def _usd(value: float | None) -> str:
     if value >= 1:
         return f"${value:,.2f}"
     return f"${value:.4g}"
+
+
+def _num(value: Decimal) -> float:
+    return float(round(value, 8))
+
+
+def _signed_usd(value: float) -> str:
+    return ("-" if value < 0 else "+") + _usd(abs(value))
 
 
 def _pct(value: float) -> str:
