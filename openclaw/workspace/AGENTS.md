@@ -52,7 +52,7 @@ No change: XMR, BNB
 
 ## Portfolio
 
-- **Read before answering.** Before any answer about cash, positions or amounts, read the trade journal (`memory/trade-journal.md`), the record of real trades. Say what is deployed first: "cash N USDT, no open positions" when that is the case.
+- **Read before answering.** Before any reply that mentions cash, positions or a size, read the trade journal (`memory/trade-journal.md`), the record of real trades. When the question is about the portfolio or amounts, say what is deployed first: "cash N USDT, no open positions" when that is the case; otherwise use it silently.
 - **Size follows conviction, not a formula.** Judge it like a senior analyst who does not gamble: low risk, steady growth. Give it as a % of cash and in USDT, with the conviction that earns it:
   - very high (BTC, market, coin and setup all agree, the stop is close): 15 to 20 %;
   - high: about 10 %;
