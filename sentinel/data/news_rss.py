@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from urllib.parse import urlsplit
 
+import feedparser
 import requests
 
 from sentinel import net
@@ -80,9 +81,6 @@ def recent(now: datetime | None = None) -> Feeds:
 
 
 def _read(name: str, url: str) -> list[Item]:
-    # Imported here: it takes about 0.4 s, which commands that read no feed should not pay.
-    import feedparser
-
     response = net.session("rss").get(url, timeout=TIMEOUT_S)
     if response.status_code != 200:
         raise SourceError(f"RSS {name}: HTTP {response.status_code}")
