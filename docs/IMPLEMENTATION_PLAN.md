@@ -6,7 +6,7 @@ Version 2, 16 October 2026: core first, then the research track, the rest later 
 
 - Commit it to the repo as `docs/IMPLEMENTATION_PLAN.md`.
 - Start every Claude Code session with: *"Read `docs/IMPLEMENTATION_PLAN.md`. Work on task X.Y only. Follow section 3 (Conventions). Stop when its acceptance criteria pass, tick its checkbox, and add a note to `docs/project_notes.md`."*
-- Follow the order in 0.2 (Roadmap): the core first, then the research track (target: done by 30 Nov). Tasks marked Later have no date. Each phase heading says which track it belongs to.
+- Follow the order in 0.2 (Roadmap): the core first, then the research track, then Later. One task per session and per PR. Each phase heading says which track it belongs to.
 - After each task, append 3 to 5 lines to `docs/project_notes.md`: what changed, why, and any before/after number (lines of code, latency, tokens, bugs fixed). These notes feed the final write-up.
 
 ---
@@ -15,13 +15,13 @@ Version 2, 16 October 2026: core first, then the research track, the rest later 
 
 **What this is.** An OpenClaw agent on AWS EC2 that acts as a senior crypto analyst for one user over Telegram. It reads market data and news, keeps a trade journal, and suggests trades; the user executes them manually. The project extends it into a measured, low-cost prediction system.
 
-**Research question.** Which cheap model, Gemini Flash or Claude Sonnet (plus Haiku as a cheap control), makes better short-term crypto predictions from the same data, and how much does a fixed "BTC first" signal hierarchy help?
+**Research question.** Which cheap model, Gemini Flash, DeepSeek or Claude Sonnet (plus Haiku as a cheap control), makes better short-term crypto predictions from the same data, and how much does a fixed "BTC first" signal hierarchy help?
 
 | Topic | Decision |
 | --- | --- |
 | Gateway | OpenClaw stays. Pin the version, gateway on localhost, no ClawHub skills. Hermes Agent is out of scope (possible later comparison). |
 | Agent | By default one agent with the existing SOUL / IDENTITY persona ("the best crypto analyst"). Chat model: Claude Haiku 5.5, with the free Gemini models (3.8, 3.7, 3.6 Flash, then 3.5 and 3.1 Flash Lite) as fallbacks. Decided at bring-up (2026-10-16): free Gemini Flash allows 5 requests a minute and 20 a day, which one agent turn plus OpenClaw's retries can use up. |
-| Priorities (2026-10-16) | Core first: the agent useful day to day (market data, trade journal, lessons, a light prediction journal). Then the research track (the measured experiment) by 30 Nov. Everything else later. Order and dates in 0.2. Deep analysis stays on Haiku with more thinking; Sonnet is not used for chat (cost). |
+| Priorities (2026-10-16) | Core first: the agent useful day to day (market data, trade journal, lessons, a light prediction journal). Then the research track (the measured experiment, with Naive Bayes). Everything else later. The order is in 0.2; there are no dates. Deep analysis stays on Haiku with more thinking; Sonnet is not used for chat (cost). |
 | Data access | `sentinel` commands for structured, compact data; `web_fetch` for public, keyless sources (OKX candles, funding, open interest); later, when a question needs it, the CMC pass-through (2.7) for any other CMC endpoint. The agent never holds an API key: whatever is in its context can end up in replies, memory files and the S3 backup. |
 | Claude models | Sonnet 5.5 (`claude-sonnet-5-5`) and Haiku 5.5 (`claude-haiku-5-5`) through an **Anthropic API key** with $5 of prepaid credit, a $5 monthly spend limit and no auto-reload (created 2026-10-16). A Claude Pro subscription does not include API usage, and Anthropic cut subscriptions off from third-party agents like OpenClaw in April 2026, so do not depend on it. |
 | Data store | DynamoDB is the source of truth: `sentinel-real` (real trades) and `sentinel-sim` (predictions, snapshots, outcomes). Provisioned capacity (2 RCU/WCU per table and index) stays inside the always-free tier; point-in-time recovery is off. Backup is the nightly JSON export to S3 (plus a `portfolio.json` fallback on the instance); the existing daily S3 backups stay as well. Keep S3 under 5 GB with a lifecycle rule on `backups/`. |
@@ -49,19 +49,25 @@ Notes:
 - Security hardening for Stage A (task 1.3): no inbound security-group rules (access only via SSM Session Manager), IMDSv2 required, encrypted EBS, least-privilege IAM, gateway on localhost, no ClawHub skills, no secrets in user data, Terraform state in a private encrypted bucket.
 - Before the first `terraform apply`, check which resources survived the destroy (the S3 backup bucket, SSM parameters, any old DynamoDB table, remote state) so Terraform neither recreates nor fails on them.
 
-### 0.2 Roadmap (2026-10-16): core first, then the research track
-The plan is split in three. **Core** makes the agent useful day to day. The **research track** is the measured experiment, targeted to finish by 30 Nov. **Later** has no date. Task numbers stay as they are.
+### 0.2 Roadmap (2026-10-19): core first, then the research track
+The plan is split in three. **Core** makes the agent useful day to day: good market data, a real portfolio in DynamoDB, and short, consistent replies. The **research track** is the measured experiment. **Later** is optional. There are no dates: steps follow this order, at the pace the work allows. Each step is one session and one small PR. A PR that touches DynamoDB or the instance merges only after its manual test cases pass (kept locally, outside git). After each merge: tag a release, update the instance to that tag, then a smoke test (`sentinel health`, one snapshot, one scan, one Telegram question).
 
-| When | Track | Tasks |
-| --- | --- | --- |
-| Now | Core: bring-up close-out | Daily S3 backup (system crontab), daily market scan (OpenClaw automation), merge the bring-up PR |
-| 17 to 25 Oct | Core: market data | 2.1 candles, 2.2 indicators, 2.3 BTC regime, 2.4 news (RSS and coin aliases), 2.5 funding and open interest, 2.6 snapshot |
-| 26 Oct to 1 Nov | Core: trade journal | 1.4, 1.5, 1.7 (trades, positions, bids, balance, nightly DynamoDB export); the agent adds a lesson to `memory/lessons_learned.md` after each closed trade; 1.3 S3 lifecycle rule |
-| 2 to 8 Nov | Core: prediction journal | 3.3 validator, 3.4 chat path, 3.6 scoring on the instance, 3.7 weekly hit rate. The research track reuses all of it. |
-| 9 to 15 Nov | Research | 3.1 clients, 3.2 prompts, 3.5 runner, 5.1 to 5.4 Naive Bayes and gate; freeze on 15 Nov |
-| 16 to 29 Nov | Research | 14-day run (9.2) |
-| 30 Nov | Research | 5.5 and 9.3 analysis |
-| No date | Later | 1.6, 1.7 `lesson share`, 2.4 GDELT, 2.4 scheduled world-news watcher (Lambda or instance timer that flags major events), 2.5 whale proxy, 2.6 `--save`, 2.7 CMC pass-through, 5.6, Phases 4, 6, 7 and 8, `openclaw/configure.sh` (before the next rebuild) |
+| Step | Track | Task (one PR) | Status |
+| --- | --- | --- | --- |
+| 1 | Core | Bring-up: instance, OpenClaw, Telegram, daily S3 backup, daily market scan | Done |
+| 2 | Core | Market data: 2.0 to 2.6, 2.8 scan, 2.4 RSS | Done |
+| 3 | Core | 2.9 agent instructions refresh (workspace text only) | Next |
+| 4 | Core | Trade journal, part 1: 1.4 item layouts, 1.5 data layer, `trade add`, `portfolio summary` | |
+| 5 | Core | Trade journal, part 2: 1.7 bids, lessons, nightly export, `trade-journal` skill, import from the markdown journal; 1.3 S3 lifecycle rule | |
+| 6 | Core | 1.9 position sizing and trigger checks | |
+| 7 | Core | 2.10 setup block in the snapshot | |
+| 8 | Core | 2.4 NewsAPI rework and `news world`, CMC coin names, no-swap flow out of `missing` | |
+| 9 | Core | 2.11 scan watchlist | |
+| 10 | Core | Minimal prediction journal: 3.3 validator, 3.4 log, 3.6 outcome scorer, 3.7 export and review skill | |
+| 11 | Research | 3.1 clients, 3.2 prompts, 3.5 runner | |
+| 12 | Research | Phase 5 Naive Bayes (5.1 to 5.5), graded by the same outcome scorer | |
+| 13 | Research | Phase 9 freeze, run and analysis | |
+| - | Later | revisit the chat model order once the agent is stable (free Gemini first, Haiku as the fallback; DeepSeek as a fallback if the experiment shows it is good), 1.6, 1.7 `lesson share`, 2.4 GDELT, 2.4 scheduled world-news watcher (Lambda or instance timer that flags major events), 2.5 whale proxy, 2.6 `--save`, 2.7 CMC pass-through, 5.6, Phases 4, 6, 7 and 8, `openclaw/configure.sh` (before the next rebuild) | |
 
 ---
 
@@ -81,7 +87,7 @@ Fix or retire each of these during Phase 1. File paths are relative to the repo 
 | B8 | `openclaw/analysis/news_aggregator.py` | NewsAPI.org free plan delivers articles 24 h late and is for development use only, so "news from yesterday" is mostly stale. README names a different service (NewsAPI.ai). |
 | B9 | `openclaw/analysis/whale_monitor.py` | Hard-wired to SUI; only checks 1 h price change; unused `API_URL`. |
 | B10 | Signals | Fixed thresholds (Fear & Greed below 30 and 24 h change below -5% gives DCA BUY); nothing recorded, so accuracy is unknown. No OHLCV, so no RSI or moving averages. |
-| B11 | `openclaw/workspace/skills/market_analyzer.md` | Single file with hard-coded `/home/ubuntu/sentinel/...` paths; skill folder format not used. |
+| B11 | `openclaw/workspace/skills/market_analyzer.md` | Single file with hard-coded `/home/ubuntu/sentinel/...` paths; skill folder format not used. Removed in 2.9. |
 | B12 | `openclaw/bootstrap.sh` | Installs the latest OpenClaw unpinned via `curl | bash`; writes scripts as heredocs from Terraform templates. |
 
 ---
@@ -140,7 +146,6 @@ crypto_analytic/
         trade-journal/SKILL.md
         analyse/SKILL.md
         test-trade-scenario/SKILL.md
-        prediction-report/SKILL.md
         nb-check/SKILL.md              # optional
         cluster-prediction/SKILL.md    # optional
         system-ops/SKILL.md            # health check, backups
@@ -228,7 +233,7 @@ Read each legacy script first and keep its behaviour, then improve.
 - [ ] Average cost method: a buy updates `avg_price`; a sell keeps `avg_price` and adds `(sell_price - avg_price) * qty - fee` to `realised_pnl`; position closes when `qty` is below 1e-9.
 - [ ] Every read uses `Query` (by `PK` or `GSI1`), never `Scan`.
 
-**Accept:** tests for buy, second buy, partial sell, full sell, realised P&L, fee handling, and a failed transaction on a version conflict.
+**Accept:** tests for buy, second buy, partial sell, full sell, realised P&L, fee handling, and a failed transaction on a version conflict. **Merge gate:** the same steps as manual test cases against the real AWS table `sentinel-sim` (the `SENTINEL_REAL_TABLE` override, under aws-vault), from starting cash through a full sell and the summary, ending with a cleanup step that deletes the test items.
 
 ### 1.6 Migration of lessons from the S3 backup (Stage B: needs the tables applied)
 **Deferred (2026-10-16):** the lessons stay a workspace file (`memory/lessons_learned.md`, copied at bring-up and backed up daily); this migration waits until shared lessons (8.4) need `LESSON` items.
@@ -245,7 +250,7 @@ Only the lessons move over. Positions, bids and the baseline are entered fresh a
 - [ ] New skill folder `openclaw/workspace/skills/trade-journal/SKILL.md`; update `TOOLS.md`; stop all JSON portfolio writes.
 - [ ] [Later] `sentinel lesson share` (daily, after the backup): renders the approved `LESSON` items as `beistroff_lessons_learned.md`, redacts dollar amounts, quantities and the baseline (rules and % results stay), and replaces yesterday's copy in your own subfolder of the shared Google Drive folder (F.9). `sentinel lesson auth` runs the one-time Google consent from the laptop. Defaults chosen 2026-10-15, change if you prefer: redacted, folder owned by the dedicated Google account.
 
-**Accept (Stage B, after first bring-up; the CLI and tests are done in Stage A):** in Telegram, "I bought 100 XRP at 1.20" creates a trade and updates the position; "show my balance" returns a short table; the nightly S3 backup still runs.
+**Accept (Stage B, after first bring-up; the CLI and tests are done in Stage A):** in Telegram, "I bought 100 XRP at 1.20" creates a trade and updates the position; "show my balance" returns a short table; the nightly S3 backup still runs. **Merge gate:** manual test cases against `sentinel-sim` (as in 1.5) for bids, lessons and the export, and a dry run of the markdown-journal import whose counts match the file, before the real import.
 
 ### 1.8 Readiness gate
 Only the checks the agent cannot work without. Others join with their own task (the exchange in 2.1); OpenClaw and Telegram are checked after the manual onboarding.
@@ -256,9 +261,17 @@ Only the checks the agent cannot work without. Others join with their own task (
 
 **Accept (Stage A):** `pytest` covers pass, fatal and transient cases for every check, the wait loop, and that no key shows up in any output. **Accept (Stage B):** the first boot ends with `~/sentinel/.ready`; `cloud-init status --long` shows done.
 
+### 1.9 Position sizing and trigger checks (with 1.7)
+Why (chat of 19 Oct): the agent did the sizing in its head and gave DOT and ADA "70 USDT at yellow" but WLD "35 USDT, half of the usual 70 at yellow". It took the plan file's caps for deployed money, and re-checked every planned trigger by hand in each message. Code does the arithmetic and the bookkeeping; the agent explains.
+- [ ] `sentinel portfolio size SYM --stop PRICE [--entry PRICE]`: the size in USDT from cash (1.7), the per-coin and total caps, the BTC gate multiplier (1.0 at `risk_on`, 0.5 at `neutral`, 0 at `risk_off`, the same labels as `btc.regime`), and a risk per trade in config. Prints the size, the risk in USDT and the stop distance in % and in ATR. Caps and risk live in config, not in a workspace file.
+- [ ] Planned entries are `BID` items with a trigger type (`close_above`, `close_below`, `touch_below`) and a stop. `sentinel bid check [--format telegram]` reads them against daily closes (UTC, closed candles only) and lists which fired, which are within 2 %, and which are far.
+- [ ] `sentinel portfolio summary` states the cash and open positions first, so "nothing is deployed" is never in doubt.
+
+**Accept:** tests for each gate label, the caps, a size that the caps cut down, each trigger type on a fixture series, and a bid with no candles.
+
 ---
 
-## Phase 2: Market data and signal hierarchy [Core, 17 to 25 Oct; parts Later]
+## Phase 2: Market data and signal hierarchy [Core; parts Later]
 
 Why (agent runs of 16 and 17 Oct): the agent fetched raw data and eyeballed it. A top-50 scan took about 33 `web_fetch` calls and read levels off 10 daily candles; the daily BTC scan named $80.4k as support although BTC wicked to 79,775 on 15 Oct UTC, mixed wick and close levels, had no moving averages, and its news was unrelated to the coin. From here on code computes the signals and the agent reads them.
 
@@ -319,6 +332,29 @@ Replaces the agent's own top-50 scan (about 33 `web_fetch` calls, levels read of
 
 **Accept:** top 50 in about 5 s without NewsAPI (17 Oct, laptop: 5.3 s, 3.1 s with cached candles; about 3,200 characters of JSON); a test for the rows, skipped and missing coins and the size budget.
 
+### 2.9 Agent instructions refresh (`openclaw/workspace/`)
+Why (chat of 19 Oct): replies ran 15 to 20 lines, repeated the BTC gate and unchanged coins in every message, quoted tool internals ("41 rows, not 50"), and the workspace files contradict each other. An early, light version of 4.1.
+- [ ] Reply template in `AGENTS.md`: one verdict line per coin (`COIN price: buy / wait / avoid`), then at most 3 lines (one reason with two numbers at most, the trigger, the stop and size). One stop; alternatives only when asked. The BTC gate once, in one line, only when it changed since the last reply. Unchanged coins in one line ("No change: XMR, BNB"). No tool internals unless missing data changes the answer. A follow-up offer at most once per topic.
+- [ ] One BTC gate: green, yellow and red are `btc.regime` (`risk_on`, `neutral`, `risk_off`) from `sentinel`, not a second rule kept in `HEARTBEAT.md`.
+- [ ] Portfolio questions: read the trade journal before answering, and say "cash N USDT, no open positions" when that is the case. The plan file starts with that state line until 1.7 replaces it.
+- [ ] Remove the contradictions: `SOUL.md` and `IDENTITY.md` still lead with volume to market cap and Fear & Greed (BTC first now); `memory/lessons_learned.md` names Binance as the price benchmark (blocked from AWS; OKX now) and a 10 % "take initial out" rule while the old skill says 3 %; delete `skills/market_analyzer.md` (B11: old scripts, tables and buttons).
+
+**Accept:** in Telegram, a two-coin question gets 8 lines or fewer, and a follow-up only repeats what changed.
+
+### 2.10 Setup block in the snapshot (`sentinel/signals/snapshot.py`)
+Why (chat of 19 Oct): the agent improvised triggers and stops per coin and argued in prose that a stop 3.7 % away sat inside one day's range. Code computes these the same way every time.
+- [ ] `setup` after `levels`: breakout trigger (daily close above the 7-day close high), pullback zone (SMA50 to the 7-day close low, when the price is above SMA50), stop (below the 7-day wick low), stop distance in % and in ATR, and room to the 30-day wick high in %. A stop under 1 ATR away is flagged `stop_in_noise`.
+- [ ] `AGENTS.md`: quote `setup`; change it only with a stated reason.
+
+**Accept:** hand-checked values on the `trending` fixture; the size test still passes.
+
+### 2.11 Scan watchlist (`sentinel/signals/scan.py`)
+Why (chat of 19 Oct): DOT was asked about but missing from "top 15" (it ranks lower), and the agent reported row counts instead of naming what was skipped.
+- [ ] `sentinel market scan --symbol DOT,ADA` adds coins outside the top N, in the same rows.
+- [ ] The output names the skipped stablecoins and wrapped coins (`skipped`), so a short row count needs no explanation.
+
+**Accept:** a test with an extra symbol outside the listing and the `skipped` list.
+
 ### 2.7 CMC pass-through (`sentinel cmc get`) [Later: build it when a question needs more than `web_fetch` and the fixed commands give]
 So the agent can ask CMC for more than the fixed commands without ever holding the key.
 - [ ] `sentinel cmc get <endpoint> [--param key=value ...]`: read-only endpoints from an allowlist in config; `sentinel` adds the key header, trims the response to the requested fields and a size budget, and reports the credits used.
@@ -328,10 +364,10 @@ So the agent can ask CMC for more than the fixed commands without ever holding t
 
 ---
 
-## Phase 3: Prediction journal and models [Core: 3.3, 3.4, 3.6, 3.7, 2 to 8 Nov; Research: 3.1, 3.2, 3.5, 9 to 15 Nov]
+## Phase 3: Prediction journal and models [Core: 3.3, 3.4, 3.6, 3.7; Research: 3.1, 3.2, 3.5]
 
 ### 3.1 LLM clients (`sentinel/llm/`)
-- [ ] One interface `call(system, user, schema) -> (parsed, usage)` for Gemini (`google-genai`), Anthropic (`anthropic`, models `claude-sonnet-5-5` and `claude-haiku-5-5`) and OpenRouter (OpenAI-compatible).
+- [ ] One interface `call(system, user, schema) -> (parsed, usage)` for Gemini (`google-genai`), Anthropic (`anthropic`, models `claude-sonnet-5-5` and `claude-haiku-5-5`) and OpenRouter (OpenAI-compatible), which also serves the DeepSeek arm (model id in config). Check DeepSeek's price and data terms when the client is built; the arms only ever see market snapshots, never portfolio or personal data.
 - [ ] JSON output mode, retries on 429 with backoff, and logged tokens in and out, latency and cost (prices in `config.py`: Sonnet 5.5 $2 / $10 per million tokens in / out, Haiku 5.5 $0.10 / $0.50, Gemini free tier $0).
 - [ ] Record the exact model id string returned by each API.
 
@@ -350,26 +386,30 @@ Runs on every answer before anything else:
 - [ ] On failure: one retry with the error list; if it fails again, store with `valid = false` (counted in the results).
 
 ### 3.4 Chat path: `test-trade-scenario` skill
-- [ ] `sentinel predict log --json '<PredictionOut>' --symbol XRP --source chat` validates, stores a `PRED` item and returns the id plus a 5-line message.
+Minimal by design (2026-10-19): the agent logs its calls; it never scores or reviews them, which would spend its token budget.
+- [ ] `sentinel predict log --json '<PredictionOut>' --symbol XRP --source chat` validates, stores a `PRED` item in `sentinel-sim` (coin, verdict, entry, trigger, stop, horizon and the snapshot it was based on) and returns the id plus a short message.
 - [ ] `sentinel predict show <id>` returns the full reasoning ("details").
-- [ ] Skill folder `skills/test-trade-scenario/SKILL.md`: build the snapshot, decide, log, reply in the short format.
+- [ ] Skill folder `skills/test-trade-scenario/SKILL.md`: read `memory/prediction_lessons.md`, build the snapshot, decide, log, reply in the short format. `memory/lessons_learned.md` stays for real trades only.
 
 ### 3.5 Scheduled path: experiment runner
 - [ ] `sentinel experiment run --slot 09|21` reads `experiment.yaml`, builds one snapshot per coin, runs every arm, stores one `PRED` per arm.
 - [ ] Idempotency key: date + slot + symbol + arm (re-runs skip existing items).
 - [ ] System cron on EC2 at 09:00 and 21:00 UTC. This runs outside OpenClaw on purpose, so every arm gets an identical prompt and exact token logging.
 
-### 3.6 Scoring job (hourly, no LLM)
-Core version: runs on the instance from the system crontab. The Lambda version waits for Phase 6.
+### 3.6 Outcome scorer (hourly, code only, no LLM)
+Records what the market did after each call, with zero model tokens. It is the answer key: the agent's calls (3.4, 3.5) and Naive Bayes' calls (Phase 5) are graded by the same scorer, and Naive Bayes learns from its outcomes. Core version: runs on the instance from the system crontab. The Lambda version waits for Phase 6.
 - [ ] `score_handler` queries `GSI2` for `OPEN` items with `due_at <= now`, fetches hourly candles since the prediction (plain `requests` to the exchange REST API, no `ccxt` in Lambda), and fills each horizon in `checks`: price, return, hit.
 - [ ] Records `target_hit_first` (target touched before stop, or the reverse, or neither) and `max_adverse_pct`.
 - [ ] Sets the next `due_at`; after the 48 h check, sets `status = DONE` and removes the `GSI2` attributes.
 
-### 3.7 Reports
-- [ ] `sentinel report daily|weekly --format telegram`: hit rate per arm and horizon with n and Wilson interval, best and worst call, cost so far, invalid answers.
-- [ ] OpenClaw cron jobs (isolated sessions) send them. Skill folder `skills/prediction-report/SKILL.md`.
+### 3.7 Export and review (outside the agent)
+Changed 2026-10-19: no report crons and no reviews by the agent. The user reviews the logs in a Claude chat, where the token budget is larger.
+- [ ] `sentinel predict export [--days 14]`: the calls and their outcomes, compact, to paste into a chat. The nightly `backup export` (1.7) puts the same items in S3.
+- [ ] A review skill in the repo, `.claude/skills/review-predictions/SKILL.md`, usable in Claude Code or pasted into any Claude chat with an export: hit rate per horizon, where the reasoning went wrong, recurring patterns, and at most 5 drafted lessons.
+- [ ] Lessons the user approves go to `memory/prediction_lessons.md` (separate from the real-trade lessons), which the 3.4 skill reads before a call.
+- [ ] [Research] Per-arm hit rates with n and Wilson intervals move to the 9.3 analysis.
 
-**Accept (end of Phase 3):** one pilot day yields 20 snapshots times the number of arms; the scorer fills the 1 h and 6 h checks; the daily report fits in 15 lines.
+**Accept (end of Phase 3, core part):** a chat call is logged with its snapshot; the scorer fills its 24 h and 48 h checks; the export of a week fits in one chat message; the review skill turns it into lessons.
 
 ---
 
@@ -402,7 +442,7 @@ Reply "details a3f" for the full analysis
 
 ---
 
-## Phase 5: Naive Bayes model and gate [Research, 9 to 15 Nov; 5.6 Later]
+## Phase 5: Naive Bayes model and gate [Research; 5.6 Later]
 
 ### 5.1 Historical dataset
 - [ ] `sentinel nb build-dataset --days 730`: daily candles for the watchlist and BTC from the exchange, full Fear & Greed history (alternative.me supports `?limit=0`). BTC dominance history is dropped (CMC history needs a paid plan) unless a free source turns up. Save Parquet to S3 `datasets/`.
@@ -494,9 +534,9 @@ Other users share their lessons the same way (`<user>_lessons_learned.md`), so t
 
 ---
 
-## Phase 9: Experiment freeze, run and analysis [Research: freeze 15 Nov, run 16 to 29 Nov, analysis 30 Nov]
+## Phase 9: Experiment freeze, run and analysis [Research: freeze, a 14-day run, then the analysis]
 
-### 9.1 Freeze (15 Nov)
+### 9.1 Freeze
 - [ ] `experiment.yaml` committed with arms, coin list, exact model ids, validator and gate thresholds, NB model version, prompt hashes. Git tag `experiment-v1`.
 - [ ] Reflection and NB retraining switched off.
 
@@ -507,12 +547,13 @@ Other users share their lessons the same way (`<user>_lessons_learned.md`), so t
 | F1G | Gemini Flash | structured (reuses F1's answer) | on; an extra call only when triggered |
 | H1 | Claude Haiku 5.5 | structured | off |
 | S1 | Claude Sonnet 5.5 | structured | off |
+| D1 | DeepSeek (through OpenRouter) | structured | off |
 | NB | Naive Bayes only | none | n/a |
 | RULES | Legacy fixed rules | none | n/a |
 
 Daily volume: 20 snapshots, so about 40 Flash calls plus gate re-checks, 20 Haiku and 20 Sonnet. Expected cost for 28 days: Sonnet about $6 (about $3 through the Batch API), Haiku about $0.30, Flash free.
 
-Shortened (2026-10-16): the run is 14 days, so it ends by 30 Nov. The final arms are chosen at the freeze to fit the $5 monthly Anthropic limit (S1 only if the budget allows) and the free Gemini quota (5 requests a minute and 20 a day for 3.x Flash, so the Gemini arms may need a Flash Lite model).
+Shortened (2026-10-16): the run is 14 days. The final arms are chosen at the freeze to fit the $5 monthly Anthropic limit (S1 only if the budget allows), DeepSeek's price on OpenRouter (D1 only if a free variant exists or the credit it needs is small) and the free Gemini quota (5 requests a minute and 20 a day for 3.x Flash, so the Gemini arms may need a Flash Lite model).
 
 ### 9.2 Run
 - [ ] Daily report check; watch for missing data and free-tier 429 errors; never change the frozen config mid-run (log incidents in `project_notes.md` instead).
@@ -603,7 +644,7 @@ All items carry `type` and `created_at`. Keys are strings.
 | `trade-journal` | "I bought/sold ...", "balance", "/balance" | `sentinel trade add`, `sentinel portfolio summary`, `sentinel bid ...`, `sentinel lesson ...` |
 | `analyse` | "analyse X", `/analyse`, `act:analyse:X` | `sentinel snapshot X --format json` |
 | `test-trade-scenario` | "test trade X 24h", `/predict`, `act:predict:X:24` | `sentinel snapshot`, `sentinel predict log`, `sentinel predict show` |
-| `prediction-report` | `/report`, daily and weekly cron | `sentinel report daily|weekly --format telegram` |
+| `review-predictions` (in the repo's `.claude/skills/`, used in Claude Code or a Claude chat, not by the agent) | the user, with a `sentinel predict export` | none; drafts lessons for `memory/prediction_lessons.md` |
 | `nb-check` (optional) | `/nb`, `act:nb:X` | `sentinel nb check X` |
 | `cluster-prediction` (optional) | `/cluster`, `act:cluster:X` | `sentinel cluster run X` |
 | `system-ops` | health check, backups (as today) | `sentinel health`, `ops/s3_backup.sh`, `sentinel backup export` |
@@ -685,7 +726,7 @@ Both should return a short JSON answer containing "OK". A 403 from Google usuall
 - OpenClaw needs the key in its own config or environment (the Gemini SDKs read `GEMINI_API_KEY`). Load it from SSM at service start rather than writing it into a file in the repo; check the OpenClaw model-provider docs for the exact key name in `openclaw.json`.
 - Set Gemini Flash as the default model for the agent. Sonnet and Haiku are called by the `sentinel` package directly for the experiment, so OpenClaw only needs the Anthropic key if you also want to chat with Claude.
 
-### F.7 Optional: OpenRouter (only for `cluster-prediction`)
+### F.7 Optional: OpenRouter (for `cluster-prediction` and the DeepSeek arm D1)
 1. Create an account at openrouter.ai, then a key named `sentinel-cluster`; do not buy credits, so only `:free` models can run.
 2. Free models allow 20 requests a minute and 50 a day (1,000 a day after $10 of lifetime credit purchases). Store it as `/sentinel/openrouter_api_key` the same way as F.4.
 
