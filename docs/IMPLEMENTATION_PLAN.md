@@ -290,6 +290,7 @@ Why (agent runs of 16 and 17 Oct): the agent fetched raw data and eyeballed it. 
 ### 2.4 News (`sentinel/data/news_rss.py`, `gdelt.py`)
 - [x] RSS feed list in config (CoinDesk, Cointelegraph, The Block, Decrypt; checked 17 Oct); parse with `feedparser`; dedupe by link; filter by coin aliases (`XRP`, `Ripple`); last 24 h; at most 5 headlines per section. The snapshot shows BTC's 2 freshest headlines in `market.headlines` (the newest of all feeds were mostly unrelated stories) and up to 3 of the coin's in `coin_news_fresh`, each article once; a failing feed is listed in `missing` as `rss:<name>`.
 - [ ] NewsAPI rework (next PR): the coin's news over 14 days, most read first (`sortBy=popularity`), at most 2 in the snapshot; a separate `sentinel news world` for what moves markets beyond crypto (rates, recession, US policy, bans, AI), which the agent runs only when a question needs it (macro questions, before a buy), never on every snapshot. The agent writes a one-line dated note of a major market event to memory and reads it there instead of fetching it again.
+- [ ] Coin names from CMC (next PR): headlines are matched by ticker and by the names in `config.COIN_NAMES`, which has 20 coins; any other coin is matched by its ticker alone (19 Oct: two "Zcash" headlines were missed for ZEC). Take the name from CMC's listing instead, with `COIN_NAMES` only for extra aliases.
 - [ ] GDELT market-wide tone (P1, can come later).
 - [x] Sentiment is judged by the LLM, not by code.
 
@@ -303,6 +304,7 @@ Why (agent runs of 16 and 17 Oct): the agent fetched raw data and eyeballed it. 
 - [x] Macro line: the next FOMC meeting from a static list in config (Federal Reserve calendar, update it once a year).
 - [ ] [Later] Spot ETF net flows: no free, documented, machine-readable source confirmed (17 Oct: Farside and TFTC are web pages; NewHedge's API needs a token; no free terms found for SoSoValue's or CoinGlass's APIs; scrapers on Apify are paid). Add them when one turns up.
 - [x] Missing sources become `null` and are listed in `missing`.
+- [ ] A coin without an OKX perpetual (XMR, VET, TON) has no flow by design: keep `flow` `null` but leave it out of `missing`, as the scan already does for funding (next PR).
 - [x] Keep the JSON under about 1,500 tokens; add a size test.
 - [ ] [Later] `--save` stores it as a `SNAP` item in `sentinel-sim` with a 180-day TTL.
 

@@ -105,7 +105,8 @@ def build(limit: int) -> Scan:
         if candles is None:
             missing.append(coin.symbol)
             continue
-        news_24h = len(feeds.coin(coin.symbol)) if feeds else None
+        # Every headline counts, not just the first few a snapshot would list.
+        news_24h = len(feeds.coin(coin.symbol, len(feeds.items))) if feeds else None
         rows.append(_row(coin, candles, btc_daily, funding[coin.symbol][0], news_24h))
     if not all(read for _, read in funding.values()):
         missing.append("funding")  # some rates failed; their null is not "no swap"
