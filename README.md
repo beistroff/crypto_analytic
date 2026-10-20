@@ -89,7 +89,7 @@ Commands (JSON by default, `--format telegram` for 5 lines or fewer):
 | `sentinel market overview [--symbol BTC,SOL]` | Fear & Greed, BTC dominance, market cap change, stablecoin share, quotes |
 | `sentinel market top [--limit 15]`, `market scalp [--limit 50]`, `market whales SYM` | Legacy rule signals, scalp candidates, a rough whale check |
 | `sentinel news long SYM [--limit 3]` | NewsAPI headlines that name the coin (about 24 h delayed; the snapshot adds fresh ones from free RSS feeds, no key) |
-| `sentinel watch add SYM --trigger touch_below\|close_below\|close_above --level N [--tf 1d\|4h] [--stop N] [--target N] [--note ...]`, `watch list`, `watch remove ID` | Stored watches in `sentinel-sim`; `watch check` (cron, every 15 min, no LLM) posts one alert per hit to OpenClaw's local hook |
+| `sentinel watch add SYM --trigger touch_below\|close_below\|close_above --level N [--tf 1d\|4h] [--stop N] [--target N] [--note ...]`, `watch list`, `watch remove ID` | Stored watches in `sentinel-sim`; `watch check` runs as an OpenClaw automation every 15 min (no LLM) and Telegram gets one alert per hit |
 | `sentinel health`, `sentinel config show` | Readiness checks, settings |
 
 Candles come from OKX's and Kraken's public APIs (no key; daily candles are UTC days) and are cached for 5 minutes in `~/.cache/sentinel` (`SENTINEL_CACHE_DIR`). `make test` and `make lint` run the tests (no network) and ruff; `pytest -m live` runs the smoke tests against the real APIs.

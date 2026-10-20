@@ -263,12 +263,12 @@ Only the checks the agent cannot work without. Others join with their own task (
 
 ### 1.9 Watches and alerts (after 1.5)
 Why (chat of 19 Oct): the agent kept a plan file of per-coin budgets, took its caps for deployed money, and re-checked every planned entry by hand in each message. Budgets set aside per coin are noise (decided 19 Oct): the flow is analyse, then watch a level, then get pinged when it is reached. Until this lands the agent notes watches in `memory/watchlist.md` (2.9) and checks them on request.
-- [x] A watch is a logged prediction (the 3.4 `PRED` item with a `watch` map: trigger `touch_below`, `close_below` or `close_above`, stop, target, status, alerted_at), so the 3.6 scorer grades it: `sentinel watch add|list|remove`.
-- [x] `sentinel watch check`: code only, no LLM, from the instance's system crontab every 15 minutes (closed UTC candles for the close triggers). On a hit it marks the watch and posts once to OpenClaw's local hook (the 6.5 config, brought forward), so the agent re-checks the snapshot and pings the user; a quiet check costs no tokens.
+- [x] A watch is a logged prediction (the 3.4 `PRED` item with a `watch` map: trigger `touch_below`, `close_below` or `close_above`, stop, target, status, hit_at), so the 3.6 scorer grades it: `sentinel watch add|list|remove`.
+- [x] `sentinel watch check`: code only, no LLM, from an OpenClaw command automation every 15 minutes (`openclaw automations add --command`, no model call; closed UTC candles for the close triggers). On a hit it marks the watch and prints a short alert, which OpenClaw delivers to Telegram; a quiet run prints `NO_REPLY` and costs nothing.
 - [x] Amounts (agent side, in `AGENTS.md`): no formula and no per-coin caps. The agent suggests its conviction as a % of cash (never above 20 % per coin; BTC `neutral` caps it at high, `risk_off` means no new buys) and the user decides; code at most converts the % to USDT and enforces the 20 % ceiling. The tier is logged with each prediction so the scorer can check calibration.
 - [x] `sentinel portfolio summary` states the cash and open positions first, so "nothing is deployed" is never in doubt.
 
-**Accept:** tests for each trigger type on a fixture series, a watch with no candles, one hook post per hit (mocked).
+**Accept:** tests for each trigger type on a fixture series, a watch with no candles, one alert per hit.
 
 ---
 
@@ -592,7 +592,7 @@ All items carry `type` and `created_at`. Keys are strings.
 | Type | PK | SK | Indexes | Attributes |
 | --- | --- | --- | --- | --- |
 | SNAP | `SNAP#{SYM}` | `{ts}` | none | schema_version, payload (JSON string), missing, ttl (180 days) |
-| PRED | `PRED#{date}` | `{ts}#{SYM}#{arm}` | GSI1: `SYM#{SYM}` / `{ts}`; GSI2 (sparse): `OPEN` / `{due_at}`, or `WATCH` / `{created_at}` while a watch is active or its alert has not gone out | pred_id, symbol, arm, model, model_version, variant, source (chat/scheduled), action, direction, confidence, horizon_h, entry, target, stop, btc_context, btc_regime, reasons, rationale_full, prompt_hash, snapshot_ref, tokens_in, tokens_out, cost_usd, latency_ms, valid, validator_errors, nb_p_up, gate_triggered, original_action, revised, status (OPEN/DONE), due_at, checks (map: `h1`, `h6`, `h24`, `h48` each with price, return_pct, hit), target_hit_first, max_adverse_pct, watch (map, 1.9: trigger, timeframe (close triggers), status active/hit/removed, hit_at, hit_price, alerted_at, removed_at) |
+| PRED | `PRED#{date}` | `{ts}#{SYM}#{arm}` | GSI1: `SYM#{SYM}` / `{ts}`; GSI2 (sparse): `OPEN` / `{due_at}`, or `WATCH` / `{created_at}` while a watch is active | pred_id, symbol, arm, model, model_version, variant, source (chat/scheduled), action, direction, confidence, horizon_h, entry, target, stop, btc_context, btc_regime, reasons, rationale_full, prompt_hash, snapshot_ref, tokens_in, tokens_out, cost_usd, latency_ms, valid, validator_errors, nb_p_up, gate_triggered, original_action, revised, status (OPEN/DONE), due_at, checks (map: `h1`, `h6`, `h24`, `h48` each with price, return_pct, hit), target_hit_first, max_adverse_pct, watch (map, 1.9: trigger, timeframe (close triggers), status active/hit/removed, hit_at, hit_price, removed_at) |
 | VOTE | `PRED#{date}` | `{ts}#{SYM}#cluster#VOTE#{model}#{round}` | none | role, action, confidence, reason, tokens, cost_usd |
 | ALERT | `ALERT#{rule}#{SYM}` | `{ts}` | none | value, ttl (6 h cooldown) |
 | REPORT | `REPORT#{daily|weekly}` | `{date}` | none | text, metrics (map) |
