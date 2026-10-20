@@ -23,11 +23,22 @@ from sentinel.store.dynamo import BaselineRepo, Position, PositionRepo, TradeRep
 
 ZERO = Decimal(0)
 EPSILON = Decimal("1e-9")
+PLACES = Decimal("1e-10")  # inputs and results are rounded to 10 decimals
 SYMBOL = re.compile(r"[A-Z0-9]{1,15}")
 
 
 class JournalError(RuntimeError):
     """A trade the journal cannot take (bad symbol, selling more than is held)."""
+
+
+def _round(value: Decimal) -> Decimal:
+    """Keep ``PLACES`` decimals: enough for $1 of BTC, short enough for DynamoDB."""
+    return value.quantize(PLACES)
+
+
+def plain(value: Decimal) -> str:
+    """A number as people write it: ``3``, ``0.0001388``, never ``3.0000000000`` or ``1E+2``."""
+    return format(value.normalize(), "f")
 
 
 def _now() -> str:
@@ -51,6 +62,11 @@ def record_trade(
     side = side.upper()
     if not SYMBOL.fullmatch(symbol):
         raise JournalError(f"bad symbol {symbol!r}")
+    if side not in ("BUY", "SELL"):
+        raise JournalError(f"bad side {side!r}, expected BUY or SELL")
+    qty, price, fee = _round(qty), _round(price), _round(fee)
+    if qty <= 0 or price <= 0 or fee < 0:
+        raise JournalError("qty and price must be positive and fee not negative")
     before = PositionRepo().get(symbol)
     now = _now()
     realised = ZERO
@@ -61,8 +77,8 @@ def record_trade(
         avg_price = cost_basis / new_qty
     else:
         if before is None or before.qty < qty - EPSILON:
-            held = before.qty if before else ZERO
-            raise JournalError(f"cannot sell {qty} {symbol}, holding {held}")
+            held = plain(before.qty) if before else "0"
+            raise JournalError(f"cannot sell {plain(qty)} {symbol}, holding {held}")
         avg_price = before.avg_price
         # Profit locked in by this sale: what each coin sold for minus what it cost on
         # average (buy fees included), less this sale's fee.
@@ -73,13 +89,15 @@ def record_trade(
             new_qty, cost_basis = ZERO, ZERO
     after = Position(
         symbol=symbol,
-        qty=new_qty,
-        avg_price=avg_price,
-        cost_basis=cost_basis,
-        realised_pnl=(before.realised_pnl if before else ZERO) + realised,
+        qty=_round(new_qty),
+        avg_price=_round(avg_price),
+        cost_basis=_round(cost_basis),
+        realised_pnl=_round((before.realised_pnl if before else ZERO) + realised),
         version=(before.version if before else 0) + 1,
+        created_at=before.created_at if before else now,
         updated_at=now,
     )
+    realised = _round(realised)
     trade_id = str(ULID())
     trade = trade_item(trade_id, now, symbol, side, qty, price, fee, venue, note, source)
     TradeRepo().add(trade, after, before.version if before else None)
@@ -95,9 +113,22 @@ def record_trade(
     }
 
 
-def set_baseline(usdt: Decimal) -> dict[str, Any]:
-    baseline = BaselineRepo().set(usdt, _now())
-    return {"baseline_usdt": baseline.usdt, "since": baseline.since}
+def set_baseline(usdt: Decimal, *, replace: bool = False) -> dict[str, Any]:
+    """Set the starting cash, once. ``replace`` overwrites it and reports the old value."""
+    if usdt < 0:
+        raise JournalError("starting cash must not be negative")
+    repo = BaselineRepo()
+    old = repo.get()
+    if old and not replace:
+        raise JournalError(
+            f"starting cash is already {plain(old.usdt)} USDT since {old.since}; "
+            "pass --replace to change it"
+        )
+    baseline = repo.set(_round(usdt), _now())
+    result: dict[str, Any] = {"baseline_usdt": baseline.usdt, "since": baseline.since}
+    if old:
+        result["replaced"] = {"baseline_usdt": old.usdt, "since": old.since}
+    return result
 
 
 @dataclass(frozen=True)

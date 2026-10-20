@@ -230,20 +230,29 @@ def trade_added(result: dict[str, Any]) -> View:
         "fee": _num(result["fee"]),
         "position": {"qty": _num(position.qty), "avg_price": _num(position.avg_price)},
     }
-    line = f"{result['side']} {_num(result['qty'])} {result['symbol']} at {_usd(data['price'])}."
+    qty = service.plain(result["qty"])
+    line = f"{result['side']} {qty} {result['symbol']} at {_usd(data['price'])}."
     if result["realised_pnl"] is not None:
         data["realised_pnl"] = _num(result["realised_pnl"])
         line += f" Realised {_signed_usd(data['realised_pnl'])}."
     if position.qty > 0:
-        line += f" Now {_num(position.qty)} at avg {_usd(data['position']['avg_price'])}."
+        line += f" Now {service.plain(position.qty)} at avg {_usd(data['position']['avg_price'])}."
     else:
         line += " Position closed."
     return View(data, line)
 
 
 def baseline_set(result: dict[str, Any]) -> View:
-    data = {"baseline_usdt": _num(result["baseline_usdt"]), "since": result["since"]}
-    return View(data, f"Starting cash set to {_usd(data['baseline_usdt'])}.")
+    data: dict[str, Any] = {
+        "baseline_usdt": _num(result["baseline_usdt"]),
+        "since": result["since"],
+    }
+    text = f"Starting cash set to {_usd(data['baseline_usdt'])}."
+    if "replaced" in result:
+        old = result["replaced"]
+        data["replaced"] = {"baseline_usdt": _num(old["baseline_usdt"]), "since": old["since"]}
+        text += f" Was {_usd(data['replaced']['baseline_usdt'])} since {old['since']}."
+    return View(data, text)
 
 
 def portfolio_summary() -> View:
@@ -274,8 +283,8 @@ def portfolio_summary() -> View:
             f"position{'s' if count > 1 else ''}, realised {_signed_usd(data['realised_pnl'])}"
         )
         rows = [
-            f"{p['symbol']} {p['qty']} at avg {_usd(p['avg_price'])}"
-            for p in data["open_positions"]
+            f"{p.symbol} {service.plain(p.qty)} at avg {_usd(_num(p.avg_price))}"
+            for p in state.open_positions
         ]
         if len(rows) > 3:
             rows = [*rows[:2], f"+{len(rows) - 2} more"]
@@ -362,7 +371,8 @@ def _usd(value: float | None) -> str:
 
 
 def _num(value: Decimal) -> float:
-    return float(round(value, 8))
+    # The journal already rounds to 10 decimals, so a float keeps every digit that matters.
+    return float(value)
 
 
 def _signed_usd(value: float) -> str:

@@ -5,7 +5,6 @@ import boto3
 import pytest
 from botocore.exceptions import ClientError
 from click.testing import CliRunner
-from moto import mock_aws
 
 from sentinel import aws, health, net
 from sentinel.cli import cli
@@ -26,22 +25,12 @@ CMC_OK = (
 
 
 @pytest.fixture
-def aws_ready():
+def aws_ready(tables):
     """Both tables, the backup bucket and both keys, as on a healthy account."""
-    with mock_aws():
-        ssm = boto3.client("ssm", region_name="us-east-1")
-        ssm.put_parameter(Name="/sentinel/cmc_api_key", Value=CMC_KEY, Type="SecureString")
-        ssm.put_parameter(Name="/sentinel/gemini_api_key", Value=GEMINI_KEY, Type="SecureString")
-        dynamodb = boto3.client("dynamodb", region_name="us-east-1")
-        for table in ("sentinel-real", "sentinel-sim"):
-            dynamodb.create_table(
-                TableName=table,
-                KeySchema=[{"AttributeName": "PK", "KeyType": "HASH"}],
-                AttributeDefinitions=[{"AttributeName": "PK", "AttributeType": "S"}],
-                BillingMode="PAY_PER_REQUEST",
-            )
-        boto3.client("s3", region_name="us-east-1").create_bucket(Bucket="openclaw-files")
-        yield
+    ssm = boto3.client("ssm", region_name="us-east-1")
+    ssm.put_parameter(Name="/sentinel/cmc_api_key", Value=CMC_KEY, Type="SecureString")
+    ssm.put_parameter(Name="/sentinel/gemini_api_key", Value=GEMINI_KEY, Type="SecureString")
+    boto3.client("s3", region_name="us-east-1").create_bucket(Bucket="openclaw-files")
 
 
 @pytest.fixture

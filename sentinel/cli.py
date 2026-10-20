@@ -259,8 +259,9 @@ def portfolio_summary(fmt: str) -> None:
 
 @portfolio.command("baseline")
 @click.option("--usdt", type=_Amount(allow_zero=True), required=True, help="Starting cash.")
+@click.option("--replace", is_flag=True, help="Overwrite a starting cash already set.")
 @FORMAT
 @_source_errors
-def portfolio_baseline(usdt: Decimal, fmt: str) -> None:
-    """Set the starting cash that the cash balance is counted from."""
-    _emit(views.baseline_set(service.set_baseline(usdt)), fmt)
+def portfolio_baseline(usdt: Decimal, replace: bool, fmt: str) -> None:
+    """Set the starting cash (USDT) that the cash balance is counted from."""
+    _emit(views.baseline_set(service.set_baseline(usdt, replace=replace)), fmt)

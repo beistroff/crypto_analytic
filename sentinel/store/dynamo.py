@@ -33,6 +33,7 @@ class Position:
     cost_basis: Decimal
     realised_pnl: Decimal
     version: int
+    created_at: str  # when the position was first opened
     updated_at: str
 
     def item(self) -> dict[str, Any]:
@@ -42,7 +43,7 @@ class Position:
             "GSI1PK": f"SYM#{self.symbol}",
             "GSI1SK": "POS",
             "type": "POSITION",
-            "created_at": self.updated_at,
+            "created_at": self.created_at,
             "qty": self.qty,
             "avg_price": self.avg_price,
             "cost_basis": self.cost_basis,
@@ -60,6 +61,7 @@ class Position:
             cost_basis=item["cost_basis"],
             realised_pnl=item["realised_pnl"],
             version=int(item["version"]),
+            created_at=item["created_at"],
             updated_at=item["updated_at"],
         )
 
@@ -144,14 +146,6 @@ class PositionRepo:
 
 
 class TradeRepo:
-    def list(self, symbol: str) -> list[dict[str, Any]]:
-        """A coin's trades, oldest first."""
-        return _query(
-            KeyConditionExpression="PK = :pk",
-            ExpressionAttributeValues=_marshal({":pk": f"TRADE#{symbol}"}),
-            ConsistentRead=True,
-        )
-
     def add(self, trade: dict[str, Any], position: Position, expected_version: int | None) -> None:
         """Write the trade and the new position, or neither.
 
@@ -181,7 +175,10 @@ class TradeRepo:
                 ]
             )
         except ClientError as exc:
-            if exc.response["Error"]["Code"] == "TransactionCanceledException":
+            # Only a failed condition is a conflict; a throttled or clashing transaction is
+            # re-raised so the caller sees its real error code.
+            reasons = [r.get("Code") for r in exc.response.get("CancellationReasons", [])]
+            if "ConditionalCheckFailed" in reasons:
                 raise VersionConflict(f"{position.symbol} changed, run the trade again") from None
             raise
 

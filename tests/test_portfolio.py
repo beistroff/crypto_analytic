@@ -13,17 +13,27 @@ from sentinel.store.dynamo import PositionRepo, TradeRepo, VersionConflict
 D = Decimal
 
 
+def _trades(tables, symbol):
+    page = tables.query(
+        TableName="sentinel-real",
+        KeyConditionExpression="PK = :pk",
+        ExpressionAttributeValues={":pk": {"S": f"TRADE#{symbol}"}},
+    )
+    return page["Items"]
+
+
 def test_buys_average_the_cost_fee_included(tables):
-    service.record_trade("buy", "sol", D(2), D(100), D(1))
+    first = service.record_trade("buy", "sol", D(2), D(100), D(1))
     result = service.record_trade("buy", "SOL", D(2), D(120), D(1))
     position = PositionRepo().get("SOL")
     assert result["position"] == position
     assert (position.qty, position.cost_basis, position.avg_price) == (D(4), D(442), D("110.5"))
     assert position.version == 2
-    trades = TradeRepo().list("SOL")
-    assert [t["side"] for t in trades] == ["BUY", "BUY"]
-    assert trades[0]["quote_amount"] == D(200)
-    assert trades[0]["GSI1PK"] == "SYM#SOL"
+    assert position.created_at == first["position"].created_at
+    trades = _trades(tables, "SOL")
+    assert [t["side"]["S"] for t in trades] == ["BUY", "BUY"]
+    assert D(trades[0]["quote_amount"]["N"]) == D(200)
+    assert trades[0]["GSI1PK"]["S"] == "SYM#SOL"
 
 
 def test_sells_realise_pnl_and_close_the_position(tables):
@@ -48,14 +58,22 @@ def test_sells_realise_pnl_and_close_the_position(tables):
     assert state.cash_usdt == D(998)
 
 
-def test_selling_more_than_held_writes_nothing(tables):
+def test_bad_trades_write_nothing(tables):
     service.record_trade("buy", "SOL", D(1), D(100))
-    with pytest.raises(JournalError, match="holding 1"):
+    with pytest.raises(JournalError, match=r"holding 1$"):
         service.record_trade("sell", "SOL", D(2), D(100))
-    with pytest.raises(JournalError, match="holding 0"):
+    with pytest.raises(JournalError, match=r"holding 0$"):
         service.record_trade("sell", "ETH", D(1), D(100))
-    assert len(TradeRepo().list("SOL")) == 1
+    with pytest.raises(JournalError, match="positive"):
+        service.record_trade("buy", "ETH", D("0.00000000001"), D(100))
+    assert len(_trades(tables, "SOL")) == 1
     assert PositionRepo().get("ETH") is None
+
+
+def test_inputs_round_to_ten_decimals(tables):
+    result = service.record_trade("buy", "BTC", D("0.000138888888888888"), D("72000.123456789012"))
+    assert result["qty"] == D("0.0001388889")
+    assert result["position"].avg_price == D("72000.1234567890")
 
 
 def test_stale_version_fails_the_whole_transaction(tables):
@@ -65,8 +83,17 @@ def test_stale_version_fails_the_whole_transaction(tables):
         TradeRepo().add({"PK": "TRADE#SOL", "SK": "late"}, stale, expected_version=0)
     with pytest.raises(VersionConflict):
         TradeRepo().add({"PK": "TRADE#NEW", "SK": "late"}, stale, expected_version=None)
-    assert len(TradeRepo().list("SOL")) == 1
-    assert TradeRepo().list("NEW") == []
+    assert len(_trades(tables, "SOL")) == 1
+    assert _trades(tables, "NEW") == []
+
+
+def test_baseline_is_set_once_unless_replaced(tables):
+    service.set_baseline(D(1000))
+    with pytest.raises(JournalError, match="already 1000 USDT"):
+        service.set_baseline(D(500))
+    result = service.set_baseline(D(500), replace=True)
+    assert result["replaced"]["baseline_usdt"] == D(1000)
+    assert service.summary().baseline_usdt == D(500)
 
 
 def test_cli_journals_a_trade_and_summarises(tables):
@@ -86,16 +113,17 @@ def test_cli_journals_a_trade_and_summarises(tables):
     assert summary["cash_usdt"] == 880.0
     assert summary["open_positions"][0]["symbol"] == "XRP"
     text = run.invoke(cli, ["portfolio", "summary", "--format", "telegram"]).output
-    assert text.splitlines()[:2] == [
+    assert text.splitlines() == [
         "Cash: $880.00",
         "Deployed: $120.00 in 1 position, realised +$0",
+        "XRP 100 at avg $1.20",
     ]
 
     oversell = run.invoke(
         cli, ["trade", "add", "--side", "sell", "--symbol", "XRP", "--qty", "500", "--price", "1"]
     )
     assert oversell.exit_code == 1
-    assert "holding 100" in json.loads(oversell.output)["error"]
+    assert json.loads(oversell.output)["error"] == "cannot sell 500 XRP, holding 100"
     zero = run.invoke(
         cli, ["trade", "add", "--side", "buy", "--symbol", "XRP", "--qty", "0", "--price", "1"]
     )
