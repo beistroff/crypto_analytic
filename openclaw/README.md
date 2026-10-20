@@ -52,6 +52,23 @@ Done by hand over SSM once bootstrap has finished (`~/sentinel/.ready` exists). 
    ```
 9. Workspace: copy `SOUL.md`, `IDENTITY.md`, `AGENTS.md`, `TOOLS.md` and `memory/lessons_learned.md` from `~/sentinel/src/openclaw/workspace/` into `~/.openclaw/workspace/`, write `USER.md` from `USER.md.example` by hand (it stays on the instance), and delete `BOOTSTRAP.md`.
 10. Run `openclaw config validate && systemctl --user start openclaw-gateway.service`. In Telegram send `/new`, then "run a health check".
+11. Watch alerts (plan 1.9): `sentinel watch check` posts each hit to the hook `POST /hooks/watch`, which runs the agent in an isolated session and delivers its reply to you on Telegram. The hook token is its own value (not the gateway token) in `/sentinel/openclaw_hook_token`; create it once from the laptop:
+    ```bash
+    HOOK_TOKEN="$(openssl rand -hex 32)"
+    aws ssm put-parameter --region us-east-1 --name /sentinel/openclaw_hook_token --type SecureString --value "$HOOK_TOKEN"
+    unset HOOK_TOKEN
+    ```
+    On the instance, give the gateway the token through an environment file (`hooks.token` takes no SecretRef), then add the hooks config. The `${OPENCLAW_HOOKS_TOKEN}` reference syntax and the Telegram `to` format are not confirmed in the docs: check `openclaw config schema` first, and the manual test confirms delivery.
+    ```bash
+    aws ssm get-parameter --region us-east-1 --name /sentinel/openclaw_hook_token --with-decryption --query Parameter.Value --output text | sed 's/^/OPENCLAW_HOOKS_TOKEN=/' | install -m 600 /dev/stdin ~/.openclaw/credentials/hooks.env
+    systemctl --user edit openclaw-gateway.service   # add: [Service] EnvironmentFile=%h/.openclaw/credentials/hooks.env
+    openclaw config set hooks "{\"enabled\":true,\"token\":\"\${OPENCLAW_HOOKS_TOKEN}\",\"allowedAgentIds\":[\"main\"],\"mappings\":[{\"id\":\"watch\",\"match\":{\"path\":\"watch\"},\"action\":\"agent\",\"agentId\":\"main\",\"sessionMode\":\"isolated\",\"messageTemplate\":\"{{payload.message}}\",\"deliver\":true,\"channel\":\"telegram\",\"to\":\"$(aws ssm get-parameter --region us-east-1 --name /sentinel/telegram_user_id --with-decryption --query Parameter.Value --output text)\"}]}" --strict-json
+    openclaw config validate && systemctl --user restart openclaw-gateway.service
+    ```
+    Then run the check every 15 minutes from the `ubuntu` user's crontab (`crontab -e`); stdout and errors both go to a small run log:
+    ```
+    */15 * * * * /home/ubuntu/sentinel/venv/bin/sentinel watch check >>/home/ubuntu/sentinel/watch-check.log 2>&1
+    ```
 
 Things learned on the way:
 - Gemini free tier: the 3.x Flash models allow 5 requests a minute and 20 a day, the Lite models 15 and 500, Pro models none. OpenClaw retries a rate-limited call up to 10 times and Google counts each try, so the free Flash models cannot carry an agent on their own. Google Search grounding has no free quota for Gemini 3 and newer.
