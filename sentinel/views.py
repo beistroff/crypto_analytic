@@ -241,7 +241,7 @@ def watch_checked(result: alerts_watch.CheckResult) -> View:
     if not result.hits:
         return View(data, NO_REPLY)
     lines = [alerts_watch.alert(w) for w in result.hits]
-    return View(data, "\n".join([*lines, "Ask Oleg for a fresh look before acting."]))
+    return View(data, "\n".join([*lines, "Ask your AI agent for a fresh look before acting."]))
 
 
 def trade_added(result: dict[str, Any]) -> View:

@@ -88,7 +88,7 @@ def test_a_hit_is_reported_once(clock):
     first = run.invoke(cli, ["watch", "check", "--format", "telegram"]).output
     assert first.splitlines() == [
         "Watch hit: SOL touch below 97: 96 at 2026-10-20T11:00:00Z. Stop 90. Note: retest.",
-        "Ask Oleg for a fresh look before acting.",
+        "Ask your AI agent for a fresh look before acting.",
     ]
     assert watch.pending() == []
     second = json.loads(run.invoke(cli, ["watch", "check"]).output)
