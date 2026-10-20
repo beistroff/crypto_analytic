@@ -10,16 +10,43 @@ from __future__ import annotations
 import functools
 import json
 from collections.abc import Callable
+from decimal import Decimal, InvalidOperation
 from typing import Any
 
 import click
 import requests
+from botocore.exceptions import BotoCoreError, ClientError
 
 from sentinel import __version__, aws, health, log, views
 from sentinel.config import get_settings
 from sentinel.data import SourceError
+from sentinel.portfolio import service
+from sentinel.portfolio.service import JournalError
+from sentinel.store.dynamo import VersionConflict
 
 FORMAT = click.option("--format", "fmt", type=click.Choice(["json", "telegram"]), default="json")
+
+
+class _Amount(click.ParamType):
+    """A decimal number, kept exact; money and quantities never pass through a float."""
+
+    name = "number"
+
+    def __init__(self, *, allow_zero: bool = False) -> None:
+        self.allow_zero = allow_zero
+
+    def convert(self, value: Any, param: click.Parameter | None, ctx: click.Context | None) -> Any:
+        if isinstance(value, Decimal):
+            return value
+        try:
+            amount = Decimal(value)
+        except InvalidOperation:
+            self.fail(f"{value!r} is not a number", param, ctx)
+        if not amount.is_finite() or amount < 0 or (amount == 0 and not self.allow_zero):
+            self.fail(
+                f"{value!r} must be {'zero or ' if self.allow_zero else ''}positive", param, ctx
+            )
+        return amount
 
 
 def _emit(view: views.View, fmt: str) -> None:
@@ -33,10 +60,10 @@ def _source_errors(command: Callable[..., Any]) -> Callable[..., Any]:
     def wrapper(*args: Any, **kwargs: Any) -> Any:
         try:
             return command(*args, **kwargs)
-        except (SourceError, aws.SecretError) as exc:
+        except (SourceError, aws.SecretError, JournalError, VersionConflict) as exc:
             error = str(exc)
-        except requests.RequestException as exc:
-            error = type(exc).__name__
+        except (requests.RequestException, BotoCoreError, ClientError) as exc:
+            error = aws.error_code(exc)
         click.echo(json.dumps({"error": error}, separators=(",", ":")))
         raise SystemExit(1)
 
@@ -185,3 +212,56 @@ def watch_levels(symbol: str, below: float | None, above: float | None, fmt: str
 def watch_move(symbol: str, entry: float, min_pct: float, fmt: str) -> None:
     """Move since an entry price; alert when it reaches --min-pct either way."""
     _emit(views.watch_move(symbol, entry, min_pct), fmt)
+
+
+@cli.group()
+def trade() -> None:
+    """The trade journal."""
+
+
+@trade.command("add")
+@click.option("--side", type=click.Choice(["buy", "sell"], case_sensitive=False), required=True)
+@click.option("--symbol", required=True, help="Ticker, e.g. SOL.")
+@click.option("--qty", type=_Amount(), required=True)
+@click.option("--price", type=_Amount(), required=True, help="Price per coin in USDT.")
+@click.option("--fee", type=_Amount(allow_zero=True), default=Decimal(0), help="Fee in USDT.")
+@click.option("--venue", help="Where it was traded.")
+@click.option("--note", help="Why, in a few words.")
+@FORMAT
+@_source_errors
+def trade_add(
+    side: str,
+    symbol: str,
+    qty: Decimal,
+    price: Decimal,
+    fee: Decimal,
+    venue: str | None,
+    note: str | None,
+    fmt: str,
+) -> None:
+    """Journal a buy or sell and update the position."""
+    result = service.record_trade(side, symbol, qty, price, fee, venue=venue, note=note)
+    _emit(views.trade_added(result), fmt)
+
+
+@cli.group()
+def portfolio() -> None:
+    """Cash and positions from the trade journal."""
+
+
+@portfolio.command("summary")
+@FORMAT
+@_source_errors
+def portfolio_summary(fmt: str) -> None:
+    """Cash and open positions first, then what is deployed and realised."""
+    _emit(views.portfolio_summary(), fmt)
+
+
+@portfolio.command("baseline")
+@click.option("--usdt", type=_Amount(allow_zero=True), required=True, help="Starting cash.")
+@click.option("--replace", is_flag=True, help="Overwrite a starting cash already set.")
+@FORMAT
+@_source_errors
+def portfolio_baseline(usdt: Decimal, replace: bool, fmt: str) -> None:
+    """Set the starting cash (USDT) that the cash balance is counted from."""
+    _emit(views.baseline_set(service.set_baseline(usdt, replace=replace)), fmt)
