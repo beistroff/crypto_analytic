@@ -52,6 +52,12 @@ Done by hand over SSM once bootstrap has finished (`~/sentinel/.ready` exists). 
    ```
 9. Workspace: copy `SOUL.md`, `IDENTITY.md`, `AGENTS.md`, `TOOLS.md` and `memory/lessons_learned.md` from `~/sentinel/src/openclaw/workspace/` into `~/.openclaw/workspace/`, write `USER.md` from `USER.md.example` by hand (it stays on the instance), and delete `BOOTSTRAP.md`.
 10. Run `openclaw config validate && systemctl --user start openclaw-gateway.service`. In Telegram send `/new`, then "run a health check".
+11. Watch alerts (plan 1.9): an OpenClaw command automation runs `sentinel watch check` every 15 minutes with no model call. A hit prints a short alert, which goes to your Telegram chat; a quiet run prints `NO_REPLY` and sends nothing. `SENTINEL_LOG_LEVEL=ERROR` keeps routine warnings (stderr) out of the chat.
+    ```bash
+    openclaw automations add --name "Watch check" --every 15m --command-argv '["/home/ubuntu/sentinel/venv/bin/sentinel","watch","check","--format","telegram"]' --command-env SENTINEL_LOG_LEVEL=ERROR --timeout-seconds 120 --announce --channel telegram --to "$(aws ssm get-parameter --region us-east-1 --name /sentinel/telegram_user_id --with-decryption --query Parameter.Value --output text)"
+    openclaw automations list
+    ```
+    `openclaw automations runs <id>` shows the run history.
 
 Things learned on the way:
 - Gemini free tier: the 3.x Flash models allow 5 requests a minute and 20 a day, the Lite models 15 and 500, Pro models none. OpenClaw retries a rate-limited call up to 10 times and Google counts each try, so the free Flash models cannot carry an agent on their own. Google Search grounding has no free quota for Gemini 3 and newer.

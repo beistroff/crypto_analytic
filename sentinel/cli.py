@@ -18,6 +18,8 @@ import requests
 from botocore.exceptions import BotoCoreError, ClientError
 
 from sentinel import __version__, aws, health, log, views
+from sentinel.alerts import watch as alerts_watch
+from sentinel.alerts.watch import WatchError
 from sentinel.config import get_settings
 from sentinel.data import SourceError
 from sentinel.portfolio import service
@@ -60,7 +62,7 @@ def _source_errors(command: Callable[..., Any]) -> Callable[..., Any]:
     def wrapper(*args: Any, **kwargs: Any) -> Any:
         try:
             return command(*args, **kwargs)
-        except (SourceError, aws.SecretError, JournalError, VersionConflict) as exc:
+        except (SourceError, aws.SecretError, JournalError, VersionConflict, WatchError) as exc:
             error = str(exc)
         except (requests.RequestException, BotoCoreError, ClientError) as exc:
             error = aws.error_code(exc)
@@ -187,31 +189,65 @@ def news_long(symbol: str, limit: int, fmt: str) -> None:
 
 @cli.group()
 def watch() -> None:
-    """Price checks for monitoring."""
+    """Price levels to be alerted about (checked every 15 minutes, no LLM)."""
 
 
-@watch.command("levels")
+@watch.command("add")
 @click.argument("symbol")
-@click.option("--below", type=float, help="Buy level: alert at or under this price.")
-@click.option("--above", type=float, help="Sell level: alert at or over this price.")
+@click.option("--trigger", type=click.Choice(alerts_watch.TRIGGERS), required=True)
+@click.option("--level", type=_Amount(), required=True, help="Price in USDT.")
+@click.option(
+    "--tf",
+    "timeframe",
+    type=click.Choice(alerts_watch.CLOSE_TIMEFRAMES),
+    help="Candle for close triggers (default 1d, a UTC day).",
+)
+@click.option("--stop", type=_Amount(), help="Where the idea is wrong.")
+@click.option("--target", type=_Amount())
+@click.option("--note", help="Why, in a few words.")
 @FORMAT
 @_source_errors
-def watch_levels(symbol: str, below: float | None, above: float | None, fmt: str) -> None:
-    """Has the price reached a buy or sell level?"""
-    if below is None and above is None:
-        raise click.UsageError("give --below, --above or both")
-    _emit(views.watch_levels(symbol, below, above), fmt)
+def watch_add(
+    symbol: str,
+    trigger: str,
+    level: Decimal,
+    timeframe: str | None,
+    stop: Decimal | None,
+    target: Decimal | None,
+    note: str | None,
+    fmt: str,
+) -> None:
+    """Watch a level; the agent is pinged once when it is reached."""
+    added, price = alerts_watch.add(
+        symbol, trigger, level, timeframe, stop=stop, target=target, note=note
+    )
+    _emit(views.watch_added(added, price), fmt)
 
 
-@watch.command("move")
-@click.argument("symbol")
-@click.option("--entry", type=click.FloatRange(min=0, min_open=True), required=True)
-@click.option("--min-pct", type=click.FloatRange(min=0), default=1.0, show_default=True)
+@watch.command("list")
 @FORMAT
 @_source_errors
-def watch_move(symbol: str, entry: float, min_pct: float, fmt: str) -> None:
-    """Move since an entry price; alert when it reaches --min-pct either way."""
-    _emit(views.watch_move(symbol, entry, min_pct), fmt)
+def watch_list(fmt: str) -> None:
+    """Active watches."""
+    _emit(views.watch_list(alerts_watch.pending()), fmt)
+
+
+@watch.command("remove")
+@click.argument("watch_id")
+@FORMAT
+@_source_errors
+def watch_remove(watch_id: str, fmt: str) -> None:
+    """Stop an active watch."""
+    _emit(views.watch_removed(alerts_watch.remove(watch_id)), fmt)
+
+
+@watch.command("check")
+@FORMAT
+@_source_errors
+def watch_check(fmt: str) -> None:
+    """Check every watch once; print one alert line per hit, or NO_REPLY (an OpenClaw
+    automation runs this every 15 minutes)."""
+    _emit(views.watch_checked(alerts_watch.check()), fmt)
 
 
 @cli.group()

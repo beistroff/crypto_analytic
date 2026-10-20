@@ -139,28 +139,6 @@ def test_whales(apis, symbol, alert):
     assert _json(_run("market", "whales", symbol))["alert"] is alert
 
 
-@pytest.mark.parametrize(
-    ("levels", "zone"),
-    [
-        (["--below", "75"], "buy"),
-        (["--above", "70"], "sell"),
-        (["--below", "60", "--above", "80"], None),
-    ],
-)
-def test_watch_levels(apis, levels, zone):
-    assert _json(_run("watch", "levels", "SOL", *levels))["zone"] == zone
-
-
-def test_watch_levels_needs_a_level(apis):
-    assert _run("watch", "levels", "SOL").exit_code == 2
-
-
-def test_watch_move(apis):
-    data = _json(_run("watch", "move", "SOL", "--entry", "70"))
-    assert (data["chg_pct"], data["alert"]) == (3.71, True)
-    assert _json(_run("watch", "move", "SOL", "--entry", "70", "--min-pct", "5"))["alert"] is False
-
-
 def test_news_telegram(apis):
     result = _run("news", "long", "SOL", "--format", "telegram")
     lines = result.stdout.strip().splitlines()

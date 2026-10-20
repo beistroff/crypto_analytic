@@ -15,17 +15,20 @@ from typing import Any
 
 import requests
 
+from sentinel.alerts import watch as alerts_watch
 from sentinel.data import SourceError, cmc, feargreed, newsapi
 from sentinel.eval.rules import is_scalp_candidate, rules_signal
 from sentinel.portfolio import service
 from sentinel.signals import scan as signals_scan
 from sentinel.signals import snapshot as signals_snapshot
 from sentinel.signals.snapshot import rounded, sig
+from sentinel.store.dynamo import Watch
 
 # Legacy whale_monitor.py: a 1 h pump above this many percent is worth an alert.
 WHALE_PUMP_1H_PCT = 1.5
 TELEGRAM_MAX_LINES = 5
 NO_NEWS = "no relevant headlines"
+NO_REPLY = "NO_REPLY"  # OpenClaw's silent token: an automation run that prints it sends nothing
 
 log = logging.getLogger(__name__)
 
@@ -178,44 +181,67 @@ def snapshot(symbol: str) -> View:
     return View(data, _lines(lines))
 
 
-def watch_levels(symbol: str, below: float | None, above: float | None) -> View:
-    """Has the price reached a buy level (at or under ``below``) or a sell level?"""
-    coin = _quote(symbol)
-    zone = None
-    if below is not None and coin.price <= below:
-        zone = "buy"
-    elif above is not None and coin.price >= above:
-        zone = "sell"
-    data = {
-        "symbol": coin.symbol,
-        "price": sig(coin.price),
-        "below": below,
-        "above": above,
-        "zone": zone,
+def _watch(watch: Watch) -> dict[str, Any]:
+    data: dict[str, Any] = {
+        "id": watch.pred_id,
+        "symbol": watch.symbol,
+        "trigger": watch.trigger,
+        "level": _num(watch.level),
+        "timeframe": watch.timeframe,
+        "stop": None if watch.stop is None else _num(watch.stop),
+        "target": None if watch.target is None else _num(watch.target),
+        "note": watch.note,
+        "status": watch.status,
+        "created_at": watch.created_at,
     }
-    if zone == "buy":
-        text = f"{coin.symbol} {_usd(coin.price)}: in buy zone (at or under {_usd(below)})"
-    elif zone == "sell":
-        text = f"{coin.symbol} {_usd(coin.price)}: in sell zone (at or over {_usd(above)})"
-    else:
-        text = f"{coin.symbol} {_usd(coin.price)}: between levels"
-    return View(data, text)
+    if watch.hit_at:
+        data["hit_at"] = watch.hit_at
+        data["hit_price"] = None if watch.hit_price is None else _num(watch.hit_price)
+    return data
 
 
-def watch_move(symbol: str, entry: float, min_pct: float) -> View:
-    """Move since an entry price; ``alert`` when it is at least ``min_pct`` either way."""
-    coin = _quote(symbol)
-    change = (coin.price - entry) / entry * 100
-    alert = abs(change) >= min_pct
+def _watch_line(watch: Watch) -> str:
+    line = f"{watch.symbol} {alerts_watch.describe(watch)}"
+    if watch.stop is not None:
+        line += f", stop {service.plain(watch.stop)}"
+    if watch.target is not None:
+        line += f", target {service.plain(watch.target)}"
+    return line
+
+
+def watch_added(watch: Watch, price: float) -> View:
+    data = {**_watch(watch), "price": sig(price)}
+    return View(data, f"Watching {_watch_line(watch)}. Now {_usd(price)}.")
+
+
+def watch_list(watches: list[Watch]) -> View:
+    data = {"watches": [_watch(w) for w in watches]}
+    if not watches:
+        return View(data, "No watches")
+    count = len(watches)
+    lines = [f"{count} watch{'es' if count > 1 else ''}"]
+    rows = [_watch_line(w) for w in watches]
+    if len(rows) > TELEGRAM_MAX_LINES - 1:
+        rows = [*rows[: TELEGRAM_MAX_LINES - 2], f"+{len(rows) - TELEGRAM_MAX_LINES + 2} more"]
+    return View(data, _lines(lines + rows))
+
+
+def watch_removed(watch: Watch) -> View:
+    return View({**_watch(watch), "status": "removed"}, f"Stopped watching {_watch_line(watch)}.")
+
+
+def watch_checked(result: alerts_watch.CheckResult) -> View:
+    """The text is what OpenClaw delivers: one line per hit, or ``NO_REPLY`` (its silent
+    token) when nothing hit, so a quiet run sends nothing."""
     data = {
-        "symbol": coin.symbol,
-        "price": sig(coin.price),
-        "entry": entry,
-        "chg_pct": round(change, 2),
-        "alert": alert,
+        "checked": result.checked,
+        "hits": [_watch(w) for w in result.hits],
+        "missing": result.missing,
     }
-    flag = "move alert, " if alert else ""
-    return View(data, f"{coin.symbol} {_usd(coin.price)}: {flag}{_pct(change)} from {_usd(entry)}")
+    if not result.hits:
+        return View(data, NO_REPLY)
+    lines = [alerts_watch.alert(w) for w in result.hits]
+    return View(data, "\n".join([*lines, "Ask your AI agent for a fresh look before acting."]))
 
 
 def trade_added(result: dict[str, Any]) -> View:

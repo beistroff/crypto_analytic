@@ -1,4 +1,5 @@
-"""DynamoDB access to the real table: trades, positions and the starting balance.
+"""DynamoDB access: trades, positions and the starting balance in the real table, watches
+in the sim table.
 
 Item layouts are in docs/IMPLEMENTATION_PLAN.md, Appendix A. Reads use ``Query`` (never
 ``Scan``); numbers are ``Decimal``. A trade and the position it changes are written in
@@ -106,6 +107,10 @@ def _table() -> str:
     return get_settings().real_table
 
 
+def _sim_table() -> str:
+    return get_settings().sim_table
+
+
 def _marshal(item: dict[str, Any]) -> dict[str, Any]:
     return {name: _serializer.serialize(value) for name, value in item.items()}
 
@@ -114,11 +119,11 @@ def _unmarshal(item: dict[str, Any]) -> dict[str, Any]:
     return {name: _deserializer.deserialize(value) for name, value in item.items()}
 
 
-def _query(**params: Any) -> list[dict[str, Any]]:
+def _query(table: str, **params: Any) -> list[dict[str, Any]]:
     client = aws.client("dynamodb")
     items: list[dict[str, Any]] = []
     while True:
-        page = client.query(TableName=_table(), **params)
+        page = client.query(TableName=table, **params)
         items += [_unmarshal(item) for item in page["Items"]]
         if "LastEvaluatedKey" not in page:
             return items
@@ -138,6 +143,7 @@ class PositionRepo:
     def list(self) -> list[Position]:
         """Every position ever held, closed ones (qty 0) included, by symbol."""
         items = _query(
+            _table(),
             KeyConditionExpression="PK = :pk",
             ExpressionAttributeValues=_marshal({":pk": "POS"}),
             ConsistentRead=True,
@@ -213,3 +219,136 @@ class BaselineRepo:
         }
         aws.client("dynamodb").put_item(TableName=_table(), Item=_marshal(item))
         return Baseline(usdt, since)
+
+
+@dataclass(frozen=True)
+class Watch:
+    """A level the user wants to hear about: a ``PRED`` item from chat with a ``watch`` map.
+
+    While it is active it sits in the sparse GSI2 under ``WATCH``, so ``watch check`` finds
+    it without a Scan.
+    """
+
+    pred_id: str
+    symbol: str
+    created_at: str
+    trigger: str  # touch_below, close_below or close_above
+    level: Decimal  # stored as the prediction's entry
+    timeframe: str | None = None  # close triggers only: 1d or 4h
+    stop: Decimal | None = None
+    target: Decimal | None = None
+    note: str | None = None
+    status: str = "active"  # active, hit or removed
+    hit_at: str | None = None
+    hit_price: Decimal | None = None
+
+    @property
+    def key(self) -> dict[str, str]:
+        return {"PK": f"PRED#{self.created_at[:10]}", "SK": f"{self.created_at}#{self.symbol}#chat"}
+
+    def item(self) -> dict[str, Any]:
+        watch: dict[str, Any] = {"trigger": self.trigger, "status": self.status}
+        if self.timeframe:
+            watch["timeframe"] = self.timeframe
+        item: dict[str, Any] = {
+            **self.key,
+            "GSI1PK": f"SYM#{self.symbol}",
+            "GSI1SK": self.created_at,
+            "GSI2PK": "WATCH",
+            "GSI2SK": self.created_at,
+            "type": "PRED",
+            "created_at": self.created_at,
+            "pred_id": self.pred_id,
+            "symbol": self.symbol,
+            "arm": "chat",
+            "source": "chat",
+            "entry": self.level,
+            "watch": watch,
+        }
+        # Optional fields are left out when not given.
+        for name in ("stop", "target", "note"):
+            if getattr(self, name) is not None:
+                item[name] = getattr(self, name)
+        return item
+
+    @classmethod
+    def from_item(cls, item: dict[str, Any]) -> Watch:
+        watch = item["watch"]
+        return cls(
+            pred_id=item["pred_id"],
+            symbol=item["symbol"],
+            created_at=item["created_at"],
+            trigger=watch["trigger"],
+            level=item["entry"],
+            timeframe=watch.get("timeframe"),
+            stop=item.get("stop"),
+            target=item.get("target"),
+            note=item.get("note"),
+            status=watch["status"],
+            hit_at=watch.get("hit_at"),
+            hit_price=watch.get("hit_price"),
+        )
+
+
+class WatchRepo:
+    def add(self, watch: Watch) -> None:
+        aws.client("dynamodb").put_item(
+            TableName=_sim_table(),
+            Item=_marshal(watch.item()),
+            ConditionExpression="attribute_not_exists(PK)",
+        )
+
+    def pending(self) -> list[Watch]:
+        """Active watches, oldest first."""
+        items = _query(
+            _sim_table(),
+            IndexName="GSI2",
+            KeyConditionExpression="GSI2PK = :pk",
+            ExpressionAttributeValues=_marshal({":pk": "WATCH"}),
+        )
+        return [Watch.from_item(item) for item in items]
+
+    def mark_hit(self, watch: Watch, hit_at: str, hit_price: Decimal) -> Watch | None:
+        """Mark an active watch as hit (it leaves GSI2); None when it was removed meanwhile."""
+        return self._update(
+            watch,
+            "SET #w.#s = :hit, #w.hit_at = :at, #w.hit_price = :price REMOVE GSI2PK, GSI2SK",
+            {":hit": "hit", ":at": hit_at, ":price": hit_price, ":active": "active"},
+            condition="#w.#s = :active",
+        )
+
+    def remove(self, watch: Watch, removed_at: str) -> bool:
+        """Stop an active watch; False when it was hit or removed in the meantime."""
+        updated = self._update(
+            watch,
+            "SET #w.#s = :removed, #w.removed_at = :at REMOVE GSI2PK, GSI2SK",
+            {":removed": "removed", ":at": removed_at, ":active": "active"},
+            condition="#w.#s = :active",
+        )
+        return updated is not None
+
+    def _update(
+        self,
+        watch: Watch,
+        expression: str,
+        values: dict[str, Any],
+        condition: str | None = None,
+    ) -> Watch | None:
+        params: dict[str, Any] = {
+            "TableName": _sim_table(),
+            "Key": _marshal(watch.key),
+            "UpdateExpression": expression,
+            "ExpressionAttributeValues": _marshal(values),
+            "ReturnValues": "ALL_NEW",
+        }
+        # "status" is a reserved word.
+        params["ExpressionAttributeNames"] = {"#w": "watch", "#s": "status"}
+        if condition:
+            params["ConditionExpression"] = condition
+        try:
+            response = aws.client("dynamodb").update_item(**params)
+        except ClientError as exc:
+            if exc.response.get("Error", {}).get("Code") == "ConditionalCheckFailedException":
+                return None
+            raise
+        return Watch.from_item(_unmarshal(response["Attributes"]))
