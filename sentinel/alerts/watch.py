@@ -1,10 +1,10 @@
 """Watches: price levels the user wants to hear about, checked by code with no LLM.
 
-``check()`` runs from the instance's crontab every 15 minutes. A quiet run costs no tokens.
-On a hit it marks the watch, then posts one message to OpenClaw's local hook; the agent
-re-checks the coin and pings the user. A watch stays in GSI2 until the post succeeds, so a
-failed post is retried on the next run, and the ``Idempotency-Key`` (the watch id) keeps
-OpenClaw from acting on the same hit twice.
+``sentinel watch check`` runs every 15 minutes as an OpenClaw command automation, which
+calls no model. On a hit it marks the watch (it then leaves GSI2) and prints a short alert,
+which OpenClaw delivers to Telegram; a quiet run prints ``NO_REPLY`` and delivers nothing.
+One alert per hit: if that delivery fails, the alert is lost and OpenClaw records the run
+as failed.
 
 Triggers:
 
@@ -14,7 +14,7 @@ Triggers:
 
 Only candles from after the watch was set count: hourly candles that open after it, and
 close candles that close after it. Each run looks back about two days (48 hourly, 10
-daily or 12 four-hour candles), which covers a crontab that missed a few runs.
+daily or 12 four-hour candles), which covers a few missed runs.
 """
 
 from __future__ import annotations
@@ -28,7 +28,6 @@ from decimal import Decimal
 import requests
 from ulid import ULID
 
-from sentinel import aws, net
 from sentinel.data import SourceError, exchange
 from sentinel.data.exchange import PERIOD, Timeframe
 from sentinel.portfolio.service import plain
@@ -37,9 +36,6 @@ from sentinel.store.dynamo import Watch, WatchRepo
 TRIGGERS = ("touch_below", "close_below", "close_above")
 CLOSE_TIMEFRAMES = ("1d", "4h")
 LOOKBACK: dict[Timeframe, int] = {"1h": 48, "1d": 10, "4h": 12}
-# The `watch` mapping in OpenClaw's hooks config (README, onboarding); the gateway listens
-# on loopback only.
-HOOK_URL = "http://127.0.0.1:18789/hooks/watch"
 SYMBOL = re.compile(r"[A-Z0-9]{1,15}")
 
 log = logging.getLogger(__name__)
@@ -58,8 +54,7 @@ class Hit:
 @dataclass
 class CheckResult:
     checked: int = 0
-    alerted: list[Watch] = field(default_factory=list)
-    failed: list[Watch] = field(default_factory=list)  # hit, post failed, retried next run
+    hits: list[Watch] = field(default_factory=list)
     missing: list[str] = field(default_factory=list)  # symbols with no candles this run
 
 
@@ -153,33 +148,23 @@ def find_hit(watch: Watch) -> Hit | None:
 
 
 def check() -> CheckResult:
-    """Look at every pending watch once; post one alert per hit."""
+    """Look at every active watch once and mark the ones that hit."""
     repo = WatchRepo()
     result = CheckResult()
     for watch in repo.pending():
         result.checked += 1
-        if watch.status == "active":
-            try:
-                hit = find_hit(watch)
-            except (SourceError, requests.RequestException) as exc:
-                log.warning("no candles", extra={"symbol": watch.symbol, "error": str(exc)})
-                if watch.symbol not in result.missing:
-                    result.missing.append(watch.symbol)
-                continue
-            if hit is None:
-                continue
-            marked = repo.mark_hit(watch, _iso(hit.at), Decimal(str(hit.price)))
-            if marked is None:  # removed while this run was looking
-                continue
-            watch = marked
         try:
-            _post(watch)
+            hit = find_hit(watch)
         except (SourceError, requests.RequestException) as exc:
-            log.warning("hook post failed", extra={"pred_id": watch.pred_id, "error": str(exc)})
-            result.failed.append(watch)
+            log.warning("no candles", extra={"symbol": watch.symbol, "error": str(exc)})
+            if watch.symbol not in result.missing:
+                result.missing.append(watch.symbol)
             continue
-        repo.mark_alerted(watch, _iso(_now()))
-        result.alerted.append(watch)
+        if hit is None:
+            continue
+        marked = repo.mark_hit(watch, _iso(hit.at), Decimal(str(hit.price)))
+        if marked is not None:  # None: removed while this run was looking
+            result.hits.append(marked)
     return result
 
 
@@ -190,11 +175,10 @@ def describe(watch: Watch) -> str:
     return f"{words} {plain(watch.level)}{timeframe}"
 
 
-def message(watch: Watch) -> str:
-    """The hook message: a prompt for the agent, which then writes to the user."""
+def alert(watch: Watch) -> str:
+    """One line for the user: ``Watch hit: SOL close below 140 (1d): 138.2 at ...``."""
     parts = [
-        f"Watch hit: {watch.symbol} {describe(watch)}, "
-        f"price {plain(watch.hit_price)} at {watch.hit_at}."
+        f"Watch hit: {watch.symbol} {describe(watch)}: {plain(watch.hit_price)} at {watch.hit_at}."
     ]
     if watch.stop is not None:
         parts.append(f"Stop {plain(watch.stop)}.")
@@ -202,21 +186,4 @@ def message(watch: Watch) -> str:
         parts.append(f"Target {plain(watch.target)}.")
     if watch.note:
         parts.append(f"Note: {watch.note}.")
-    parts.append(f"Watch id {watch.pred_id}, set {watch.created_at}.")
-    parts.append(
-        f"Run `sentinel snapshot {watch.symbol}`, apply the BTC gate and send your human one "
-        "short message: is the setup still valid, and what would you do? Your human decides."
-    )
     return " ".join(parts)
-
-
-def _post(watch: Watch) -> None:
-    headers = {
-        "Authorization": f"Bearer {aws.get_secret('openclaw_hook_token')}",
-        "Idempotency-Key": watch.pred_id,
-    }
-    response = net.session("openclaw").post(
-        HOOK_URL, json={"message": message(watch)}, headers=headers
-    )
-    if not 200 <= response.status_code < 300:
-        raise SourceError(f"OpenClaw hook: HTTP {response.status_code}")

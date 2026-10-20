@@ -28,6 +28,7 @@ from sentinel.store.dynamo import Watch
 WHALE_PUMP_1H_PCT = 1.5
 TELEGRAM_MAX_LINES = 5
 NO_NEWS = "no relevant headlines"
+NO_REPLY = "NO_REPLY"  # OpenClaw's silent token: an automation run that prints it sends nothing
 
 log = logging.getLogger(__name__)
 
@@ -205,8 +206,6 @@ def _watch_line(watch: Watch) -> str:
         line += f", stop {service.plain(watch.stop)}"
     if watch.target is not None:
         line += f", target {service.plain(watch.target)}"
-    if watch.status == "hit":
-        line += " (hit, alert pending)"
     return line
 
 
@@ -232,18 +231,17 @@ def watch_removed(watch: Watch) -> View:
 
 
 def watch_checked(result: alerts_watch.CheckResult) -> View:
+    """The text is what OpenClaw delivers: one line per hit, or ``NO_REPLY`` (its silent
+    token) when nothing hit, so a quiet run sends nothing."""
     data = {
         "checked": result.checked,
-        "alerted": [w.pred_id for w in result.alerted],
-        "failed": [w.pred_id for w in result.failed],
+        "hits": [_watch(w) for w in result.hits],
         "missing": result.missing,
     }
-    text = f"Checked {result.checked}: alerted {_some([w.symbol for w in result.alerted])}"
-    if result.failed:
-        text += f"; post failed: {_some([w.symbol for w in result.failed])}"
-    if result.missing:
-        text += f"; no candles: {_some(result.missing)}"
-    return View(data, text)
+    if not result.hits:
+        return View(data, NO_REPLY)
+    lines = [alerts_watch.alert(w) for w in result.hits]
+    return View(data, "\n".join([*lines, "Ask Oleg for a fresh look before acting."]))
 
 
 def trade_added(result: dict[str, Any]) -> View:

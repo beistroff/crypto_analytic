@@ -83,7 +83,7 @@ def make_server():
     Append ``(status, headers)`` or ``(status, headers, body)`` to ``.replies``
     (used once each, in order), or set ``.routes[path]`` to answer every request for
     that path (without query string). A body is sent as JSON, or as RSS when it is bytes.
-    ``.seen`` lists each request's path, headers and body (POST only, parsed JSON).
+    ``.seen`` lists each request's path and headers.
     """
     servers = []
 
@@ -93,14 +93,8 @@ def make_server():
         seen = []
 
         class Handler(BaseHTTPRequestHandler):
-            def do_POST(self):
-                length = int(self.headers.get("Content-Length", 0))
-                self.do_GET(json.loads(self.rfile.read(length) or b"null"))
-
-            def do_GET(self, received=None):
-                seen.append(
-                    SimpleNamespace(path=self.path, headers=dict(self.headers), body=received)
-                )
+            def do_GET(self):
+                seen.append(SimpleNamespace(path=self.path, headers=dict(self.headers)))
                 route = routes.get(self.path.split("?")[0])
                 reply = replies.pop(0) if replies else route or (200, {})
                 body = reply[2] if len(reply) > 2 else {"ok": True}

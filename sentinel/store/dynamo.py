@@ -225,8 +225,8 @@ class BaselineRepo:
 class Watch:
     """A level the user wants to hear about: a ``PRED`` item from chat with a ``watch`` map.
 
-    While it needs work (active, or hit but not alerted yet) it sits in the sparse GSI2
-    under ``WATCH``, so ``watch check`` finds it without a Scan.
+    While it is active it sits in the sparse GSI2 under ``WATCH``, so ``watch check`` finds
+    it without a Scan.
     """
 
     pred_id: str
@@ -241,7 +241,6 @@ class Watch:
     status: str = "active"  # active, hit or removed
     hit_at: str | None = None
     hit_price: Decimal | None = None
-    alerted_at: str | None = None
 
     @property
     def key(self) -> dict[str, str]:
@@ -288,7 +287,6 @@ class Watch:
             status=watch["status"],
             hit_at=watch.get("hit_at"),
             hit_price=watch.get("hit_price"),
-            alerted_at=watch.get("alerted_at"),
         )
 
 
@@ -301,7 +299,7 @@ class WatchRepo:
         )
 
     def pending(self) -> list[Watch]:
-        """Active watches and hit ones not alerted yet, oldest first."""
+        """Active watches, oldest first."""
         items = _query(
             _sim_table(),
             IndexName="GSI2",
@@ -311,17 +309,13 @@ class WatchRepo:
         return [Watch.from_item(item) for item in items]
 
     def mark_hit(self, watch: Watch, hit_at: str, hit_price: Decimal) -> Watch | None:
-        """Mark an active watch as hit; None when it was removed in the meantime."""
+        """Mark an active watch as hit (it leaves GSI2); None when it was removed meanwhile."""
         return self._update(
             watch,
-            "SET #w.#s = :hit, #w.hit_at = :at, #w.hit_price = :price",
+            "SET #w.#s = :hit, #w.hit_at = :at, #w.hit_price = :price REMOVE GSI2PK, GSI2SK",
             {":hit": "hit", ":at": hit_at, ":price": hit_price, ":active": "active"},
             condition="#w.#s = :active",
         )
-
-    def mark_alerted(self, watch: Watch, alerted_at: str) -> None:
-        """The alert went out: the watch leaves GSI2."""
-        self._update(watch, "SET #w.alerted_at = :at REMOVE GSI2PK, GSI2SK", {":at": alerted_at})
 
     def remove(self, watch: Watch, removed_at: str) -> bool:
         """Stop an active watch; False when it was hit or removed in the meantime."""
@@ -347,11 +341,8 @@ class WatchRepo:
             "ExpressionAttributeValues": _marshal(values),
             "ReturnValues": "ALL_NEW",
         }
-        # "status" is a reserved word; every expression goes through the same names.
-        names = {"#w": "watch"}
-        if "#s" in expression or (condition and "#s" in condition):
-            names["#s"] = "status"
-        params["ExpressionAttributeNames"] = names
+        # "status" is a reserved word.
+        params["ExpressionAttributeNames"] = {"#w": "watch", "#s": "status"}
         if condition:
             params["ConditionExpression"] = condition
         try:

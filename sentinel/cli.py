@@ -228,7 +228,7 @@ def watch_add(
 @FORMAT
 @_source_errors
 def watch_list(fmt: str) -> None:
-    """Active watches, and hit ones whose alert has not gone out yet."""
+    """Active watches."""
     _emit(views.watch_list(alerts_watch.pending()), fmt)
 
 
@@ -245,7 +245,8 @@ def watch_remove(watch_id: str, fmt: str) -> None:
 @FORMAT
 @_source_errors
 def watch_check(fmt: str) -> None:
-    """Check every watch once and post one alert per hit (run by cron)."""
+    """Check every watch once; print one alert line per hit, or NO_REPLY (an OpenClaw
+    automation runs this every 15 minutes)."""
     _emit(views.watch_checked(alerts_watch.check()), fmt)
 
 

@@ -2,7 +2,6 @@ import json
 from datetime import UTC, datetime
 from decimal import Decimal
 
-import boto3
 import pytest
 from click.testing import CliRunner
 
@@ -15,7 +14,6 @@ from sentinel.store.dynamo import Watch
 D = Decimal
 SET_AT = datetime(2026, 10, 20, 9, 30, tzinfo=UTC)
 NOW = datetime(2026, 10, 20, 12, 20, tzinfo=UTC)
-TOKEN = "hook-test-value"
 
 
 def _series(timeframe, lows, closes, end):
@@ -44,18 +42,16 @@ def _candles(symbol, timeframe, limit=200):
 
 
 @pytest.fixture
-def hook(tables, make_server, monkeypatch):
-    """Mocked tables and SSM, a local hook server, the fixture candles and the clock at
-    SET_AT; move the clock with ``hook.at(NOW)``."""
-    boto3.client("ssm", region_name="us-east-1").put_parameter(
-        Name="/sentinel/openclaw_hook_token", Value=TOKEN, Type="SecureString"
-    )
-    server = make_server()
-    monkeypatch.setattr(watch, "HOOK_URL", f"{server.base}/hooks/watch")
+def clock(tables, monkeypatch):
+    """Mocked tables, the fixture candles and the clock at SET_AT; move it with
+    ``clock(NOW)``."""
     monkeypatch.setattr(exchange, "candles", _candles)
-    server.at = lambda moment: monkeypatch.setattr(watch, "_now", lambda: moment)
-    server.at(SET_AT)
-    return server
+
+    def at(moment):
+        monkeypatch.setattr(watch, "_now", lambda: moment)
+
+    at(SET_AT)
+    return at
 
 
 def _watch(trigger, level, created_at, timeframe=None):
@@ -76,47 +72,31 @@ def test_triggers_on_a_fixture_series(monkeypatch):
     assert above == watch.Hit(datetime(2026, 10, 20, tzinfo=UTC), 105)
 
 
-def test_a_watch_with_no_candles_waits(hook):
+def test_a_watch_with_no_candles_waits(clock):
     watch.WatchRepo().add(Watch("ID", "NOPE", "2026-10-20T09:30:00Z", "touch_below", D(1)))
-    hook.at(NOW)
+    clock(NOW)
     result = watch.check()
-    assert (result.checked, result.missing, result.alerted) == (1, ["NOPE"], [])
-    assert hook.seen == []
+    assert (result.checked, result.missing, result.hits) == (1, ["NOPE"], [])
     assert watch.pending()[0].status == "active"
 
 
-def test_one_hook_post_per_hit(hook):
-    added, price = watch.add("sol", "touch_below", D(97), stop=D(90), note="retest")
+def test_a_hit_is_reported_once(clock):
+    run = CliRunner()
+    _, price = watch.add("sol", "touch_below", D(97), stop=D(90), note="retest")
     assert price == 100
-    hook.at(NOW)
-    result = watch.check()
-    assert [w.pred_id for w in result.alerted] == [added.pred_id]
-    (post,) = hook.seen
-    assert post.path == "/hooks/watch"
-    assert post.headers["Authorization"] == f"Bearer {TOKEN}"
-    assert post.headers["Idempotency-Key"] == added.pred_id
-    assert post.body["message"].startswith(
-        "Watch hit: SOL touch below 97, price 96 at 2026-10-20T11:00:00Z. Stop 90. Note: retest."
-    )
+    clock(NOW)
+    first = run.invoke(cli, ["watch", "check", "--format", "telegram"]).output
+    assert first.splitlines() == [
+        "Watch hit: SOL touch below 97: 96 at 2026-10-20T11:00:00Z. Stop 90. Note: retest.",
+        "Ask Oleg for a fresh look before acting.",
+    ]
     assert watch.pending() == []
-    assert watch.check().checked == 0
-    assert len(hook.seen) == 1
+    second = json.loads(run.invoke(cli, ["watch", "check"]).output)
+    assert (second["checked"], second["hits"]) == (0, [])
+    assert run.invoke(cli, ["watch", "check", "--format", "telegram"]).output == "NO_REPLY\n"
 
 
-def test_a_failed_post_is_retried_on_the_next_run(hook):
-    added, _ = watch.add("SOL", "touch_below", D(97))
-    hook.replies.append((503, {}))
-    hook.at(NOW)
-    first = watch.check()
-    assert [w.pred_id for w in first.failed] == [added.pred_id]
-    assert watch.pending()[0].status == "hit"
-    second = watch.check()
-    assert [w.pred_id for w in second.alerted] == [added.pred_id]
-    assert [s.headers["Idempotency-Key"] for s in hook.seen] == [added.pred_id] * 2
-    assert watch.pending() == []
-
-
-def test_cli_adds_lists_and_removes(hook):
+def test_cli_adds_lists_and_removes(clock):
     run = CliRunner()
     add = ["watch", "add", "SOL", "--trigger", "close_below", "--level", "92", "--stop", "85"]
     added = json.loads(run.invoke(cli, add).output)
