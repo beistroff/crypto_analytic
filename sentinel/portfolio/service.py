@@ -30,12 +30,9 @@ class JournalError(RuntimeError):
     """A trade the journal cannot take (bad symbol, selling more than is held)."""
 
 
-def _now() -> datetime:
-    return datetime.now(UTC)
-
-
-def _iso(moment: datetime) -> str:
-    return moment.strftime("%Y-%m-%dT%H:%M:%SZ")
+def _now() -> str:
+    """UTC time as ISO 8601 text: DynamoDB has no date type, and this text sorts by time."""
+    return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def record_trade(
@@ -54,10 +51,8 @@ def record_trade(
     side = side.upper()
     if not SYMBOL.fullmatch(symbol):
         raise JournalError(f"bad symbol {symbol!r}")
-    positions = PositionRepo()
-    before = positions.get(symbol)
-    moment = _now()
-    now = _iso(moment)
+    before = PositionRepo().get(symbol)
+    now = _now()
     realised = ZERO
     if side == "BUY":
         old_qty = before.qty if before else ZERO
@@ -69,6 +64,8 @@ def record_trade(
             held = before.qty if before else ZERO
             raise JournalError(f"cannot sell {qty} {symbol}, holding {held}")
         avg_price = before.avg_price
+        # Profit locked in by this sale: what each coin sold for minus what it cost on
+        # average (buy fees included), less this sale's fee.
         realised = (price - avg_price) * qty - fee
         new_qty = before.qty - qty
         cost_basis = avg_price * new_qty
@@ -99,7 +96,7 @@ def record_trade(
 
 
 def set_baseline(usdt: Decimal) -> dict[str, Any]:
-    baseline = BaselineRepo().set(usdt, _iso(_now()))
+    baseline = BaselineRepo().set(usdt, _now())
     return {"baseline_usdt": baseline.usdt, "since": baseline.since}
 
 
