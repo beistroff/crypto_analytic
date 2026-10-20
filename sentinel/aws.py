@@ -35,6 +35,7 @@ NAMES = frozenset(
         "cmc_api_key",
         "newsapi_key",
         "gemini_api_key",
+        "openclaw_hook_token",
     }
 )
 

@@ -34,6 +34,7 @@ class MinIntervals(BaseModel):
     okx: float = 0.05  # OKX public market data: 40 candle requests per 2 s per IP
     kraken: float = 1.0  # Kraken public API: about 1 request per second
     rss: float = 0.0  # news feeds on different sites, each read once per call
+    openclaw: float = 0.0  # the local gateway's hooks, one post per watch hit
 
 
 class HttpSettings(BaseModel):
