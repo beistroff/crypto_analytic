@@ -64,6 +64,8 @@ def test_triggers_on_a_fixture_series(monkeypatch):
     touch = watch.find_hit(_watch("touch_below", 97, "2026-10-20T09:30:00Z"))
     assert touch == watch.Hit(datetime(2026, 10, 20, 11, tzinfo=UTC), 96)
     assert watch.find_hit(_watch("touch_below", 95, "2026-10-20T09:30:00Z")) is None
+    # The latest price (100) was fetched at NOW, before this watch: no hit yet.
+    assert watch.find_hit(_watch("touch_below", 101, "2026-10-20T12:30:00Z")) is None
     # The 17 Oct candle closes after the watch was set; the open 20 Oct candle never counts.
     below = watch.find_hit(_watch("close_below", 92, "2026-10-17T10:00:00Z", "1d"))
     assert below == watch.Hit(datetime(2026, 10, 18, tzinfo=UTC), 90)

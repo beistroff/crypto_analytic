@@ -133,7 +133,8 @@ def find_hit(watch: Watch) -> Hit | None:
         for candle in series.candles:
             if candle.ts >= since and candle.low <= level:
                 return Hit(candle.ts, candle.low)
-        if series.price <= level:
+        # Cached candles can predate the watch; their latest price then does not count.
+        if series.fetched_at >= since and series.price <= level:
             return Hit(series.fetched_at, series.price)
         return None
     timeframe: Timeframe = "4h" if watch.timeframe == "4h" else "1d"
