@@ -137,7 +137,7 @@ TIMEFRAME_WORDS = {"1w": "weekly", "1d": "daily", "4h": "4-hour", "1h": "hourly"
 
 def candles(symbol: str, timeframe: exchange.Timeframe, limit: int) -> View:
     """Raw candles for history the snapshot does not cover (a year or more: weekly)."""
-    series = exchange.candles(symbol, timeframe, limit)
+    series = exchange.history(symbol, timeframe, limit)
     rows = series.candles
     when = "%d %b %Y" if timeframe in ("1w", "1d") else "%d %b %H:%M"
     high = max(rows, key=lambda c: c.high)

@@ -116,6 +116,32 @@ def candles(symbol: str, timeframe: Timeframe, limit: int = 200) -> Candles:
     raise SourceError(f"no candles for {symbol} ({'; '.join(errors)})")
 
 
+def history(symbol: str, timeframe: Timeframe, limit: int) -> Candles:
+    """Like ``candles``, but when the first exchange has fewer candles than asked (a coin
+    it listed recently: OKX has ZEC only since November 2025), the exchange with the most
+    candles wins. Costs one more request, and only for such coins."""
+    best = candles(symbol, timeframe, limit)
+    for exchange in get_settings().exchanges:
+        if len(best.candles) >= limit:
+            break
+        if exchange == best.exchange:
+            continue
+        try:
+            other = _cached(exchange, best.symbol, timeframe, limit)
+        except (
+            SourceError,
+            requests.RequestException,
+            ValueError,
+            KeyError,
+            IndexError,
+            TypeError,
+        ):
+            continue  # the first exchange's shorter history is still an answer
+        if len(other.candles) > len(best.candles):
+            best = other
+    return best
+
+
 def _cached(exchange: Exchange, symbol: str, timeframe: Timeframe, limit: int) -> Candles:
     settings = get_settings()
     path = settings.cache_dir / "candles" / f"{exchange}-{symbol}-{timeframe}-{limit}.json"
