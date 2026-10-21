@@ -36,6 +36,12 @@ def test_okx_daily_candles_are_utc_days_oldest_first(venues):
     assert result.price == 81746.9
 
 
+def test_weekly_candles_are_utc_weeks(venues):
+    result = exchange.candles("btc", "1w", limit=3)
+    assert _query(venues.okx.seen[0])["bar"] == ["1Wutc"]
+    assert result.candles[-1].closed is False
+
+
 def test_falls_back_to_kraken_for_a_coin_okx_does_not_list(venues):
     venues.okx.routes[OKX_PATH] = NOT_ON_OKX
     result = exchange.candles("XMR", "1d", limit=2)

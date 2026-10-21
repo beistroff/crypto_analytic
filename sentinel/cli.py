@@ -153,6 +153,18 @@ def market_scan(limit: int, fmt: str) -> None:
     _emit(views.scan(limit), fmt)
 
 
+@market.command("candles")
+@click.argument("symbol")
+@click.option("--tf", "timeframe", type=click.Choice(["1w", "1d", "4h", "1h"]), default="1w")
+@click.option("--limit", type=click.IntRange(2, 300), default=104, help="Candles, newest last.")
+@FORMAT
+@_source_errors
+def market_candles(symbol: str, timeframe: str, limit: int, fmt: str) -> None:
+    """Price history the snapshot does not cover: weekly by default (104 weeks, 2 years).
+    UTC candles from OKX, or Kraken for coins OKX lacks."""
+    _emit(views.candles(symbol, timeframe, limit), fmt)
+
+
 @market.command("whales")
 @click.argument("symbol")
 @FORMAT
@@ -217,7 +229,7 @@ def watch_add(
     note: str | None,
     fmt: str,
 ) -> None:
-    """Watch a level; the agent is pinged once when it is reached."""
+    """Watch a level; your Telegram gets one alert when it is reached."""
     added, price = alerts_watch.add(
         symbol, trigger, level, timeframe, stop=stop, target=target, note=note
     )
