@@ -132,7 +132,13 @@ def scan(limit: int) -> View:
     return View(result.data(), _lines(lines))
 
 
-TIMEFRAME_WORDS = {"1w": "weekly", "1d": "daily", "4h": "4-hour", "1h": "hourly"}
+TIMEFRAME_WORDS = {
+    "1w": "weekly",
+    "1d": "daily",
+    "4h": "4-hour",
+    "1h": "hourly",
+    "15m": "15-minute",
+}
 
 
 def candles(symbol: str, timeframe: exchange.Timeframe, limit: int) -> View:

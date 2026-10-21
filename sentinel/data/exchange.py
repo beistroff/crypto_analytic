@@ -32,23 +32,25 @@ from sentinel import net
 from sentinel.config import Exchange, get_settings
 from sentinel.data import SourceError
 
-Timeframe = Literal["1w", "1d", "4h", "1h"]
+Timeframe = Literal["1w", "1d", "4h", "1h", "15m"]
 PERIOD = {
     "1w": timedelta(weeks=1),
     "1d": timedelta(days=1),
     "4h": timedelta(hours=4),
     "1h": timedelta(hours=1),
+    "15m": timedelta(minutes=15),
 }
 
 OKX_URL = "https://www.okx.com/api/v5/market/candles"
-# 4H and 1H bars start on the same hours in UTC and in Hong Kong time; 1D and 1W differ.
-# 1Wutc weeks start on Monday 00:00 UTC; Kraken's weekly candles start on another weekday.
-OKX_BARS = {"1w": "1Wutc", "1d": "1Dutc", "4h": "4H", "1h": "1H"}
+# 4H, 1H and 15m bars start at the same times in UTC and in Hong Kong time; 1D and 1W
+# differ. 1Wutc weeks start on Monday 00:00 UTC; Kraken's weekly candles start on another
+# weekday.
+OKX_BARS = {"1w": "1Wutc", "1d": "1Dutc", "4h": "4H", "1h": "1H", "15m": "15m"}
 OKX_MAX_LIMIT = 300
 OKX_NOT_LISTED = "51001"
 
 KRAKEN_URL = "https://api.kraken.com/0/public/OHLC"
-KRAKEN_INTERVALS = {"1w": 10080, "1d": 1440, "4h": 240, "1h": 60}
+KRAKEN_INTERVALS = {"1w": 10080, "1d": 1440, "4h": 240, "1h": 60, "15m": 15}
 KRAKEN_NOT_LISTED = "EQuery:Unknown asset pair"
 
 SYMBOL = re.compile(r"[A-Z0-9]{1,20}")

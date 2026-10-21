@@ -155,13 +155,13 @@ def market_scan(limit: int, fmt: str) -> None:
 
 @market.command("candles")
 @click.argument("symbol")
-@click.option("--tf", "timeframe", type=click.Choice(["1w", "1d", "4h", "1h"]), default="1w")
+@click.option("--tf", "timeframe", type=click.Choice(["1w", "1d", "4h", "1h", "15m"]), default="1w")
 @click.option("--limit", type=click.IntRange(2, 300), default=104, help="Candles, newest last.")
 @FORMAT
 @_source_errors
 def market_candles(symbol: str, timeframe: str, limit: int, fmt: str) -> None:
-    """Price history the snapshot does not cover: weekly by default (104 weeks, 2 years).
-    UTC candles from OKX, or Kraken for coins OKX lacks."""
+    """UTC candles for any span, 15m for a scalp to 1w for years (the default: 104 weeks).
+    From OKX, or the exchange with the longer history."""
     _emit(views.candles(symbol, timeframe, limit), fmt)
 
 
