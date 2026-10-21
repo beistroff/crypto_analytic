@@ -58,6 +58,11 @@ Done by hand over SSM once bootstrap has finished (`~/sentinel/.ready` exists). 
     openclaw automations list
     ```
     `openclaw automations runs <id>` shows the run history.
+12. Daily market scan: an agent automation at 07:00 UTC whose prompt is `openclaw/automations/daily-scan.md`. After a release that changes the file, set it again on the existing job (`openclaw automations list` shows the id):
+    ```bash
+    openclaw automations edit <id> --message "$(cat ~/sentinel/src/openclaw/automations/daily-scan.md)"
+    openclaw automations run <id>
+    ```
 
 Things learned on the way:
 - Gemini free tier: the 3.x Flash models allow 5 requests a minute and 20 a day, the Lite models 15 and 500, Pro models none. OpenClaw retries a rate-limited call up to 10 times and Google counts each try, so the free Flash models cannot carry an agent on their own. Google Search grounding has no free quota for Gemini 3 and newer.
