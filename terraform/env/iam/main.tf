@@ -67,8 +67,8 @@ resource "aws_iam_role_policy" "session_manager" {
 #   - S3: read/write on the backup bucket; delete only under strategy-share/ because
 #     `aws s3 sync --delete` prunes that prefix. Backups can therefore not be deleted by the role.
 # Note: OpenClaw runs shell commands, so anything it ingests (news, web pages) could try to
-# steer it. Mitigations: deletion protection on sentinel-real, nightly JSON export to S3,
-# no IAM/EC2 permissions on this role, and (manually) versioning on the backup bucket.
+# steer it. Mitigations: deletion protection on sentinel-real, exec limited to sentinel and
+# ops/, no IAM/EC2 permissions on this role, and (manually) versioning on the backup bucket.
 resource "aws_iam_role_policy" "sentinel_permissions" {
   name = "sentinel-permissions"
   role = aws_iam_role.sentinel_role.id

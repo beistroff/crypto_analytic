@@ -70,7 +70,11 @@ Done by hand over SSM once bootstrap has finished (`~/sentinel/.ready` exists). 
     aws-vault exec sentinel-deploy -- aws s3api put-bucket-lifecycle-configuration --bucket openclaw-files --lifecycle-configuration file://ops/s3_lifecycle.json
     ```
     `get-bucket-lifecycle-configuration` should now print both rules; a `NoSuchLifecycleConfiguration` error before the first `put` is normal.
-14. Nightly backup: `ops/s3_backup.sh` in the system crontab also writes the real DynamoDB table as JSON to `backups/<UTC stamp>/dynamodb/sentinel-real.json`. `ops/s3_backup.sh --dry-run` reads the table and prints the item counts without writing.
+14. Daily backup: an OpenClaw command automation runs `ops/s3_backup.sh` at 03:00 UTC with no model call and sends nothing to Telegram. It copies the workspace and the sentinel folder to `backups/<UTC stamp>/`; the DynamoDB tables are not in it (the trade journal is re-entered by hand if it is ever lost). Remove an older system crontab entry for the script first (`crontab -l`), so it does not run twice. The snap `aws` is in `/snap/bin`, which the gateway's PATH may lack:
+    ```bash
+    openclaw automations add --name "Daily backup" --cron "0 3 * * *" --tz UTC --command-argv '["/home/ubuntu/sentinel/src/ops/s3_backup.sh"]' --command-env PATH=/snap/bin:/usr/local/bin:/usr/bin:/bin --timeout-seconds 600 --no-deliver
+    openclaw automations run <id>
+    ```
 
 Things learned on the way:
 - Gemini free tier: the 3.x Flash models allow 5 requests a minute and 20 a day, the Lite models 15 and 500, Pro models none. OpenClaw retries a rate-limited call up to 10 times and Google counts each try, so the free Flash models cannot carry an agent on their own. Google Search grounding has no free quota for Gemini 3 and newer.

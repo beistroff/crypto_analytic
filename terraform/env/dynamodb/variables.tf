@@ -52,7 +52,7 @@ variable "write_capacity" {
 }
 
 variable "enable_point_in_time_recovery" {
-  description = "Continuous backups (PITR, $0.20 per GB-month). Off: the nightly JSON export to S3 is the backup."
+  description = "Continuous backups (PITR, $0.20 per GB-month). Off to keep the cost at $0; the tables have no backup."
   type        = bool
   default     = false
 }
