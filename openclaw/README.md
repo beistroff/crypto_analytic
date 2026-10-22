@@ -50,7 +50,7 @@ Done by hand over SSM once bootstrap has finished (`~/sentinel/.ready` exists). 
    openclaw approvals allowlist add --agent main "/home/ubuntu/sentinel/venv/bin/sentinel"
    openclaw approvals allowlist add --agent main "/home/ubuntu/sentinel/src/ops/*.sh"
    ```
-9. Workspace: copy `SOUL.md`, `IDENTITY.md`, `AGENTS.md`, `TOOLS.md` and `memory/lessons_learned.md` from `~/sentinel/src/openclaw/workspace/` into `~/.openclaw/workspace/`, write `USER.md` from `USER.md.example` by hand (it stays on the instance), and delete `BOOTSTRAP.md`.
+9. Workspace: copy `SOUL.md`, `IDENTITY.md`, `AGENTS.md`, `TOOLS.md`, `skills/` and `memory/lessons_learned.md` from `~/sentinel/src/openclaw/workspace/` into `~/.openclaw/workspace/`, write `USER.md` from `USER.md.example` by hand (it stays on the instance), and delete `BOOTSTRAP.md`.
 10. Run `openclaw config validate && systemctl --user start openclaw-gateway.service`. In Telegram send `/new`, then "run a health check".
 11. Watch alerts (plan 1.9): an OpenClaw command automation runs `sentinel watch check` every 15 minutes with no model call. A hit prints a short alert, which goes to your Telegram chat; a quiet run prints `NO_REPLY` and sends nothing. `SENTINEL_LOG_LEVEL=ERROR` keeps routine warnings (stderr) out of the chat.
     ```bash
@@ -63,6 +63,14 @@ Done by hand over SSM once bootstrap has finished (`~/sentinel/.ready` exists). 
     openclaw automations edit <id> --message "$(cat ~/sentinel/src/openclaw/automations/daily-scan.md)"
     openclaw automations run <id>
     ```
+
+13. Backup bucket lifecycle (once, from your laptop; the instance role cannot change it, and cannot delete backups either, so S3 expires them itself): `ops/s3_lifecycle.json` expires everything under `backups/` after 30 days (older versions after 7, if the bucket is versioned), which keeps the bucket far under 5 GB. `strategy-share/` is not touched. The call replaces the bucket's whole lifecycle configuration, so look at the current one first:
+    ```bash
+    aws-vault exec sentinel-deploy -- aws s3api get-bucket-lifecycle-configuration --bucket openclaw-files
+    aws-vault exec sentinel-deploy -- aws s3api put-bucket-lifecycle-configuration --bucket openclaw-files --lifecycle-configuration file://ops/s3_lifecycle.json
+    ```
+    `get-bucket-lifecycle-configuration` should now print both rules; a `NoSuchLifecycleConfiguration` error before the first `put` is normal.
+14. Nightly backup: `ops/s3_backup.sh` in the system crontab also writes the real DynamoDB table as JSON to `backups/<UTC stamp>/dynamodb/sentinel-real.json`. `ops/s3_backup.sh --dry-run` reads the table and prints the item counts without writing.
 
 Things learned on the way:
 - Gemini free tier: the 3.x Flash models allow 5 requests a minute and 20 a day, the Lite models 15 and 500, Pro models none. OpenClaw retries a rate-limited call up to 10 times and Google counts each try, so the free Flash models cannot carry an agent on their own. Google Search grounding has no free quota for Gemini 3 and newer.
