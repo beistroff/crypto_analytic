@@ -316,6 +316,13 @@ def baseline_set(result: dict[str, Any]) -> View:
     return View(data, text)
 
 
+def backup_exported(result: dict[str, Any]) -> View:
+    types = ", ".join(f"{count} {name.lower()}" for name, count in sorted(result["types"].items()))
+    verb = "Would export" if result["dry_run"] else "Exported"
+    where = f"s3://{result['bucket']}/{result['key']}"
+    return View(result, f"{verb} {result['items']} items ({types or 'none'}) to {where}")
+
+
 def portfolio_summary() -> View:
     """Cash and open positions first, so "nothing is deployed" is never in doubt."""
     state = service.summary()

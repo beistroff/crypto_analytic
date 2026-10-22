@@ -18,8 +18,10 @@ import requests
 from botocore.exceptions import BotoCoreError, ClientError
 
 from sentinel import __version__, aws, health, log, views
+from sentinel import backup as backups
 from sentinel.alerts import watch as alerts_watch
 from sentinel.alerts.watch import WatchError
+from sentinel.backup import BackupError
 from sentinel.config import get_settings
 from sentinel.data import SourceError
 from sentinel.portfolio import service
@@ -62,7 +64,14 @@ def _source_errors(command: Callable[..., Any]) -> Callable[..., Any]:
     def wrapper(*args: Any, **kwargs: Any) -> Any:
         try:
             return command(*args, **kwargs)
-        except (SourceError, aws.SecretError, JournalError, VersionConflict, WatchError) as exc:
+        except (
+            SourceError,
+            aws.SecretError,
+            JournalError,
+            VersionConflict,
+            WatchError,
+            BackupError,
+        ) as exc:
             error = str(exc)
         except (requests.RequestException, BotoCoreError, ClientError) as exc:
             error = aws.error_code(exc)
@@ -290,6 +299,22 @@ def trade_add(
     """Journal a buy or sell and update the position."""
     result = service.record_trade(side, symbol, qty, price, fee, venue=venue, note=note)
     _emit(views.trade_added(result), fmt)
+
+
+@cli.group()
+def backup() -> None:
+    """Backups of the DynamoDB tables to S3."""
+
+
+@backup.command("export")
+@click.option("--stamp", help="Backup folder name; default the current UTC minute.")
+@click.option("--dry-run", is_flag=True, help="Read the table and count, write nothing.")
+@FORMAT
+@_source_errors
+def backup_export(stamp: str | None, dry_run: bool, fmt: str) -> None:
+    """Write the real table (trades, positions, starting cash) as JSON to the backup bucket,
+    next to the nightly file backup."""
+    _emit(views.backup_exported(backups.export_real(stamp, dry_run=dry_run)), fmt)
 
 
 @cli.group()

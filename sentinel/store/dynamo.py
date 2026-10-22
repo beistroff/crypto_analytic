@@ -130,6 +130,30 @@ def _query(table: str, **params: Any) -> list[dict[str, Any]]:
         params["ExclusiveStartKey"] = page["LastEvaluatedKey"]
 
 
+def export_real() -> list[dict[str, Any]]:
+    """Every item of the real table, for the nightly backup.
+
+    The instance role has no ``Scan``, so this is a ``Query`` per partition it knows: the
+    baseline, the positions, and the trades of each position's symbol (a closed position
+    stays in the table, so every symbol ever traded is listed). A new item type in
+    ``sentinel-real`` has to be added here.
+    """
+    items = _partition(_table(), "META") + _partition(_table(), "POS")
+    symbols = [item["SK"] for item in items if item["PK"] == "POS"]
+    for symbol in symbols:
+        items += _partition(_table(), f"TRADE#{symbol}")
+    return items
+
+
+def _partition(table: str, pk: str) -> list[dict[str, Any]]:
+    return _query(
+        table,
+        KeyConditionExpression="PK = :pk",
+        ExpressionAttributeValues=_marshal({":pk": pk}),
+        ConsistentRead=True,
+    )
+
+
 class PositionRepo:
     def get(self, symbol: str) -> Position | None:
         response = aws.client("dynamodb").get_item(
@@ -142,13 +166,7 @@ class PositionRepo:
 
     def list(self) -> list[Position]:
         """Every position ever held, closed ones (qty 0) included, by symbol."""
-        items = _query(
-            _table(),
-            KeyConditionExpression="PK = :pk",
-            ExpressionAttributeValues=_marshal({":pk": "POS"}),
-            ConsistentRead=True,
-        )
-        return [Position.from_item(item) for item in items]
+        return [Position.from_item(item) for item in _partition(_table(), "POS")]
 
 
 class TradeRepo:
