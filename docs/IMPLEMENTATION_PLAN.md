@@ -60,7 +60,7 @@ The plan is split in three. **Core** makes the agent useful day to day: good mar
 | 4 | Core | Trade journal, part 1: 1.4 item layouts, 1.5 data layer, `trade add`, `portfolio summary` | Done |
 | 5 | Core | 1.9 watches and alerts | Done |
 | 5a | Core | Polish after step 5: `market candles` (weekly history), the gate emoji, the daily scan prompt in the repo, `docs/RELEASING.md` | Done |
-| 6 | Core | Trade journal, part 2: 1.7 lessons, nightly export, `trade-journal` skill, import from the markdown journal; 1.3 S3 lifecycle rule | Next |
+| 6 | Core | Trade journal, part 2: nightly export, `trade-journal` skill; 1.3 S3 lifecycle rule (decided 22 Oct: lessons stay in `memory/lessons_learned.md` and there is no import of the markdown journal) | Next |
 | 7 | Core | 2.10 setup block in the snapshot | |
 | 8 | Core | 2.4 NewsAPI rework and `news world`, CMC coin names, no-swap flow out of `missing` | |
 | 9 | Core | 2.11 scan watchlist | |
@@ -247,11 +247,12 @@ Only the lessons move over. Positions and the baseline are entered fresh at brin
 **Accept:** the dry run prints the count; `sentinel lesson list` shows every reviewed lesson.
 
 ### 1.7 Switch the trade journal to DynamoDB
-- [ ] Commands: `sentinel trade add --side buy|sell --symbol SOL --qty 1.35 --price 72.6 [--fee 0.1]`, `sentinel portfolio summary --format telegram|json`, `sentinel lesson add|list`, `sentinel backup export` (DynamoDB to JSON in S3, nightly, next to the existing file backups).
+- [ ] Commands: `sentinel trade add --side buy|sell --symbol SOL --qty 1.35 --price 72.6 [--fee 0.1]`, `sentinel portfolio summary --format telegram|json`, `sentinel backup export` (DynamoDB to JSON in S3, nightly, next to the existing file backups).
 - [ ] New skill folder `openclaw/workspace/skills/trade-journal/SKILL.md`; update `TOOLS.md`; stop all JSON portfolio writes.
+- [ ] [Later] `sentinel lesson add|list` with `LESSON` items, together with 1.6 (decided 22 Oct: until then lessons stay in `memory/lessons_learned.md`, which the agent reads and the daily S3 backup covers).
 - [ ] [Later] `sentinel lesson share` (daily, after the backup): renders the approved `LESSON` items as `beistroff_lessons_learned.md`, redacts dollar amounts, quantities and the baseline (rules and % results stay), and replaces yesterday's copy in your own subfolder of the shared Google Drive folder (F.9). `sentinel lesson auth` runs the one-time Google consent from the laptop. Defaults chosen 2026-10-15, change if you prefer: redacted, folder owned by the dedicated Google account.
 
-**Accept (Stage B, after first bring-up; the CLI and tests are done in Stage A):** in Telegram, "I bought 100 XRP at 1.20" creates a trade and updates the position; "show my balance" returns a short table; the nightly S3 backup still runs. **Merge gate:** manual test cases against `sentinel-sim` (as in 1.5) for lessons and the export, and a dry run of the markdown-journal import whose counts match the file, before the real import.
+**Accept (Stage B, after first bring-up; the CLI and tests are done in Stage A):** in Telegram, "I bought 100 XRP at 1.20" creates a trade and updates the position; "show my balance" returns a short table; the nightly S3 backup still runs. **Merge gate:** manual test cases against `sentinel-sim` (as in 1.5) for the export. The markdown journal is not imported (decided 22 Oct): the portfolio is entered fresh with `portfolio baseline` and `trade add`.
 
 ### 1.8 Readiness gate
 Only the checks the agent cannot work without. Others join with their own task (the exchange in 2.1); OpenClaw and Telegram are checked after the manual onboarding.
@@ -642,7 +643,7 @@ All items carry `type` and `created_at`. Keys are strings.
 
 | Skill folder | Trigger | Commands it runs |
 | --- | --- | --- |
-| `trade-journal` | "I bought/sold ...", "balance", "/balance" | `sentinel trade add`, `sentinel portfolio summary`, `sentinel lesson ...` |
+| `trade-journal` | "I bought/sold ...", "balance", "/balance" | `sentinel trade add`, `sentinel portfolio summary`, `sentinel portfolio baseline` |
 | `analyse` | "analyse X", `/analyse`, `act:analyse:X` | `sentinel snapshot X --format json` |
 | `test-trade-scenario` | "test trade X 24h", `/predict`, `act:predict:X:24` | `sentinel snapshot`, `sentinel predict log`, `sentinel predict show` |
 | `review-predictions` (in the repo's `.claude/skills/`, used in Claude Code or a Claude chat, not by the agent) | the user, with a `sentinel predict export` | none; drafts lessons for `memory/prediction_lessons.md` |
