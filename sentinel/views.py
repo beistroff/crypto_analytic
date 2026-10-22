@@ -16,7 +16,7 @@ from typing import Any
 import requests
 
 from sentinel.alerts import watch as alerts_watch
-from sentinel.data import SourceError, cmc, feargreed, newsapi
+from sentinel.data import SourceError, cmc, exchange, feargreed, newsapi
 from sentinel.eval.rules import is_scalp_candidate, rules_signal
 from sentinel.portfolio import service
 from sentinel.signals import scan as signals_scan
@@ -130,6 +130,44 @@ def scan(limit: int) -> View:
         f"RSI over 70: {_some(hot)}; under 30: {_some(cold)}",
     ]
     return View(result.data(), _lines(lines))
+
+
+TIMEFRAME_WORDS = {
+    "1w": "weekly",
+    "1d": "daily",
+    "4h": "4-hour",
+    "1h": "hourly",
+    "15m": "15-minute",
+}
+
+
+def candles(symbol: str, timeframe: exchange.Timeframe, limit: int) -> View:
+    """Raw candles for history the snapshot does not cover (a year or more: weekly)."""
+    series = exchange.history(symbol, timeframe, limit)
+    rows = series.candles
+    when = "%d %b %Y" if timeframe in ("1w", "1d") else "%d %b %H:%M"
+    high = max(rows, key=lambda c: c.high)
+    low = min(rows, key=lambda c: c.low)
+    data: dict[str, Any] = {
+        "symbol": series.symbol,
+        "exchange": series.exchange,
+        "timeframe": timeframe,
+        "columns": ["open_time", "open", "high", "low", "close"],
+        "candles": [
+            [c.ts.isoformat(), sig(c.open), sig(c.high), sig(c.low), sig(c.close)] for c in rows
+        ],
+        "last_open": not rows[-1].closed,
+        "high": {"price": sig(high.high), "open_time": high.ts.isoformat()},
+        "low": {"price": sig(low.low), "open_time": low.ts.isoformat()},
+    }
+    first = rows[0]
+    change = (series.price - first.close) / first.close * 100
+    lines = [
+        f"{series.symbol} {TIMEFRAME_WORDS[timeframe]}, {len(rows)} candles from {first.ts:{when}}",
+        f"Close {_usd(first.close)} then, now {_usd(series.price)} ({_pct(change)})",
+        f"High {_usd(high.high)} ({high.ts:{when}}), low {_usd(low.low)} ({low.ts:{when}})",
+    ]
+    return View(data, _lines(lines))
 
 
 def _some(items: list[str], shown: int = 5) -> str:

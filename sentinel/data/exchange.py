@@ -32,17 +32,25 @@ from sentinel import net
 from sentinel.config import Exchange, get_settings
 from sentinel.data import SourceError
 
-Timeframe = Literal["1d", "4h", "1h"]
-PERIOD = {"1d": timedelta(days=1), "4h": timedelta(hours=4), "1h": timedelta(hours=1)}
+Timeframe = Literal["1w", "1d", "4h", "1h", "15m"]
+PERIOD = {
+    "1w": timedelta(weeks=1),
+    "1d": timedelta(days=1),
+    "4h": timedelta(hours=4),
+    "1h": timedelta(hours=1),
+    "15m": timedelta(minutes=15),
+}
 
 OKX_URL = "https://www.okx.com/api/v5/market/candles"
-# 4H and 1H bars start on the same hours in UTC and in Hong Kong time; only 1D differs.
-OKX_BARS = {"1d": "1Dutc", "4h": "4H", "1h": "1H"}
+# 4H, 1H and 15m bars start at the same times in UTC and in Hong Kong time; 1D and 1W
+# differ. 1Wutc weeks start on Monday 00:00 UTC; Kraken's weekly candles start on another
+# weekday.
+OKX_BARS = {"1w": "1Wutc", "1d": "1Dutc", "4h": "4H", "1h": "1H", "15m": "15m"}
 OKX_MAX_LIMIT = 300
 OKX_NOT_LISTED = "51001"
 
 KRAKEN_URL = "https://api.kraken.com/0/public/OHLC"
-KRAKEN_INTERVALS = {"1d": 1440, "4h": 240, "1h": 60}
+KRAKEN_INTERVALS = {"1w": 10080, "1d": 1440, "4h": 240, "1h": 60, "15m": 15}
 KRAKEN_NOT_LISTED = "EQuery:Unknown asset pair"
 
 SYMBOL = re.compile(r"[A-Z0-9]{1,20}")
@@ -108,6 +116,32 @@ def candles(symbol: str, timeframe: Timeframe, limit: int = 200) -> Candles:
             )
             errors.append(f"{exchange}: malformed reply")
     raise SourceError(f"no candles for {symbol} ({'; '.join(errors)})")
+
+
+def history(symbol: str, timeframe: Timeframe, limit: int) -> Candles:
+    """Like ``candles``, but when the first exchange has fewer candles than asked (a coin
+    it listed recently: OKX has ZEC only since November 2025), the exchange with the most
+    candles wins. Costs one more request, and only for such coins."""
+    best = candles(symbol, timeframe, limit)
+    for exchange in get_settings().exchanges:
+        if len(best.candles) >= limit:
+            break
+        if exchange == best.exchange:
+            continue
+        try:
+            other = _cached(exchange, best.symbol, timeframe, limit)
+        except (
+            SourceError,
+            requests.RequestException,
+            ValueError,
+            KeyError,
+            IndexError,
+            TypeError,
+        ):
+            continue  # the first exchange's shorter history is still an answer
+        if len(other.candles) > len(best.candles):
+            best = other
+    return best
 
 
 def _cached(exchange: Exchange, symbol: str, timeframe: Timeframe, limit: int) -> Candles:

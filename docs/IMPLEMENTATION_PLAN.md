@@ -59,6 +59,7 @@ The plan is split in three. **Core** makes the agent useful day to day: good mar
 | 3 | Core | 2.9 agent instructions refresh (workspace text only) | Done |
 | 4 | Core | Trade journal, part 1: 1.4 item layouts, 1.5 data layer, `trade add`, `portfolio summary` | Done |
 | 5 | Core | 1.9 watches and alerts | Done |
+| 5a | Core | Polish after step 5: `market candles` (weekly history), the gate emoji, the daily scan prompt in the repo, `docs/RELEASING.md` | Done |
 | 6 | Core | Trade journal, part 2: 1.7 lessons, nightly export, `trade-journal` skill, import from the markdown journal; 1.3 S3 lifecycle rule | Next |
 | 7 | Core | 2.10 setup block in the snapshot | |
 | 8 | Core | 2.4 NewsAPI rework and `news world`, CMC coin names, no-swap flow out of `missing` | |

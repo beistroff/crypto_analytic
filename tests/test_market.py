@@ -134,6 +134,17 @@ def test_scalp_skips_stablecoins_and_pumped_coins(apis):
     assert [c["symbol"] for c in data["candidates"]] == ["SOL", "XRP"]  # not USDT, not ETH
 
 
+def test_weekly_candles_cover_two_years(trending):
+    text = _run("market", "candles", "SOL", "--format", "telegram").stdout
+    assert text.splitlines() == [
+        "SOL weekly, 104 candles from 26 Oct 2024",
+        "Close $90.22 then, now $100.00 (+10.8%)",
+        "High $101.00 (17 Oct 2026), low $89.32 (26 Oct 2024)",
+    ]
+    data = _json(_run("market", "candles", "SOL"))
+    assert (len(data["candles"]), data["last_open"], data["high"]["price"]) == (104, True, 101.0)
+
+
 @pytest.mark.parametrize(("symbol", "alert"), [("SOL", True), ("BTC", False)])
 def test_whales(apis, symbol, alert):
     assert _json(_run("market", "whales", symbol))["alert"] is alert
