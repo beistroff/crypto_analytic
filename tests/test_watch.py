@@ -5,6 +5,7 @@ from decimal import Decimal
 import pytest
 from click.testing import CliRunner
 
+from sentinel import views
 from sentinel.alerts import watch
 from sentinel.cli import cli
 from sentinel.data import SourceError, exchange
@@ -96,6 +97,24 @@ def test_a_hit_is_reported_once(clock):
     second = json.loads(run.invoke(cli, ["watch", "check"]).output)
     assert (second["checked"], second["hits"]) == (0, [])
     assert run.invoke(cli, ["watch", "check", "--format", "telegram"]).output == "NO_REPLY\n"
+
+
+def test_two_watches_in_one_second_keep_apart(clock):
+    first, _ = watch.add("SOL", "close_below", D(92))
+    clock(SET_AT.replace(microsecond=5000))
+    second, _ = watch.add("SOL", "close_below", D(85))
+    assert (first.created_at, second.created_at) == (
+        "2026-10-20T09:30:00.000Z",
+        "2026-10-20T09:30:00.005Z",
+    )
+    assert len(watch.pending()) == 2
+    with pytest.raises(watch.WatchError, match="same moment"):
+        watch.add("SOL", "close_below", D(80))
+
+
+def test_the_list_shows_every_watch():
+    watches = [_watch("close_below", i + 1, f"2026-10-20T09:30:0{i}Z", "1d") for i in range(6)]
+    assert len(views.watch_list(watches).text.splitlines()) == 7
 
 
 def test_cli_adds_lists_and_removes(clock):

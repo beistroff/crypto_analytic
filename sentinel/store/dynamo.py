@@ -291,12 +291,19 @@ class Watch:
 
 
 class WatchRepo:
-    def add(self, watch: Watch) -> None:
-        aws.client("dynamodb").put_item(
-            TableName=_sim_table(),
-            Item=_marshal(watch.item()),
-            ConditionExpression="attribute_not_exists(PK)",
-        )
+    def add(self, watch: Watch) -> bool:
+        """Store a watch; False when an item with the same key exists."""
+        try:
+            aws.client("dynamodb").put_item(
+                TableName=_sim_table(),
+                Item=_marshal(watch.item()),
+                ConditionExpression="attribute_not_exists(PK)",
+            )
+        except ClientError as exc:
+            if exc.response.get("Error", {}).get("Code") == "ConditionalCheckFailedException":
+                return False
+            raise
+        return True
 
     def pending(self) -> list[Watch]:
         """Active watches, oldest first."""

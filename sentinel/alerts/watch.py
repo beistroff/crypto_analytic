@@ -66,6 +66,11 @@ def _iso(moment: datetime) -> str:
     return moment.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+def _stamp(moment: datetime) -> str:
+    """``_iso`` with milliseconds: two watches for one coin in one second keep apart."""
+    return f"{moment:%Y-%m-%dT%H:%M:%S}.{moment.microsecond // 1000:03d}Z"
+
+
 def add(
     symbol: str,
     trigger: str,
@@ -97,7 +102,7 @@ def add(
     watch = Watch(
         pred_id=str(ULID()),
         symbol=symbol,
-        created_at=_iso(_now()),
+        created_at=_stamp(_now()),
         trigger=trigger,
         level=level,
         timeframe=timeframe,
@@ -105,7 +110,8 @@ def add(
         target=target,
         note=note,
     )
-    WatchRepo().add(watch)
+    if not WatchRepo().add(watch):
+        raise WatchError(f"a watch for {symbol} was added at the same moment, add it again")
     return watch, price
 
 
