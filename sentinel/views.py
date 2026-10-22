@@ -257,11 +257,8 @@ def watch_list(watches: list[Watch]) -> View:
     if not watches:
         return View(data, "No watches")
     count = len(watches)
-    lines = [f"{count} watch{'es' if count > 1 else ''}"]
-    rows = [_watch_line(w) for w in watches]
-    if len(rows) > TELEGRAM_MAX_LINES - 1:
-        rows = [*rows[: TELEGRAM_MAX_LINES - 2], f"+{len(rows) - TELEGRAM_MAX_LINES + 2} more"]
-    return View(data, _lines(lines + rows))
+    lines = [f"{count} watch{'es' if count > 1 else ''}", *(_watch_line(w) for w in watches)]
+    return View(data, "\n".join(lines))
 
 
 def watch_removed(watch: Watch) -> View:

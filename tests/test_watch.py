@@ -5,6 +5,7 @@ from decimal import Decimal
 import pytest
 from click.testing import CliRunner
 
+from sentinel import views
 from sentinel.alerts import watch
 from sentinel.cli import cli
 from sentinel.data import SourceError, exchange
@@ -109,6 +110,11 @@ def test_two_watches_in_one_second_keep_apart(clock):
     assert len(watch.pending()) == 2
     with pytest.raises(watch.WatchError, match="same moment"):
         watch.add("SOL", "close_below", D(80))
+
+
+def test_the_list_shows_every_watch():
+    watches = [_watch("close_below", i + 1, f"2026-10-20T09:30:0{i}Z", "1d") for i in range(6)]
+    assert len(views.watch_list(watches).text.splitlines()) == 7
 
 
 def test_cli_adds_lists_and_removes(clock):
