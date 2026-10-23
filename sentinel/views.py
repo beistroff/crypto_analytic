@@ -203,6 +203,17 @@ def snapshot(symbol: str) -> View:
             f"{_usd(week.wick_high)} ({week.wick_high_date:%d %b}); "
             f"closes {_usd(week.close_low)} to {_usd(week.close_high)}"
         )
+    if snap.setup:
+        s = snap.setup
+        setup = (
+            f"4h setup: trigger close above {_usd(s.trigger)}; stop {_usd(s.stop)} "
+            f"(-{s.stop_pct}%, {s.stop_atr} ATR{', in noise' if s.stop_in_noise else ''})"
+        )
+        if s.pullback_low is not None:
+            setup += f"; pullback {_usd(s.pullback_low)} to {_usd(s.pullback_high)}"
+        if s.room_pct is not None:
+            setup += f"; room to 30d high {_pct_or(s.room_pct)}"
+        lines.append(setup)
     extra = []
     if snap.flow:
         f = snap.flow

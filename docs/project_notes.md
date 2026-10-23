@@ -51,3 +51,8 @@ Short notes per merged PR, newest last: what changed, why, and one number. Detai
 - A `trade-journal` skill journals trades and reads the balance through `sentinel`; the agent no longer reads a markdown journal. The daily S3 backup runs as an OpenClaw command automation, and old backups expire by a lifecycle rule.
 - Why: portfolio numbers must come from DynamoDB only; backups belong to the deployment, not to the CLI, and cost nothing as a command automation.
 - Number: 0 lines of Python changed; `backups/` kept for 30 days.
+
+## #19 Setup block in the snapshot (23 Oct)
+- The snapshot computes a 4h setup: trigger (4h close above the 48 h close high), stop 0.25 ATR under the 48 h wick low with its distance in % and ATR, a `stop_in_noise` flag, the pullback zone and room to the 30-day high; 4h and 1h RSI join the daily one.
+- Why: the agent improvised triggers and stops per coin, once a stop inside one day's range; trades last 12 h to 7 days, so daily levels were too wide.
+- Number: one more candle request per snapshot, about 150 characters more JSON; 144 tests pass.

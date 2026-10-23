@@ -61,8 +61,8 @@ The plan is split in three. **Core** makes the agent useful day to day: good mar
 | 5 | Core | 1.9 watches and alerts | Done |
 | 5a | Core | Polish after step 5: `market candles` (weekly history), the gate emoji, the daily scan prompt in the repo, `docs/RELEASING.md` | Done |
 | 6 | Core | Trade journal, part 2: `trade-journal` skill, daily backup as an OpenClaw command automation; 1.3 S3 lifecycle rule (decided 22 and 23 Oct: lessons stay in `memory/lessons_learned.md`, no import of the markdown journal, no DynamoDB export) | Done |
-| 7 | Core | 2.10 setup block in the snapshot | Next |
-| 8 | Core | 2.4 NewsAPI rework and `news world`, CMC coin names, no-swap flow out of `missing` | |
+| 7 | Core | 2.10 setup block in the snapshot (4h) | Done |
+| 8 | Core | 2.4 NewsAPI rework and `news world`, CMC coin names, no-swap flow out of `missing` | Next |
 | 9 | Core | 2.11 scan watchlist | |
 | 10 | Core | Minimal prediction journal: 3.3 validator, 3.4 log, 3.6 outcome scorer, 3.7 export and review skill | |
 | 11 | Research | 3.1 clients, 3.2 prompts, 3.5 runner | |
@@ -346,8 +346,8 @@ Why (chat of 19 Oct): replies ran 15 to 20 lines, repeated the BTC gate and unch
 
 ### 2.10 Setup block in the snapshot (`sentinel/signals/snapshot.py`)
 Why (chat of 19 Oct): the agent improvised triggers and stops per coin and argued in prose that a stop 3.7 % away sat inside one day's range. Code computes these the same way every time.
-- [ ] `setup` after `levels`: breakout trigger (daily close above the 7-day close high), pullback zone (SMA50 to the 7-day close low, when the price is above SMA50), stop (below the 7-day wick low), stop distance in % and in ATR, and room to the 30-day wick high in %. A stop under 1 ATR away is flagged `stop_in_noise`. Consider computing the setup on 4h candles (trigger on a 4h close, stop below the 48 h wick low, 4h ATR) and adding 4h and 1h RSI; trades last 12 h to 7 days (AGENTS.md).
-- [ ] `AGENTS.md`: quote `setup`; change it only with a stated reason.
+- [x] `setup` after `levels`, on 4h candles (decided 23 Oct: trades last 12 h to 7 days): breakout trigger (a 4h close above the 48 h close high), pullback zone (4h SMA50 to the 48 h close low, when the price is above the 4h SMA50), stop (0.25 ATR below the 48 h wick low), stop distance in % and in 4h ATR, and room to the 30-day wick high in %. A stop under 1 ATR (4h) or half the daily ATR away is flagged `stop_in_noise`. 4h and 1h RSI in `technicals`.
+- [x] `AGENTS.md`: quote `setup`; change it only with a stated reason.
 
 **Accept:** hand-checked values on the `trending` fixture; the size test still passes.
 

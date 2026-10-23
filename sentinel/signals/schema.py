@@ -51,6 +51,8 @@ class Flow(BaseModel):
 
 class Technicals(BaseModel):
     rsi14: float | None
+    rsi14_4h: float | None
+    rsi14_1h: float | None
     sma20: float | None
     sma50: float | None
     sma200: float | None
@@ -80,6 +82,24 @@ class Levels(BaseModel):
     d30: Range | None
 
 
+class Setup(BaseModel):
+    """A trade of 12 h to 7 days, on 4h candles. Trigger: a 4h close above the highest
+    4h close of the last 48 h. Stop: 0.25 ATR (4h) under the 48 h wick low; its distance
+    from the price in % and in ATR, flagged ``stop_in_noise`` under 1 ATR or under half
+    the daily ATR (an ordinary half-day swing would hit it). Pullback zone:
+    4h SMA50 to the 48 h close low, only while the price is above the SMA50. Room: from
+    the price to the 30-day wick high, in %."""
+
+    trigger: float
+    stop: float
+    stop_pct: float
+    stop_atr: float
+    stop_in_noise: bool
+    pullback_low: float | None
+    pullback_high: float | None
+    room_pct: float | None
+
+
 class VsBtc(BaseModel):
     """Return difference against BTC in percentage points (positive: stronger than BTC),
     and beta of daily returns to BTC's over 90 days."""
@@ -106,5 +126,6 @@ class Snapshot(BaseModel):
     flow: Flow | None
     technicals: Technicals | None
     levels: Levels | None
+    setup: Setup | None
     vs_btc: VsBtc | None
     missing: list[str]
