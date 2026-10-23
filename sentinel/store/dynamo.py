@@ -1,5 +1,5 @@
 """DynamoDB access: trades, positions and the starting balance in the real table, watches
-in the sim table.
+and logged predictions in the sim table.
 
 Item layouts are in docs/IMPLEMENTATION_PLAN.md, Appendix A. Reads use ``Query`` (never
 ``Scan``); numbers are ``Decimal``. A trade and the position it changes are written in
@@ -8,7 +8,7 @@ one transaction that checks the position's ``version`` (optimistic locking).
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass, fields
 from decimal import Decimal
 from typing import Any
 
@@ -290,20 +290,25 @@ class Watch:
         )
 
 
+def _put_new(item: dict[str, Any]) -> bool:
+    """Store a new sim-table item; False when an item with the same key exists."""
+    try:
+        aws.client("dynamodb").put_item(
+            TableName=_sim_table(),
+            Item=_marshal(item),
+            ConditionExpression="attribute_not_exists(PK)",
+        )
+    except ClientError as exc:
+        if exc.response.get("Error", {}).get("Code") == "ConditionalCheckFailedException":
+            return False
+        raise
+    return True
+
+
 class WatchRepo:
     def add(self, watch: Watch) -> bool:
         """Store a watch; False when an item with the same key exists."""
-        try:
-            aws.client("dynamodb").put_item(
-                TableName=_sim_table(),
-                Item=_marshal(watch.item()),
-                ConditionExpression="attribute_not_exists(PK)",
-            )
-        except ClientError as exc:
-            if exc.response.get("Error", {}).get("Code") == "ConditionalCheckFailedException":
-                return False
-            raise
-        return True
+        return _put_new(watch.item())
 
     def pending(self) -> list[Watch]:
         """Active watches, oldest first."""
@@ -359,3 +364,74 @@ class WatchRepo:
                 return None
             raise
         return Watch.from_item(_unmarshal(response["Attributes"]))
+
+
+@dataclass(frozen=True)
+class Prediction:
+    """A call logged from chat: a ``PRED`` item without a ``watch`` map.
+
+    It sits in the sparse GSI2 under ``OPEN`` until the scorer has checked every horizon.
+    ``snapshot`` is the market the call was made in (price, RSI, BTC's regime).
+    """
+
+    pred_id: str
+    symbol: str
+    created_at: str
+    model: str
+    action: str  # BUY, SELL or HOLD
+    direction: str  # UP, DOWN or FLAT
+    confidence: Decimal
+    horizon_h: int
+    entry: Decimal
+    target: Decimal | None
+    stop: Decimal | None
+    btc_context: str
+    reasons: list[str]
+    risk_note: str | None
+    snapshot: dict[str, Any]
+    valid: bool
+    validator_errors: list[str]
+    warnings: list[str]
+    due_at: str
+    source: str = "chat"
+    status: str = "OPEN"
+
+    @property
+    def key(self) -> dict[str, str]:
+        return {"PK": f"PRED#{self.created_at[:10]}", "SK": f"{self.created_at}#{self.symbol}#chat"}
+
+    def item(self) -> dict[str, Any]:
+        item = {
+            **self.key,
+            "GSI1PK": f"SYM#{self.symbol}",
+            "GSI1SK": self.created_at,
+            "GSI2PK": self.status,
+            "GSI2SK": self.due_at,
+            "type": "PRED",
+            "arm": "chat",
+            **asdict(self),
+        }
+        return {name: value for name, value in item.items() if value is not None}
+
+    @classmethod
+    def from_item(cls, item: dict[str, Any]) -> Prediction:
+        values = {f.name: item.get(f.name) for f in fields(cls)}
+        values["horizon_h"] = int(item["horizon_h"])
+        return cls(**values)
+
+
+class PredictionRepo:
+    def add(self, prediction: Prediction) -> bool:
+        """Store a call; False when an item with the same key exists."""
+        return _put_new(prediction.item())
+
+    def get(self, pred_id: str, date: str) -> Prediction | None:
+        """The call ``pred_id`` logged on ``date`` (``YYYY-MM-DD``, from the id)."""
+        items = _query(
+            _sim_table(),
+            KeyConditionExpression="PK = :pk",
+            FilterExpression="pred_id = :id",
+            ExpressionAttributeValues=_marshal({":pk": f"PRED#{date}", ":id": pred_id}),
+        )
+        found = [item for item in items if "watch" not in item]
+        return Prediction.from_item(found[0]) if found else None

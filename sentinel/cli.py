@@ -24,6 +24,8 @@ from sentinel.config import get_settings
 from sentinel.data import SourceError
 from sentinel.portfolio import service
 from sentinel.portfolio.service import JournalError
+from sentinel.predict import journal
+from sentinel.predict.journal import PredictError
 from sentinel.store.dynamo import VersionConflict
 
 FORMAT = click.option("--format", "fmt", type=click.Choice(["json", "telegram"]), default="json")
@@ -62,7 +64,14 @@ def _source_errors(command: Callable[..., Any]) -> Callable[..., Any]:
     def wrapper(*args: Any, **kwargs: Any) -> Any:
         try:
             return command(*args, **kwargs)
-        except (SourceError, aws.SecretError, JournalError, VersionConflict, WatchError) as exc:
+        except (
+            SourceError,
+            aws.SecretError,
+            JournalError,
+            VersionConflict,
+            WatchError,
+            PredictError,
+        ) as exc:
             error = str(exc)
         except (requests.RequestException, BotoCoreError, ClientError) as exc:
             error = aws.error_code(exc)
@@ -270,6 +279,32 @@ def watch_check(fmt: str) -> None:
     """Check every watch once; print one alert line per hit, or NO_REPLY (an OpenClaw
     automation runs this every 15 minutes)."""
     _emit(views.watch_checked(alerts_watch.check()), fmt)
+
+
+@cli.group()
+def predict() -> None:
+    """Calls logged from chat, checked by code and scored later."""
+
+
+@predict.command("log")
+@click.option("--json", "raw", required=True, help="The call as PredictionOut JSON.")
+@click.option("--symbol", required=True)
+@click.option("--model", required=True, help="The chat model that made the call.")
+@click.option("--source", type=click.Choice(["chat"]), default="chat")
+@FORMAT
+@_source_errors
+def predict_log(raw: str, symbol: str, model: str, source: str, fmt: str) -> None:
+    """Check a call and store it with the market it was made in."""
+    _emit(views.prediction_logged(journal.log(symbol, raw, model, source)), fmt)
+
+
+@predict.command("show")
+@click.argument("pred_id")
+@FORMAT
+@_source_errors
+def predict_show(pred_id: str, fmt: str) -> None:
+    """A logged call in full: reasons, BTC context, snapshot, validator result."""
+    _emit(views.prediction(journal.show(pred_id)), fmt)
 
 
 @cli.group()
