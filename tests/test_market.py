@@ -61,6 +61,11 @@ def test_news_asks_for_ticker_and_name_and_drops_unrelated_titles(apis):
     assert apis.keys.news not in request.path
 
 
+def test_renamed_coin_keeps_both_names(apis, monkeypatch):
+    monkeypatch.setattr(cmc, "names", lambda: {"GRAM": "Gram (prev. Toncoin)"})
+    assert newsapi.coin_names("GRAM") == ("Gram", "Toncoin")
+
+
 def test_coin_names_without_cmc_fall_back_to_config(apis):
     apis.cmc.routes["/v1/cryptocurrency/listings/latest"] = (500, {})
     assert (newsapi.coin_names("SOL"), newsapi.coin_names("BTC")) == ((), ("Bitcoin",))

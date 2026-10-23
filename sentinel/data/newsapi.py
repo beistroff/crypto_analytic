@@ -31,6 +31,7 @@ WORLD_QUERY = (
     'OR SEC OR regulation OR ban OR sanctions OR war OR "artificial intelligence" OR AI) '
     'AND (crypto OR bitcoin OR markets OR stocks OR economy OR "Wall Street")'
 )
+RENAMED = re.compile(r"^(.+?) \(prev\. (.+)\)$")
 # NewsAPI's placeholder for an article taken down since.
 REMOVED = "[Removed]"
 
@@ -86,8 +87,14 @@ def _search(query: str, search_in: str, days: int, page_size: int) -> list[Headl
 
 
 def coin_names(ticker: str) -> tuple[str, ...]:
-    """The coin's CMC name plus its extra aliases in config (``Ether``, ``Ripple``)."""
-    found = (cmc.names().get(ticker), *get_settings().coin_names.get(ticker, ()))
+    """The coin's CMC name plus its extra aliases in config (``Ether``, ``Ripple``). A
+    renamed coin's CMC name ("Gram (prev. Toncoin)") gives both names."""
+    name = cmc.names().get(ticker)
+    renamed = RENAMED.match(name) if name else None
+    found = (
+        *(renamed.groups() if renamed else (name,)),
+        *get_settings().coin_names.get(ticker, ()),
+    )
     return tuple(dict.fromkeys(n for n in found if n and n != ticker))
 
 

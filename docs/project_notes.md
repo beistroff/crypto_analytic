@@ -60,4 +60,4 @@ Short notes per merged PR, newest last: what changed, why, and one number. Detai
 ## #20 News rework, CMC coin names, no-swap flow (23 Oct)
 - NewsAPI coin news is the most read of 14 days (2 in the snapshot); `sentinel news world` gives the most read market-moving world news of 3 days, run by the agent only when needed. Headline names come from CMC's top 100 (cached a day). A coin without an OKX swap is no longer listed as missing flow.
 - Why: day-old "newest" headlines were noise, the 22 Oct war scare had no source, and coins outside a hand-kept 20-name list were matched by ticker only.
-- Number: 20 hand-kept coin names down to 4 aliases; 1 CMC credit a day; 147 tests pass.
+- Number: 20 hand-kept coin names down to 4 aliases; 1 CMC credit a day; 148 tests pass.
