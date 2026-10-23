@@ -87,18 +87,33 @@ def whales(symbol: str) -> View:
 
 
 def news(symbol: str, limit: int) -> View:
-    """Recent headlines that name the coin; the agent judges their sentiment."""
+    """The coin's most read headlines of 14 days; the agent judges their sentiment."""
     items = newsapi.headlines(symbol, limit)
-    data: dict[str, Any] = {
-        "symbol": symbol.upper(),
+    label = f"{symbol.upper()} news, {newsapi.COIN_DAYS} days"
+    return _headlines({"symbol": symbol.upper(), "days": newsapi.COIN_DAYS}, label, items)
+
+
+def world_news(limit: int) -> View:
+    """The most read world news of 3 days that moves markets beyond crypto."""
+    items = newsapi.world(limit)
+    label = f"World news, {newsapi.WORLD_DAYS} days"
+    return _headlines({"days": newsapi.WORLD_DAYS}, label, items)
+
+
+def _headlines(data: dict[str, Any], label: str, items: list[newsapi.Headline]) -> View:
+    head = f"{label}, most read first (about 24 h delayed)"
+    data = {
+        **data,
         "delayed_24h": True,
         "headlines": [{"title": h.title, "source": h.source, "url": h.url} for h in items],
     }
     if not items:
         data["note"] = NO_NEWS
-        return View(data, f"{symbol.upper()} news (about 24 h delayed): {NO_NEWS}")
-    lines = [f"{symbol.upper()} news (about 24 h delayed): {len(items)}"]
-    lines += [f"- {_short(h.title)} ({h.source})" for h in items]
+        return View(data, f"{head}: {NO_NEWS}")
+    shown = items[: TELEGRAM_MAX_LINES - 1]
+    more = f", {len(shown)} shown" if len(shown) < len(items) else ""
+    lines = [f"{head}: {len(items)}{more}"]
+    lines += [f"- {_short(h.title)} ({h.source})" for h in shown]
     return View(data, _lines(lines))
 
 

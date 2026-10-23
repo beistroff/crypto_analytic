@@ -19,7 +19,7 @@ import requests
 from sentinel import net
 from sentinel.config import get_settings
 from sentinel.data import SourceError
-from sentinel.data.newsapi import Headline, names_coin
+from sentinel.data.newsapi import Headline, coin_names, names_coin
 
 WINDOW = timedelta(hours=24)
 # Feeds are optional extras: give up sooner than the 10 s default so one slow feed does
@@ -50,7 +50,7 @@ class Feeds:
     def coin(self, symbol: str, limit: int = 5) -> list[Headline]:
         """The newest headlines that name the coin (its ticker in capitals, or its name)."""
         ticker = symbol.upper()
-        names = get_settings().coin_names.get(ticker, ())
+        names = coin_names(ticker)
         found = [i.headline for i in self.items if names_coin(i.headline.title, ticker, names)]
         return found[:limit]
 

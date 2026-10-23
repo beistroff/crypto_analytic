@@ -121,7 +121,7 @@ class Snapshot(BaseModel):
     market: Market | None
     macro: Macro | None
     coin_news_fresh: list[Headline] | None  # RSS, last 24 h
-    coin_news: list[Headline] | None  # NewsAPI, about a day old
+    coin_news: list[Headline] | None  # NewsAPI, last 14 days, most read first
     news_delayed_24h: bool = True
     flow: Flow | None
     technicals: Technicals | None

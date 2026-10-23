@@ -63,6 +63,7 @@ def _isolated_env(request, monkeypatch, tmp_path):
 @pytest.fixture(autouse=True)
 def _fresh_state(monkeypatch):
     get_settings.cache_clear()
+    cmc.names.cache_clear()
     aws.clear_cache()
     monkeypatch.setattr(net, "_sessions", {})
     monkeypatch.setattr(log, "_secrets", set())

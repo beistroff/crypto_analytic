@@ -89,7 +89,8 @@ Commands (JSON by default, `--format telegram` for 5 lines or fewer):
 | `sentinel market overview [--symbol BTC,SOL]` | Fear & Greed, BTC dominance, market cap change, stablecoin share, quotes |
 | `sentinel market candles SYM [--tf 1w\|1d\|4h\|1h\|15m] [--limit 104]` | UTC candles for any span, from scalps (15m) to years (1w, the default: 2 years), up to 300, with the range high and low |
 | `sentinel market top [--limit 15]`, `market scalp [--limit 50]`, `market whales SYM` | Legacy rule signals, scalp candidates, a rough whale check |
-| `sentinel news long SYM [--limit 3]` | NewsAPI headlines that name the coin (about 24 h delayed; the snapshot adds fresh ones from free RSS feeds, no key) |
+| `sentinel news long SYM [--limit 3]` | The coin's most read NewsAPI headlines of 14 days (about 24 h delayed; the snapshot adds fresh ones from free RSS feeds, no key) |
+| `sentinel news world [--limit 5]` | The most read world news of 3 days that moves markets beyond crypto (rates, policy, bans, war, AI) |
 | `sentinel watch add SYM --trigger touch_below\|close_below\|close_above --level N [--tf 1d\|4h] [--stop N] [--target N] [--note ...]`, `watch list`, `watch remove ID` | Stored watches in `sentinel-sim`; `watch check` runs as an OpenClaw automation every 15 min (no LLM) and Telegram gets one alert per hit |
 | `sentinel health`, `sentinel config show` | Readiness checks, settings |
 

@@ -195,8 +195,17 @@ def news() -> None:
 @FORMAT
 @_source_errors
 def news_long(symbol: str, limit: int, fmt: str) -> None:
-    """NewsAPI headlines (about 24 h delayed): longer-range research."""
+    """The coin's most read NewsAPI headlines of 14 days (about 24 h delayed)."""
     _emit(views.news(symbol, limit), fmt)
+
+
+@news.command("world")
+@click.option("--limit", type=click.IntRange(1, 10), default=5)
+@FORMAT
+@_source_errors
+def news_world(limit: int, fmt: str) -> None:
+    """World news of 3 days that moves markets (rates, policy, bans, war, AI), most read first."""
+    _emit(views.world_news(limit), fmt)
 
 
 @cli.group()
