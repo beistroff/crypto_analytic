@@ -54,10 +54,34 @@ def test_news_asks_for_ticker_and_name_and_drops_unrelated_titles(apis):
     assert [h.source for h in items] == ["Example Wire", "Example Markets"]
     request = apis.news.seen[0]
     query = parse_qs(urlsplit(request.path).query)
+    # "Solana" is CMC's name for SOL (the listing fixture).
     terms = '("SOL" OR "Solana") AND (crypto OR cryptocurrency OR blockchain OR token)'
-    assert (query["q"], query["language"]) == ([terms], ["en"])
+    assert (query["q"], query["language"], query["sortBy"]) == ([terms], ["en"], ["popularity"])
     assert request.headers["X-Api-Key"] == apis.keys.news
     assert apis.keys.news not in request.path
+
+
+def test_coin_names_without_cmc_fall_back_to_config(apis):
+    apis.cmc.routes["/v1/cryptocurrency/listings/latest"] = (500, {})
+    assert (newsapi.coin_names("SOL"), newsapi.coin_names("BTC")) == ((), ("Bitcoin",))
+
+
+def test_world_news_once_per_title_without_removed_articles(apis):
+    story = {"source": {"name": "Example Wire"}, "title": "Fed holds rates", "url": "u1"}
+    copy = {**story, "source": {"name": "Example Copy"}, "url": "u2"}
+    removed = {"source": {"name": "[Removed]"}, "title": "[Removed]", "url": "u3"}
+    apis.news.routes["/v2/everything"] = (
+        200,
+        {},
+        {"status": "ok", "articles": [story, copy, removed]},
+    )
+    lines = _run("news", "world", "--format", "telegram").stdout.strip().splitlines()
+    assert lines == [
+        "World news, 3 days, most read first (about 24 h delayed): 1",
+        "- Fed holds rates (Example Wire)",
+    ]
+    query = parse_qs(urlsplit(apis.news.seen[0].path).query)
+    assert (query["q"], query["searchIn"]) == ([newsapi.WORLD_QUERY], ["title"])
 
 
 # --- legacy rules (RULES baseline) -----------------------------------------------------
@@ -153,7 +177,7 @@ def test_whales(apis, symbol, alert):
 def test_news_telegram(apis):
     result = _run("news", "long", "SOL", "--format", "telegram")
     lines = result.stdout.strip().splitlines()
-    assert lines[0] == "SOL news (about 24 h delayed): 2"
+    assert lines[0] == "SOL news, 14 days, most read first (about 24 h delayed): 2"
     assert len(lines) <= 5
 
 

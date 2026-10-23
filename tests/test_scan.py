@@ -20,7 +20,7 @@ def _listing(symbol, change_24h=1.2, change_7d=-3.4):
         "percent_change_7d": change_7d,
         "market_cap": 1e10,
     }
-    return {"symbol": symbol, "quote": {"USD": usd}}
+    return {"symbol": symbol, "name": f"{symbol} coin", "quote": {"USD": usd}}
 
 
 @pytest.fixture

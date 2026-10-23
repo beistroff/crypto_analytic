@@ -112,8 +112,14 @@ def test_btc_snapshot_has_no_comparison_with_itself(trending):
     assert data["market"]["headlines"] == []
 
 
-def test_missing_sources_become_null(trending):
+def test_coin_without_a_swap_has_no_flow_and_nothing_missing(trending):
     trending.okx.routes[flow.FUNDING] = (200, {}, {"code": "51001", "data": [], "msg": ""})
+    data = json.loads(_run("XMR"))
+    assert (data["flow"], data["missing"]) == (None, [])
+
+
+def test_missing_sources_become_null(trending):
+    trending.okx.routes[flow.FUNDING] = (500, {})
     trending.fng.routes["/fng/"] = (200, {}, {"data": []})  # malformed reply
     trending.news.routes["/v2/everything"] = (401, {}, {"status": "error", "code": "apiKeyInvalid"})
     trending.rss.routes["/rss"] = (200, {}, b"<html>maintenance</html>")  # not a feed

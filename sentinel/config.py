@@ -48,29 +48,14 @@ class HttpSettings(BaseModel):
     min_interval_s: MinIntervals = Field(default_factory=MinIntervals)
 
 
-# Names a coin goes by in headlines, besides its ticker. A ticker alone matches unrelated
-# words ("SOL" in Spanish, "ONE", "LINK"), so news queries search for both.
+# Names a coin goes by in headlines besides its ticker and its CMC name (top 100, from
+# ``cmc.names``). A ticker alone matches unrelated words ("SOL" in Spanish, "ONE", "LINK"),
+# so news queries search for both. Bitcoin and Ethereum are kept for when CMC is down.
 COIN_NAMES: dict[str, tuple[str, ...]] = {
     "BTC": ("Bitcoin",),
     "ETH": ("Ethereum", "Ether"),
-    "SOL": ("Solana",),
     "XRP": ("Ripple",),
     "BNB": ("Binance Coin",),
-    "DOGE": ("Dogecoin",),
-    "ADA": ("Cardano",),
-    "TRX": ("Tron",),
-    "AVAX": ("Avalanche",),
-    "LINK": ("Chainlink",),
-    "DOT": ("Polkadot",),
-    "TON": ("Toncoin",),
-    "SUI": ("Sui",),
-    "LTC": ("Litecoin",),
-    "XLM": ("Stellar",),
-    "HBAR": ("Hedera",),
-    "XMR": ("Monero",),
-    "NEAR": ("NEAR Protocol",),
-    "APT": ("Aptos",),
-    "UNI": ("Uniswap",),
 }
 
 # Free crypto news feeds (no key, minutes old, unlike NewsAPI's free plan), by the name

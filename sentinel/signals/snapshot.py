@@ -1,13 +1,14 @@
 """One coin's snapshot in the signal hierarchy (plan, Appendix C).
 
 BTC first (its regime outweighs the coin's own signal), then market mood and BTC's latest
-headlines, macro, the coin's news (fresh from RSS, then NewsAPI's day-old headlines), derivatives
+headlines, macro, the coin's news (fresh from RSS, then NewsAPI's most read of 14 days), derivatives
 flow and the coin's technicals, range levels, a 4h setup and strength against BTC. Code computes
 every number; the agent reads them and decides.
 
 Sources are fetched in parallel. A source that fails becomes ``null`` and is named in
 ``missing`` (a single news feed as ``rss:<name>``), so one bad source never fails the
-whole snapshot. Candles come from
+whole snapshot. A coin without an OKX swap has no flow by design: ``null``, not missing.
+Candles come from
 ``sentinel.data.exchange`` (cached for 5 minutes, so BTC is fetched once per scan).
 """
 
@@ -34,6 +35,7 @@ SETUP_CANDLES = 12  # 48 h of 4h candles
 STOP_BUFFER_ATR = 0.25
 NOISE_DAILY_ATR = 0.5  # a stop closer than half a day's ATR sits in an ordinary swing
 NEWS_LIMIT = 3
+POPULAR_NEWS_LIMIT = 2
 MARKET_NEWS_LIMIT = 2
 TITLE_WIDTH = 120
 
@@ -49,7 +51,7 @@ def build(symbol: str) -> schema.Snapshot:
         "feargreed": feargreed.latest,
         "cmc_global": cmc.global_metrics,
         "rss": lambda: news_rss.recent(now),
-        "news": lambda: newsapi.headlines(symbol, NEWS_LIMIT),
+        "news": lambda: newsapi.headlines(symbol, POPULAR_NEWS_LIMIT),
         "flow": lambda: flow.flow(symbol),
         "h4": lambda: exchange.candles(symbol, "4h", H4_LIMIT),
     }
@@ -97,7 +99,7 @@ def build(symbol: str) -> schema.Snapshot:
         macro=macro,
         coin_news_fresh=news["fresh"],
         coin_news=news["delayed"],
-        flow=_flow(got["flow"]) if "flow" in got else None,
+        flow=_flow(got["flow"]) if got.get("flow") else None,
         technicals=coin_technicals,
         levels=levels,
         setup=_setup(h4, daily, hourly.price, levels) if h4 and hourly else None,
@@ -107,13 +109,17 @@ def build(symbol: str) -> schema.Snapshot:
 
 
 def _fetch(jobs: dict[str, Callable[[], Any]]) -> dict[str, Any]:
-    """Run every job in parallel; failed jobs are left out of the result."""
+    """Run every job in parallel; failed jobs are left out of the result, and a coin the
+    exchange does not list (no OKX swap for XMR) is ``None``: expected, not a fault."""
     with ThreadPoolExecutor(max_workers=len(jobs)) as pool:
         futures = {name: pool.submit(job) for name, job in jobs.items()}
     results = {}
     for name, future in futures.items():
         try:
             results[name] = future.result()
+        except NotListed:
+            log.info("source not listed", extra={"source": name})
+            results[name] = None
         # The last four: a reply that is not the expected JSON (e.g. a maintenance page).
         except (
             SourceError,
@@ -124,11 +130,7 @@ def _fetch(jobs: dict[str, Callable[[], Any]]) -> dict[str, Any]:
             IndexError,
             TypeError,
         ) as exc:
-            # A coin an exchange does not list (no OKX swap for XMR) is expected, not a fault.
-            level = logging.INFO if isinstance(exc, NotListed) else logging.WARNING
-            log.log(
-                level, "source unavailable", extra={"source": name, "error": type(exc).__name__}
-            )
+            log.warning("source unavailable", extra={"source": name, "error": type(exc).__name__})
     return results
 
 

@@ -56,3 +56,8 @@ Short notes per merged PR, newest last: what changed, why, and one number. Detai
 - The snapshot computes a 4h setup: trigger (4h close above the 48 h close high), stop 0.25 ATR under the 48 h wick low with its distance in % and ATR, a `stop_in_noise` flag, the pullback zone and room to the 30-day high; 4h and 1h RSI join the daily one.
 - Why: the agent improvised triggers and stops per coin, once a stop inside one day's range; trades last 12 h to 7 days, so daily levels were too wide.
 - Number: one more candle request per snapshot, about 150 characters more JSON; 144 tests pass.
+
+## #20 News rework, CMC coin names, no-swap flow (23 Oct)
+- NewsAPI coin news is the most read of 14 days (2 in the snapshot); `sentinel news world` gives the most read market-moving world news of 3 days, run by the agent only when needed. Headline names come from CMC's top 100 (cached a day). A coin without an OKX swap is no longer listed as missing flow.
+- Why: day-old "newest" headlines were noise, the 22 Oct war scare had no source, and coins outside a hand-kept 20-name list were matched by ticker only.
+- Number: 20 hand-kept coin names down to 4 aliases; 1 CMC credit a day; 147 tests pass.

@@ -1,22 +1,36 @@
 """CoinMarketCap Pro API (Basic plan): listings, quotes and global metrics.
 
 Credits: listings cost 1 per 100 coins, a quotes call 1 per 100 symbols, global metrics 1.
+Coin names (for matching headlines) come from the top 100 listing, cached on disk for a
+day: 1 credit a day.
 """
 
 from __future__ import annotations
 
+import functools
+import json
+import logging
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
+import requests
+
 from sentinel import aws, net
+from sentinel.config import get_settings
 from sentinel.data import SourceError
 
 BASE_URL = "https://pro-api.coinmarketcap.com"
+NAMES_LIMIT = 100
+NAMES_MAX_AGE = timedelta(days=1)
+
+log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
 class Coin:
     symbol: str
+    name: str
     price: float
     change_1h: float | None
     change_24h: float
@@ -54,6 +68,32 @@ def quotes(symbols: list[str]) -> dict[str, Coin]:
     return {s: _coin(data[s]) for s in wanted if isinstance(data.get(s), dict)}
 
 
+@functools.cache
+def names() -> dict[str, str]:
+    """Coin names by ticker for the top 100 (``{"SOL": "Solana"}``), read once per process
+    from a file cached for a day. Empty when CMC cannot be reached: headlines are then
+    matched by ticker and the aliases in config."""
+    path = get_settings().cache_dir / "cmc_names.json"
+    try:
+        cached = json.loads(path.read_text(encoding="utf-8"))
+        if datetime.now(UTC) - datetime.fromisoformat(cached["fetched_at"]) < NAMES_MAX_AGE:
+            return cached["names"]
+    except (OSError, ValueError, KeyError, TypeError):
+        pass  # no cache yet, or an unreadable one
+    try:
+        found = {c.symbol: c.name for c in listings(NAMES_LIMIT)}
+    except (SourceError, aws.SecretError, requests.RequestException, KeyError) as exc:
+        log.warning("coin names unavailable", extra={"error": type(exc).__name__})
+        return {}
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        cached = {"fetched_at": datetime.now(UTC).isoformat(), "names": found}
+        path.write_text(json.dumps(cached), encoding="utf-8")
+    except OSError as exc:
+        log.warning("coin names not cached", extra={"error": type(exc).__name__})
+    return found
+
+
 def global_metrics() -> Market:
     """Market-wide context: BTC dominance, total market cap 24 h change, stablecoin share."""
     data = _get("/v1/global-metrics/quotes/latest", {"convert": "USD"})
@@ -87,6 +127,7 @@ def _coin(raw: dict[str, Any]) -> Coin:
     usd = raw["quote"]["USD"]
     return Coin(
         symbol=raw["symbol"],
+        name=raw["name"],
         price=usd["price"],
         change_1h=usd.get("percent_change_1h"),
         change_24h=usd["percent_change_24h"],
