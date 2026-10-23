@@ -23,6 +23,7 @@ HIERARCHY = [
     "flow",
     "technicals",
     "levels",
+    "setup",
     "vs_btc",
     "missing",
 ]
@@ -71,7 +72,21 @@ def test_snapshot_in_hierarchy_order_and_within_budget(trending):
     assert data["levels"]["d7"]["wick_low"] == pytest.approx(100 * 1.001**-6 * 0.99, rel=1e-5)
     assert data["levels"]["d7"]["wick_low_date"] == "2026-10-11"
     assert data["vs_btc"]["rs_7d"] == 0.0  # the same trend as BTC
-    assert len(_run("SOL", "--format", "telegram").strip().splitlines()) == 4  # nothing missing
+    assert data["technicals"]["rsi14_4h"] == data["technicals"]["rsi14_1h"] == 100.0
+    # 4h candles: the price is 100 and each finished close 0.1% below the next one. Of the
+    # last 12 (48 h) the highest finished close is one candle back, the wick low 11 back;
+    # every true range is 2% of its close, so the 4h ATR is 1.974 (2% of the recent closes).
+    setup = data["setup"]
+    assert setup["trigger"] == pytest.approx(100 * 1.001**-1, rel=1e-5)
+    assert setup["stop"] == pytest.approx(100 * 1.001**-11 * 0.99 - 0.25 * 1.974, abs=1e-3)
+    # 100 - 97.424 = 2.576: 2.58% and 1.3 ATR away, so outside the noise.
+    assert (setup["stop_pct"], setup["stop_atr"], setup["stop_in_noise"]) == (2.58, 1.3, False)
+    # Pullback: 4h SMA50 (the mean of the last 50 closes) up to the 48 h close low.
+    sma50 = sum(100 * 1.001**-k for k in range(50)) / 50
+    assert setup["pullback_low"] == pytest.approx(sma50, rel=1e-5)
+    assert setup["pullback_high"] == pytest.approx(100 * 1.001**-11, rel=1e-5)
+    assert setup["room_pct"] == 1.0  # today's daily wick high is 1% above the price
+    assert len(_run("SOL", "--format", "telegram").strip().splitlines()) == 5  # nothing missing
 
 
 def test_btc_snapshot_has_no_comparison_with_itself(trending):

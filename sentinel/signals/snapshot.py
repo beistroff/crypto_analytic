@@ -2,7 +2,7 @@
 
 BTC first (its regime outweighs the coin's own signal), then market mood and BTC's latest
 headlines, macro, the coin's news (fresh from RSS, then NewsAPI's day-old headlines), derivatives
-flow and the coin's technicals, range levels and strength against BTC. Code computes
+flow and the coin's technicals, range levels, a 4h setup and strength against BTC. Code computes
 every number; the agent reads them and decides.
 
 Sources are fetched in parallel. A source that fails becomes ``null`` and is named in
@@ -29,6 +29,9 @@ from sentinel.signals import btc_regime, indicators, schema
 
 DAILY_LIMIT = 300  # SMA200 plus 90 days for beta
 HOURLY_LIMIT = 200  # 7 days of hourly closes, with room to spare
+H4_LIMIT = 100  # SMA50 and a settled ATR and RSI
+SETUP_CANDLES = 12  # 48 h of 4h candles
+STOP_BUFFER_ATR = 0.25
 NEWS_LIMIT = 3
 MARKET_NEWS_LIMIT = 2
 TITLE_WIDTH = 120
@@ -47,6 +50,7 @@ def build(symbol: str) -> schema.Snapshot:
         "rss": lambda: news_rss.recent(now),
         "news": lambda: newsapi.headlines(symbol, NEWS_LIMIT),
         "flow": lambda: flow.flow(symbol),
+        "h4": lambda: exchange.candles(symbol, "4h", H4_LIMIT),
     }
     if symbol != "BTC":
         jobs["daily"] = lambda: exchange.candles(symbol, "1d", DAILY_LIMIT)
@@ -59,8 +63,8 @@ def build(symbol: str) -> schema.Snapshot:
     btc_daily, btc_hourly = got.get("btc_daily"), got.get("btc_hourly")
     if btc_daily is None or btc_hourly is None:
         missing.append("btc_candles")
-    daily, hourly = got.get("daily"), got.get("hourly")
-    if symbol != "BTC" and (daily is None or hourly is None):
+    daily, hourly, h4 = got.get("daily"), got.get("hourly"), got.get("h4")
+    if (symbol != "BTC" and (daily is None or hourly is None)) or h4 is None:
         missing.append("candles")
     sources = ("feargreed", "cmc_global", "rss", "news", "flow")
     missing += [name for name in sources if name not in got]
@@ -72,7 +76,8 @@ def build(symbol: str) -> schema.Snapshot:
         missing.append("fomc_calendar")
 
     metrics = got.get("cmc_global")
-    coin_technicals = technicals(daily, hourly) if daily and hourly else None
+    coin_technicals = technicals(daily, hourly, h4) if daily and hourly else None
+    levels = _levels(daily) if daily else None
     btc_technicals = technicals(btc_daily, btc_hourly) if btc_daily and btc_hourly else None
     news = _news(symbol, feeds, got.get("news"))
     return schema.Snapshot(
@@ -93,7 +98,8 @@ def build(symbol: str) -> schema.Snapshot:
         coin_news=news["delayed"],
         flow=_flow(got["flow"]) if "flow" in got else None,
         technicals=coin_technicals,
-        levels=_levels(daily) if daily else None,
+        levels=levels,
+        setup=_setup(h4, hourly.price, levels) if h4 and hourly else None,
         vs_btc=_vs_btc(daily, btc_daily) if symbol != "BTC" and daily and btc_daily else None,
         missing=missing,
     )
@@ -125,7 +131,9 @@ def _fetch(jobs: dict[str, Callable[[], Any]]) -> dict[str, Any]:
     return results
 
 
-def technicals(daily: exchange.Candles, hourly: exchange.Candles) -> schema.Technicals:
+def technicals(
+    daily: exchange.Candles, hourly: exchange.Candles, h4: exchange.Candles | None = None
+) -> schema.Technicals:
     closes = [c.close for c in daily.candles]
     price = hourly.price
     sma50, sma200 = indicators.sma(closes, 50), indicators.sma(closes, 200)
@@ -135,6 +143,8 @@ def technicals(daily: exchange.Candles, hourly: exchange.Candles) -> schema.Tech
     }
     return schema.Technicals(
         rsi14=rounded(indicators.rsi(closes), 1),
+        rsi14_4h=rounded(indicators.rsi([c.close for c in h4.candles]), 1) if h4 else None,
+        rsi14_1h=rounded(indicators.rsi([c.close for c in hourly.candles]), 1),
         sma20=sig(indicators.sma(closes, 20)),
         sma50=sig(sma50),
         sma200=sig(sma200),
@@ -217,6 +227,28 @@ def _levels(daily: exchange.Candles) -> schema.Levels:
         return schema.Range(**{k: sig(v) if isinstance(v, float) else v for k, v in found.items()})
 
     return schema.Levels(d7=edges(7), d30=edges(30))
+
+
+def _setup(h4: exchange.Candles, price: float, levels: schema.Levels | None) -> schema.Setup | None:
+    """Trigger, stop and pullback zone on 4h candles (rules in ``schema.Setup``)."""
+    edges = indicators.range_edges(h4.candles, SETUP_CANDLES)
+    atr = indicators.atr(h4.candles)
+    if edges is None or atr is None:
+        return None
+    stop = edges["wick_low"] - STOP_BUFFER_ATR * atr
+    sma50 = indicators.sma([c.close for c in h4.candles], 50)
+    zone = sorted((sma50, edges["close_low"])) if sma50 is not None and price > sma50 else None
+    month = levels.d30 if levels else None
+    return schema.Setup(
+        trigger=sig(edges["close_high"]),
+        stop=sig(stop),
+        stop_pct=rounded((price - stop) / price * 100),
+        stop_atr=rounded((price - stop) / atr),
+        stop_in_noise=price - stop < atr,
+        pullback_low=sig(zone[0]) if zone else None,
+        pullback_high=sig(zone[1]) if zone else None,
+        room_pct=rounded(indicators.pct(month.wick_high, price)) if month else None,
+    )
 
 
 def _vs_btc(daily: exchange.Candles, btc_daily: exchange.Candles) -> schema.VsBtc:

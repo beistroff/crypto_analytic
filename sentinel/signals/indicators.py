@@ -10,9 +10,10 @@ Conventions:
   the hourly close nearest to that many hours ago.
 - Day returns (relative strength) come from daily closes: the latest price against the
   close of the UTC day ``n`` days before today, so a 1-day return is "today so far".
-- Range edges: the wick low and high (candle lows and highs, including today's) and the
-  close low and high (closes of finished days only) over the last ``days`` daily candles.
-  A level is either a wick or a close level; the two are never mixed.
+- Range edges: the wick low and high (candle lows and highs, including the open one) and
+  the close low and high (closes of finished candles only) over the last ``count`` candles
+  (days on daily candles). A level is either a wick or a close level; the two are never
+  mixed.
 """
 
 from __future__ import annotations
@@ -92,11 +93,11 @@ def volume_z(daily: list[Candle], days: int = 30) -> float | None:
     return (finished[-1] - fmean(before)) / spread if spread else None
 
 
-def range_edges(daily: list[Candle], days: int) -> dict[str, float | str] | None:
-    """Wick and close range of the last ``days`` daily candles, with the UTC dates."""
-    window = daily[-days:]
+def range_edges(candles: list[Candle], count: int) -> dict[str, float | str] | None:
+    """Wick and close range of the last ``count`` candles, with the UTC dates."""
+    window = candles[-count:]
     finished = [c for c in window if c.closed]
-    if len(window) < days or not finished:
+    if len(window) < count or not finished:
         return None
     low = min(window, key=lambda c: c.low)
     high = max(window, key=lambda c: c.high)
