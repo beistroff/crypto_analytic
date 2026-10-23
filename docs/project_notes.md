@@ -46,3 +46,8 @@ Short notes per merged PR, newest last: what changed, why, and one number. Detai
 - `sentinel market candles` (weekly by default, 15m for scalps), the trading approach in `AGENTS.md`, the daily scan prompt in the repo, `docs/RELEASING.md`.
 - Why: asked about a coin's past year, the agent saw 10 months, because OKX lists it only since Nov 2025.
 - Number: the same coin now covers 2 years of weekly candles from Kraken (104 candles).
+
+## #18 Trade journal, part 2 (23 Oct)
+- A `trade-journal` skill journals trades and reads the balance through `sentinel`; the agent no longer reads a markdown journal. The daily S3 backup runs as an OpenClaw command automation, and old backups expire by a lifecycle rule.
+- Why: portfolio numbers must come from DynamoDB only; backups belong to the deployment, not to the CLI, and cost nothing as a command automation.
+- Number: 0 lines of Python changed; `backups/` kept for 30 days.

@@ -60,8 +60,8 @@ The plan is split in three. **Core** makes the agent useful day to day: good mar
 | 4 | Core | Trade journal, part 1: 1.4 item layouts, 1.5 data layer, `trade add`, `portfolio summary` | Done |
 | 5 | Core | 1.9 watches and alerts | Done |
 | 5a | Core | Polish after step 5: `market candles` (weekly history), the gate emoji, the daily scan prompt in the repo, `docs/RELEASING.md` | Done |
-| 6 | Core | Trade journal, part 2: `trade-journal` skill, daily backup as an OpenClaw command automation; 1.3 S3 lifecycle rule (decided 22 and 23 Oct: lessons stay in `memory/lessons_learned.md`, no import of the markdown journal, no DynamoDB export) | Next |
-| 7 | Core | 2.10 setup block in the snapshot | |
+| 6 | Core | Trade journal, part 2: `trade-journal` skill, daily backup as an OpenClaw command automation; 1.3 S3 lifecycle rule (decided 22 and 23 Oct: lessons stay in `memory/lessons_learned.md`, no import of the markdown journal, no DynamoDB export) | Done |
+| 7 | Core | 2.10 setup block in the snapshot | Next |
 | 8 | Core | 2.4 NewsAPI rework and `news world`, CMC coin names, no-swap flow out of `missing` | |
 | 9 | Core | 2.11 scan watchlist | |
 | 10 | Core | Minimal prediction journal: 3.3 validator, 3.4 log, 3.6 outcome scorer, 3.7 export and review skill | |
@@ -217,7 +217,7 @@ Read each legacy script first and keep its behaviour, then improve.
 - [x] OpenClaw installed through the installer with `--version` and `--no-onboard`; `openclaw_version` variable and a check block warn until it is pinned. Record the version in `TOOLS.md` after the first bring-up.
 - [x] IAM least privilege: both tables and their indexes, no `Scan`, SSM `/sentinel/*` read only, S3 read/write on the backup bucket and delete only under `strategy-share/`. Session Manager through AWS's minimal instance policy, not `AmazonSSMManagedInstanceCore` (which allows reading every SSM parameter in the account). Terraform owns the role's complete policy set (`aws_iam_role_policy_attachments_exclusive`, `aws_iam_role_policies_exclusive`), so a policy attached by hand shows in the plan and is removed. Later: SQS receive/delete.
 - [x] State in S3 with native lock files (`env/bootstrap`, neutral committed bucket name); provider lock files committed; CI runs fmt, validate, tflint, shellcheck and gitleaks.
-- [ ] S3 lifecycle rule on the backup bucket (expire old `backups/` objects) so it stays under 5 GB; the bucket is not Terraform-managed, so import it or set the rule once.
+- [x] S3 lifecycle rule on the backup bucket (expire old `backups/` objects) so it stays under 5 GB; the bucket is not Terraform-managed, so import it or set the rule once.
 - [ ] Optional: `terraform_remote_state` instead of passing the instance profile name as a string.
 
 **Accept (Stage A):** `terraform fmt -check`, `validate` and `plan` are clean in every env. **Accept (Stage B, first bring-up):** a fresh instance boots to a working venv and OpenClaw is onboarded (document the manual `openclaw onboard` steps in `openclaw/README.md`).
@@ -247,8 +247,8 @@ Only the lessons move over. Positions and the baseline are entered fresh at brin
 **Accept:** the dry run prints the count; `sentinel lesson list` shows every reviewed lesson.
 
 ### 1.7 Switch the trade journal to DynamoDB
-- [ ] Commands: `sentinel trade add --side buy|sell --symbol SOL --qty 1.35 --price 72.6 [--fee 0.1]`, `sentinel portfolio summary --format telegram|json`. The daily `ops/s3_backup.sh` runs as an OpenClaw command automation (no model call); there is no `backup export` (decided 23 Oct: backups are the deployment's business, not the CLI's).
-- [ ] New skill folder `openclaw/workspace/skills/trade-journal/SKILL.md`; update `TOOLS.md`; stop all JSON portfolio writes.
+- [x] Commands: `sentinel trade add --side buy|sell --symbol SOL --qty 1.35 --price 72.6 [--fee 0.1]`, `sentinel portfolio summary --format telegram|json`. The daily `ops/s3_backup.sh` runs as an OpenClaw command automation (no model call); there is no `backup export` (decided 23 Oct: backups are the deployment's business, not the CLI's).
+- [x] New skill folder `openclaw/workspace/skills/trade-journal/SKILL.md`; update `TOOLS.md`; stop all JSON portfolio writes.
 - [ ] [Later] `sentinel lesson add|list` with `LESSON` items, together with 1.6 (decided 22 Oct: until then lessons stay in `memory/lessons_learned.md`, which the agent reads and the daily S3 backup covers).
 - [ ] [Later] `sentinel lesson share` (daily, after the backup): renders the approved `LESSON` items as `beistroff_lessons_learned.md`, redacts dollar amounts, quantities and the baseline (rules and % results stay), and replaces yesterday's copy in your own subfolder of the shared Google Drive folder (F.9). `sentinel lesson auth` runs the one-time Google consent from the laptop. Defaults chosen 2026-10-15, change if you prefer: redacted, folder owned by the dedicated Google account.
 
