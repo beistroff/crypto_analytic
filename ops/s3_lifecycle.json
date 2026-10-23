@@ -1,0 +1,18 @@
+{
+  "Rules": [
+    {
+      "ID": "expire-old-backups",
+      "Status": "Enabled",
+      "Filter": { "Prefix": "backups/" },
+      "Expiration": { "Days": 30 },
+      "NoncurrentVersionExpiration": { "NoncurrentDays": 7 },
+      "AbortIncompleteMultipartUpload": { "DaysAfterInitiation": 7 }
+    },
+    {
+      "ID": "clean-delete-markers",
+      "Status": "Enabled",
+      "Filter": { "Prefix": "backups/" },
+      "Expiration": { "ExpiredObjectDeleteMarker": true }
+    }
+  ]
+}

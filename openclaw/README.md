@@ -50,7 +50,7 @@ Done by hand over SSM once bootstrap has finished (`~/sentinel/.ready` exists). 
    openclaw approvals allowlist add --agent main "/home/ubuntu/sentinel/venv/bin/sentinel"
    openclaw approvals allowlist add --agent main "/home/ubuntu/sentinel/src/ops/*.sh"
    ```
-9. Workspace: copy `SOUL.md`, `IDENTITY.md`, `AGENTS.md`, `TOOLS.md` and `memory/lessons_learned.md` from `~/sentinel/src/openclaw/workspace/` into `~/.openclaw/workspace/`, write `USER.md` from `USER.md.example` by hand (it stays on the instance), and delete `BOOTSTRAP.md`.
+9. Workspace: copy `SOUL.md`, `IDENTITY.md`, `AGENTS.md`, `TOOLS.md`, `skills/` and `memory/lessons_learned.md` from `~/sentinel/src/openclaw/workspace/` into `~/.openclaw/workspace/`, write `USER.md` from `USER.md.example` by hand (it stays on the instance), and delete `BOOTSTRAP.md`.
 10. Run `openclaw config validate && systemctl --user start openclaw-gateway.service`. In Telegram send `/new`, then "run a health check".
 11. Watch alerts (plan 1.9): an OpenClaw command automation runs `sentinel watch check` every 15 minutes with no model call. A hit prints a short alert, which goes to your Telegram chat; a quiet run prints `NO_REPLY` and sends nothing. `SENTINEL_LOG_LEVEL=ERROR` keeps routine warnings (stderr) out of the chat.
     ```bash
@@ -61,6 +61,18 @@ Done by hand over SSM once bootstrap has finished (`~/sentinel/.ready` exists). 
 12. Daily market scan: an agent automation at 07:00 UTC whose prompt is `openclaw/automations/daily-scan.md`. After a release that changes the file, set it again on the existing job (`openclaw automations list` shows the id):
     ```bash
     openclaw automations edit <id> --message "$(cat ~/sentinel/src/openclaw/automations/daily-scan.md)"
+    openclaw automations run <id>
+    ```
+
+13. Backup bucket lifecycle (once, from your laptop; the instance role cannot change it, and cannot delete backups either, so S3 expires them itself): `ops/s3_lifecycle.json` expires everything under `backups/` after 30 days (older versions after 7, if the bucket is versioned), which keeps the bucket far under 5 GB. `strategy-share/` is not touched. The call replaces the bucket's whole lifecycle configuration, so look at the current one first:
+    ```bash
+    aws-vault exec sentinel-deploy -- aws s3api get-bucket-lifecycle-configuration --bucket openclaw-files
+    aws-vault exec sentinel-deploy -- aws s3api put-bucket-lifecycle-configuration --bucket openclaw-files --lifecycle-configuration file://ops/s3_lifecycle.json
+    ```
+    `get-bucket-lifecycle-configuration` should now print both rules; a `NoSuchLifecycleConfiguration` error before the first `put` is normal.
+14. Daily backup: an OpenClaw command automation runs `ops/s3_backup.sh` at 03:00 UTC with no model call and sends nothing to Telegram. It copies the workspace and the sentinel folder to `backups/<UTC stamp>/`; the DynamoDB tables are not in it (the trade journal is re-entered by hand if it is ever lost). Remove an older system crontab entry for the script first (`crontab -l`), so it does not run twice. The snap `aws` is in `/snap/bin`, which the gateway's PATH may lack:
+    ```bash
+    openclaw automations add --name "Daily backup" --cron "0 3 * * *" --tz UTC --command-argv '["/home/ubuntu/sentinel/src/ops/s3_backup.sh"]' --command-env PATH=/snap/bin:/usr/local/bin:/usr/bin:/bin --timeout-seconds 600 --no-deliver
     openclaw automations run <id>
     ```
 

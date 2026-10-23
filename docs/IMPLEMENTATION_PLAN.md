@@ -24,7 +24,7 @@ Version 2, 16 October 2026: core first, then the research track, the rest later 
 | Priorities (2026-10-16) | Core first: the agent useful day to day (market data, trade journal, lessons, a light prediction journal). Then the research track (the measured experiment, with Naive Bayes). Everything else later. The order is in 0.2; there are no dates. Deep analysis stays on Haiku with more thinking; Sonnet is not used for chat (cost). |
 | Data access | `sentinel` commands for structured, compact data; `web_fetch` for public, keyless sources (OKX candles, funding, open interest); later, when a question needs it, the CMC pass-through (2.7) for any other CMC endpoint. The agent never holds an API key: whatever is in its context can end up in replies, memory files and the S3 backup. |
 | Claude models | Sonnet 5.5 (`claude-sonnet-5-5`) and Haiku 5.5 (`claude-haiku-5-5`) through an **Anthropic API key** with $5 of prepaid credit, a $5 monthly spend limit and no auto-reload (created 2026-10-16). A Claude Pro subscription does not include API usage, and Anthropic cut subscriptions off from third-party agents like OpenClaw in April 2026, so do not depend on it. |
-| Data store | DynamoDB is the source of truth: `sentinel-real` (real trades) and `sentinel-sim` (predictions, snapshots, outcomes). Provisioned capacity (2 RCU/WCU per table and index) stays inside the always-free tier; point-in-time recovery is off. Backup is the nightly JSON export to S3 (plus a `portfolio.json` fallback on the instance); the existing daily S3 backups stay as well. Keep S3 under 5 GB with a lifecycle rule on `backups/`. |
+| Data store | DynamoDB is the source of truth: `sentinel-real` (real trades) and `sentinel-sim` (predictions, snapshots, outcomes). Provisioned capacity (2 RCU/WCU per table and index) stays inside the always-free tier; point-in-time recovery is off. The tables have no backup (decided 23 Oct: no cost, and the trade journal is re-entered by hand if lost); the daily S3 backup of the workspace stays, run by an OpenClaw command automation. Keep S3 under 5 GB with a lifecycle rule on `backups/`. |
 | Lambda | Only for jobs that need no LLM: market scans and alerts, prediction scoring, Naive Bayes retraining. Cost is effectively $0. All LLM calls run on EC2. |
 | Alerts | Lambda puts alerts on SQS; a small poller on EC2 posts them to OpenClaw's local webhook; OpenClaw writes a short warning to Telegram. No inbound ports. |
 | Naive Bayes | A sanity gate and an optional skill, never the source of truth. A deterministic validator runs before it and catches absurd answers more cheaply. |
@@ -60,8 +60,8 @@ The plan is split in three. **Core** makes the agent useful day to day: good mar
 | 4 | Core | Trade journal, part 1: 1.4 item layouts, 1.5 data layer, `trade add`, `portfolio summary` | Done |
 | 5 | Core | 1.9 watches and alerts | Done |
 | 5a | Core | Polish after step 5: `market candles` (weekly history), the gate emoji, the daily scan prompt in the repo, `docs/RELEASING.md` | Done |
-| 6 | Core | Trade journal, part 2: 1.7 lessons, nightly export, `trade-journal` skill, import from the markdown journal; 1.3 S3 lifecycle rule | Next |
-| 7 | Core | 2.10 setup block in the snapshot | |
+| 6 | Core | Trade journal, part 2: `trade-journal` skill, daily backup as an OpenClaw command automation; 1.3 S3 lifecycle rule (decided 22 and 23 Oct: lessons stay in `memory/lessons_learned.md`, no import of the markdown journal, no DynamoDB export) | Done |
+| 7 | Core | 2.10 setup block in the snapshot | Next |
 | 8 | Core | 2.4 NewsAPI rework and `news world`, CMC coin names, no-swap flow out of `missing` | |
 | 9 | Core | 2.11 scan watchlist | |
 | 10 | Core | Minimal prediction journal: 3.3 validator, 3.4 log, 3.6 outcome scorer, 3.7 export and review skill | |
@@ -217,13 +217,13 @@ Read each legacy script first and keep its behaviour, then improve.
 - [x] OpenClaw installed through the installer with `--version` and `--no-onboard`; `openclaw_version` variable and a check block warn until it is pinned. Record the version in `TOOLS.md` after the first bring-up.
 - [x] IAM least privilege: both tables and their indexes, no `Scan`, SSM `/sentinel/*` read only, S3 read/write on the backup bucket and delete only under `strategy-share/`. Session Manager through AWS's minimal instance policy, not `AmazonSSMManagedInstanceCore` (which allows reading every SSM parameter in the account). Terraform owns the role's complete policy set (`aws_iam_role_policy_attachments_exclusive`, `aws_iam_role_policies_exclusive`), so a policy attached by hand shows in the plan and is removed. Later: SQS receive/delete.
 - [x] State in S3 with native lock files (`env/bootstrap`, neutral committed bucket name); provider lock files committed; CI runs fmt, validate, tflint, shellcheck and gitleaks.
-- [ ] S3 lifecycle rule on the backup bucket (expire old `backups/` objects) so it stays under 5 GB; the bucket is not Terraform-managed, so import it or set the rule once.
+- [x] S3 lifecycle rule on the backup bucket (expire old `backups/` objects) so it stays under 5 GB; the bucket is not Terraform-managed, so import it or set the rule once.
 - [ ] Optional: `terraform_remote_state` instead of passing the instance profile name as a string.
 
 **Accept (Stage A):** `terraform fmt -check`, `validate` and `plan` are clean in every env. **Accept (Stage B, first bring-up):** a fresh instance boots to a working venv and OpenClaw is onboarded (document the manual `openclaw onboard` steps in `openclaw/README.md`).
 
 ### 1.4 DynamoDB tables in Terraform
-- [x] Two tables, provisioned capacity (2 RCU/WCU, free tier), `PK` (S) + `SK` (S), `GSI1` (`GSI1PK`, `GSI1SK`) on both, `GSI2` (`GSI2PK`, `GSI2SK`) on `sentinel-sim`, TTL attribute `ttl` on `sentinel-sim`, `deletion_protection_enabled = true` on `sentinel-real`. Point-in-time recovery is off to keep the cost at $0; the nightly export is the backup.
+- [x] Two tables, provisioned capacity (2 RCU/WCU, free tier), `PK` (S) + `SK` (S), `GSI1` (`GSI1PK`, `GSI1SK`) on both, `GSI2` (`GSI2PK`, `GSI2SK`) on `sentinel-sim`, TTL attribute `ttl` on `sentinel-sim`, `deletion_protection_enabled = true` on `sentinel-real`. Point-in-time recovery is off to keep the cost at $0; the tables have no backup.
 - [x] Item layouts exactly as in Appendix A.
 
 **Accept:** tables exist; the EC2 role can put and query; `tests/conftest.py` creates identical tables in `moto` from one shared spec.
@@ -247,11 +247,12 @@ Only the lessons move over. Positions and the baseline are entered fresh at brin
 **Accept:** the dry run prints the count; `sentinel lesson list` shows every reviewed lesson.
 
 ### 1.7 Switch the trade journal to DynamoDB
-- [ ] Commands: `sentinel trade add --side buy|sell --symbol SOL --qty 1.35 --price 72.6 [--fee 0.1]`, `sentinel portfolio summary --format telegram|json`, `sentinel lesson add|list`, `sentinel backup export` (DynamoDB to JSON in S3, nightly, next to the existing file backups).
-- [ ] New skill folder `openclaw/workspace/skills/trade-journal/SKILL.md`; update `TOOLS.md`; stop all JSON portfolio writes.
+- [x] Commands: `sentinel trade add --side buy|sell --symbol SOL --qty 1.35 --price 72.6 [--fee 0.1]`, `sentinel portfolio summary --format telegram|json`. The daily `ops/s3_backup.sh` runs as an OpenClaw command automation (no model call); there is no `backup export` (decided 23 Oct: backups are the deployment's business, not the CLI's).
+- [x] New skill folder `openclaw/workspace/skills/trade-journal/SKILL.md`; update `TOOLS.md`; stop all JSON portfolio writes.
+- [ ] [Later] `sentinel lesson add|list` with `LESSON` items, together with 1.6 (decided 22 Oct: until then lessons stay in `memory/lessons_learned.md`, which the agent reads and the daily S3 backup covers).
 - [ ] [Later] `sentinel lesson share` (daily, after the backup): renders the approved `LESSON` items as `beistroff_lessons_learned.md`, redacts dollar amounts, quantities and the baseline (rules and % results stay), and replaces yesterday's copy in your own subfolder of the shared Google Drive folder (F.9). `sentinel lesson auth` runs the one-time Google consent from the laptop. Defaults chosen 2026-10-15, change if you prefer: redacted, folder owned by the dedicated Google account.
 
-**Accept (Stage B, after first bring-up; the CLI and tests are done in Stage A):** in Telegram, "I bought 100 XRP at 1.20" creates a trade and updates the position; "show my balance" returns a short table; the nightly S3 backup still runs. **Merge gate:** manual test cases against `sentinel-sim` (as in 1.5) for lessons and the export, and a dry run of the markdown-journal import whose counts match the file, before the real import.
+**Accept (Stage B, after first bring-up; the CLI and tests are done in Stage A):** in Telegram, "I bought 100 XRP at 1.20" creates a trade and updates the position; "show my balance" returns a short table; the daily S3 backup still runs. **Merge gate:** none (no code change); the Telegram checks run after the release. The markdown journal is not imported (decided 22 Oct): the portfolio is entered fresh with `portfolio baseline` and `trade add`.
 
 ### 1.8 Readiness gate
 Only the checks the agent cannot work without. Others join with their own task (the exchange in 2.1); OpenClaw and Telegram are checked after the manual onboarding.
@@ -406,7 +407,7 @@ Records what the market did after each call, with zero model tokens. It is the a
 
 ### 3.7 Export and review (outside the agent)
 Changed 2026-10-19: no report crons and no reviews by the agent. The user reviews the logs in a Claude chat, where the token budget is larger.
-- [ ] `sentinel predict export [--days 14]`: the calls and their outcomes, compact, to paste into a chat. The nightly `backup export` (1.7) puts the same items in S3.
+- [ ] `sentinel predict export [--days 14]`: the calls and their outcomes, compact, to paste into a chat.
 - [ ] A review skill in the repo, `.claude/skills/review-predictions/SKILL.md`, usable in Claude Code or pasted into any Claude chat with an export: hit rate per horizon, where the reasoning went wrong, recurring patterns, and at most 5 drafted lessons.
 - [ ] Lessons the user approves go to `memory/prediction_lessons.md` (separate from the real-trade lessons), which the 3.4 skill reads before a call.
 - [ ] [Research] Per-arm hit rates with n and Wilson intervals move to the 9.3 analysis.
@@ -642,13 +643,13 @@ All items carry `type` and `created_at`. Keys are strings.
 
 | Skill folder | Trigger | Commands it runs |
 | --- | --- | --- |
-| `trade-journal` | "I bought/sold ...", "balance", "/balance" | `sentinel trade add`, `sentinel portfolio summary`, `sentinel lesson ...` |
+| `trade-journal` | "I bought/sold ...", "balance", "/balance" | `sentinel trade add`, `sentinel portfolio summary`, `sentinel portfolio baseline` |
 | `analyse` | "analyse X", `/analyse`, `act:analyse:X` | `sentinel snapshot X --format json` |
 | `test-trade-scenario` | "test trade X 24h", `/predict`, `act:predict:X:24` | `sentinel snapshot`, `sentinel predict log`, `sentinel predict show` |
 | `review-predictions` (in the repo's `.claude/skills/`, used in Claude Code or a Claude chat, not by the agent) | the user, with a `sentinel predict export` | none; drafts lessons for `memory/prediction_lessons.md` |
 | `nb-check` (optional) | `/nb`, `act:nb:X` | `sentinel nb check X` |
 | `cluster-prediction` (optional) | `/cluster`, `act:cluster:X` | `sentinel cluster run X` |
-| `system-ops` | health check, backups (as today) | `sentinel health`, `ops/s3_backup.sh`, `sentinel backup export` |
+| `system-ops` | health check, backups (as today) | `sentinel health`, `ops/s3_backup.sh` |
 
 ## Appendix F: Manual setup of model API keys
 

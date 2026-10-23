@@ -38,7 +38,7 @@ terraform apply
 
 ## Cost notes
 - DynamoDB uses provisioned capacity (2 RCU/WCU per table and index), inside the always-free tier.
-  Continuous backups (PITR) are off; the nightly JSON export to S3 is the backup.
+  Continuous backups (PITR) are off to keep the cost at $0; the tables are not backed up (the trade journal is re-entered by hand if lost).
 - The instance type decides the architecture, and the AMI (Ubuntu 24.04) follows it, so
   switching to another free-tier type is a one-line change in `terraform.tfvars`.
 
