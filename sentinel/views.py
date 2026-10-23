@@ -117,11 +117,12 @@ def _headlines(data: dict[str, Any], label: str, items: list[newsapi.Headline]) 
     return View(data, _lines(lines))
 
 
-def scan(limit: int) -> View:
+def scan(limit: int, wanted: list[str]) -> View:
     """One row of computed signals per top coin; the text names the stand-outs."""
-    result = signals_scan.build(limit)
+    result = signals_scan.build(limit, wanted)
     rows, btc = result.rows, result.btc
-    head = f"Top {limit} scan, {len(rows)} coins"
+    head = f"Top {limit} scan" + (f" + {', '.join(wanted)}" if wanted else "")
+    head += f", {len(rows)} coins"
     if btc:
         head += (
             f": BTC {_usd(btc.price)} {btc.regime} "
@@ -129,6 +130,8 @@ def scan(limit: int) -> View:
         )
     if result.missing:
         head += f"; no data: {', '.join(result.missing)}"
+    if result.skipped:
+        head += f"; skipped: {', '.join(result.skipped)}"
     ranked = sorted((r for r in rows if r.rs_7d is not None), key=lambda r: r.rs_7d, reverse=True)
     near_low = sorted(
         (r for r in rows if r.to_low_7d is not None), key=lambda r: r.to_low_7d, reverse=True

@@ -61,3 +61,8 @@ Short notes per merged PR, newest last: what changed, why, and one number. Detai
 - NewsAPI coin news is the most read of 14 days (2 in the snapshot); `sentinel news world` gives the most read market-moving world news of 3 days, run by the agent only when needed. Headline names come from CMC's top 100 (cached a day). A coin without an OKX swap is no longer listed as missing flow.
 - Why: day-old "newest" headlines were noise, the 22 Oct war scare had no source, and coins outside a hand-kept 20-name list were matched by ticker only.
 - Number: 20 hand-kept coin names down to 4 aliases; 1 CMC credit a day; 148 tests pass.
+
+## #21 Scan watchlist (24 Oct)
+- `sentinel market scan --symbol DOT,ADA` adds coins outside the top N in the same rows; the output names the left-out stablecoins and wrapped coins in `skipped`.
+- Why: DOT was asked about but missing from a top-15 scan, and the agent reported row counts instead of naming what was skipped.
+- Number: 1 extra CMC credit only when `--symbol` names a coin outside the top N; 149 tests pass.

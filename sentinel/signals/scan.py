@@ -11,7 +11,9 @@ candles and its OKX funding rate, fetched in parallel, plus BTC's hourly candles
   candles (``sentinel.signals.indicators``); ``to_low_7d`` and ``to_high_7d`` are the
   distance in percent from the price to the 7-day wick low and high.
 - Stablecoins (CMC's "stablecoin" tag, or the fixed list) and wrapped or staked copies
-  of BTC and ETH are skipped. Coins without
+  of BTC and ETH in the listing are left out and named in ``skipped``. Coins asked for by
+  ``wanted`` outside the top N come from one CMC quotes call (1 credit) and are added
+  after it; symbols CMC does not know are in ``missing``. Coins without
   candles on any exchange are listed in ``missing``; coins without an OKX swap have no
   funding rate (``null``). When a rate could not be read (rate limit, outage),
   ``missing`` also names ``funding``.
@@ -70,6 +72,7 @@ class Scan:
     btc: schema.BtcContext | None
     rows: list[Row]
     missing: list[str]
+    skipped: list[str]
 
     def data(self) -> dict[str, Any]:
         return {
@@ -78,16 +81,25 @@ class Scan:
             "columns": COLUMNS,
             "rows": [list(astuple(r)) for r in self.rows],
             "missing": self.missing,
+            "skipped": self.skipped,
         }
 
 
-def build(limit: int) -> Scan:
+def build(limit: int, wanted: list[str] | None = None) -> Scan:
     now = _now()
-    coins = [
-        c
-        for c in cmc.listings(limit)
-        if not c.is_stablecoin and c.symbol not in STABLECOINS | WRAPPED
-    ]
+    listed = cmc.listings(limit)
+    coins, skipped = [], []
+    for c in listed:
+        if c.is_stablecoin or c.symbol in STABLECOINS | WRAPPED:
+            skipped.append(c.symbol)
+        else:
+            coins.append(c)
+    unknown = []
+    extra = [s for s in wanted or [] if s not in {c.symbol for c in listed}]
+    if extra:
+        found = cmc.quotes(extra)
+        coins += [found[s] for s in extra if s in found]
+        unknown = [s for s in extra if s not in found]
     symbols = [c.symbol for c in coins]
     with ThreadPoolExecutor(max_workers=WORKERS) as pool:
         feeds_job = pool.submit(_feeds, now)
@@ -99,7 +111,7 @@ def build(limit: int) -> Scan:
     btc_daily, btc_hourly = daily.get("BTC"), btc_hourly_job.result()
     feeds = feeds_job.result()
 
-    rows, missing = [], []
+    rows, missing = [], unknown
     for coin in coins:
         candles = daily[coin.symbol]
         if candles is None:
@@ -121,7 +133,7 @@ def build(limit: int) -> Scan:
         btc = snapshot.btc_context(btc_hourly, tech, None)
     elif "BTC" not in missing:
         missing.insert(0, "btc")
-    return Scan(as_of=iso(now), btc=btc, rows=rows, missing=missing)
+    return Scan(as_of=iso(now), btc=btc, rows=rows, missing=missing, skipped=skipped)
 
 
 def _now() -> datetime:

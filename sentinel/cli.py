@@ -145,12 +145,13 @@ def market_scalp(limit: int, fmt: str) -> None:
 
 @market.command("scan")
 @click.option("--limit", type=click.IntRange(1, 100), default=50)
+@click.option("--symbol", "symbols", default="", help="Extra coins, e.g. DOT,ADA.")
 @FORMAT
 @_source_errors
-def market_scan(limit: int, fmt: str) -> None:
+def market_scan(limit: int, symbols: str, fmt: str) -> None:
     """One row of computed signals per top coin (RSI, averages, strength against BTC,
-    7-day range, funding), BTC's regime first."""
-    _emit(views.scan(limit), fmt)
+    7-day range, funding), BTC's regime first; --symbol adds coins outside the top N."""
+    _emit(views.scan(limit, [s.strip().upper() for s in symbols.split(",") if s.strip()]), fmt)
 
 
 @market.command("candles")

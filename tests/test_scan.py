@@ -7,6 +7,7 @@ from sentinel.cli import cli
 from sentinel.data import flow
 
 LISTINGS = "/v1/cryptocurrency/listings/latest"
+QUOTES = "/v1/cryptocurrency/quotes/latest"
 # About 4 characters per token: 1,500 tokens for 50 coins.
 MAX_CHARS = 6000
 
@@ -59,6 +60,7 @@ def test_scan_one_row_per_coin_within_budget(top50):
     assert data["btc"] == {**snapshot_btc, "dominance": None}
     assert data["btc"]["regime"] == "risk_on"
     assert data["missing"] == ["NOPE"]
+    assert data["skipped"] == ["USDT", "USDG", "WBTC"]
     rows = [dict(zip(data["columns"], row, strict=True)) for row in data["rows"]]
     assert [r["sym"] for r in rows[:2]] == ["BTC", "C00"]  # no USDT, USDG or WBTC
     assert len(rows) == 47
@@ -82,13 +84,25 @@ def test_scan_one_row_per_coin_within_budget(top50):
     }
     lines = _run("--format", "telegram").strip().splitlines()
     assert lines[0] == (
-        "Top 50 scan, 47 coins: BTC $80,000 risk_on (+2.5% 24h, +18.4% 7d); no data: NOPE"
+        "Top 50 scan, 47 coins: BTC $80,000 risk_on (+2.5% 24h, +18.4% 7d); no data: NOPE; "
+        "skipped: USDT, USDG, WBTC"
     )
     assert (
         lines[-1]
         == "RSI over 70: BTC 100, C00 100, C01 100, C02 100, C03 100 (+42 more); under 30: none"
     )
     assert len(lines) == 5
+
+
+def test_symbol_adds_coins_outside_the_listing(top50):
+    body = {"status": {"error_code": 0}, "data": {"DOT": _listing("DOT")}}
+    top50.cmc.routes[QUOTES] = (200, {}, body)
+    data = json.loads(_run("--symbol", "dot, BTC,XXX"))
+    quotes = [r.path for r in top50.cmc.seen if r.path.startswith(QUOTES)]
+    assert quotes == [f"{QUOTES}?symbol=DOT%2CXXX&convert=USD"]  # BTC is in the listing
+    syms = [row[0] for row in data["rows"]]
+    assert syms[-1] == "DOT" and syms.count("BTC") == 1 and len(syms) == 48
+    assert data["missing"] == ["XXX", "NOPE"]
 
 
 def test_failed_funding_is_missing_but_no_swap_is_not(top50):

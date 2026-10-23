@@ -63,8 +63,8 @@ The plan is split in three. **Core** makes the agent useful day to day: good mar
 | 6 | Core | Trade journal, part 2: `trade-journal` skill, daily backup as an OpenClaw command automation; 1.3 S3 lifecycle rule (decided 22 and 23 Oct: lessons stay in `memory/lessons_learned.md`, no import of the markdown journal, no DynamoDB export) | Done |
 | 7 | Core | 2.10 setup block in the snapshot (4h) | Done |
 | 8 | Core | 2.4 NewsAPI rework and `news world`, CMC coin names, no-swap flow out of `missing` | Done |
-| 9 | Core | 2.11 scan watchlist | Next |
-| 10 | Core | Minimal prediction journal: 3.3 validator, 3.4 log, 3.6 outcome scorer, 3.7 export and review skill | |
+| 9 | Core | 2.11 scan watchlist | Done |
+| 10 | Core | Minimal prediction journal: 3.3 validator, 3.4 log, 3.6 outcome scorer, 3.7 export and review skill | Next |
 | 11 | Research | 3.1 clients, 3.2 prompts, 3.5 runner | |
 | 12 | Research | Phase 5 Naive Bayes (5.1 to 5.5), graded by the same outcome scorer | |
 | 13 | Research | Phase 9 freeze, run and analysis | |
@@ -353,8 +353,8 @@ Why (chat of 19 Oct): the agent improvised triggers and stops per coin and argue
 
 ### 2.11 Scan watchlist (`sentinel/signals/scan.py`)
 Why (chat of 19 Oct): DOT was asked about but missing from "top 15" (it ranks lower), and the agent reported row counts instead of naming what was skipped.
-- [ ] `sentinel market scan --symbol DOT,ADA` adds coins outside the top N, in the same rows.
-- [ ] The output names the skipped stablecoins and wrapped coins (`skipped`), so a short row count needs no explanation.
+- [x] `sentinel market scan --symbol DOT,ADA` adds coins outside the top N, in the same rows.
+- [x] The output names the skipped stablecoins and wrapped coins (`skipped`), so a short row count needs no explanation.
 
 **Accept:** a test with an extra symbol outside the listing and the `skipped` list.
 
