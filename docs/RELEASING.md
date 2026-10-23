@@ -2,15 +2,14 @@
 
 One roadmap step (`docs/IMPLEMENTATION_PLAN.md`, section 0.2) is one branch, one PR and one release tag. A PR that touches DynamoDB or the instance merges only after its manual test cases pass.
 
-## 1. Branch and commit
+## 1. Run `sentinel` on the laptop
 
-```bash
-git checkout main
-git pull
-git checkout -b feat/<short-name>
+Manual test cases run the branch's `sentinel` with keys from aws-vault. In PowerShell from the repo root, put the venv on `PATH` once per terminal (aws-vault starts `sentinel` as a child process, which looks it up there):
+
+```powershell
+$env:Path = "$PWD\.venv\Scripts;$env:Path"
+aws-vault exec sentinel-deploy -- sentinel market scan --limit 10 --format telegram
 ```
-
-Commit messages are one short line: `feat: ...`, `fix: ...`, `docs: ...`, `refactor: ...`. Run `make test` and `make lint` before pushing.
 
 ## 2. Push and open the PR
 
