@@ -70,15 +70,18 @@ def test_world_news_once_per_title_without_removed_articles(apis):
     story = {"source": {"name": "Example Wire"}, "title": "Fed holds rates", "url": "u1"}
     copy = {**story, "source": {"name": "Example Copy"}, "url": "u2"}
     removed = {"source": {"name": "[Removed]"}, "title": "[Removed]", "url": "u3"}
+    others = [{**story, "title": f"Story {i}", "url": f"s{i}"} for i in range(5)]
     apis.news.routes["/v2/everything"] = (
         200,
         {},
-        {"status": "ok", "articles": [story, copy, removed]},
+        {"status": "ok", "articles": [story, copy, removed, *others]},
     )
     lines = _run("news", "world", "--format", "telegram").stdout.strip().splitlines()
+    # 5 of 6 distinct stories (the default limit); Telegram has room for 4 under the head.
     assert lines == [
-        "World news, 3 days, most read first (about 24 h delayed): 1",
+        "World news, 3 days, most read first (about 24 h delayed): 5, 4 shown",
         "- Fed holds rates (Example Wire)",
+        *[f"- Story {i} (Example Wire)" for i in range(3)],
     ]
     query = parse_qs(urlsplit(apis.news.seen[0].path).query)
     assert (query["q"], query["searchIn"]) == ([newsapi.WORLD_QUERY], ["title"])

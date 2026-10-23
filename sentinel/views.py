@@ -110,8 +110,10 @@ def _headlines(data: dict[str, Any], label: str, items: list[newsapi.Headline]) 
     if not items:
         data["note"] = NO_NEWS
         return View(data, f"{head}: {NO_NEWS}")
-    lines = [f"{head}: {len(items)}"]
-    lines += [f"- {_short(h.title)} ({h.source})" for h in items]
+    shown = items[: TELEGRAM_MAX_LINES - 1]
+    more = f", {len(shown)} shown" if len(shown) < len(items) else ""
+    lines = [f"{head}: {len(items)}{more}"]
+    lines += [f"- {_short(h.title)} ({h.source})" for h in shown]
     return View(data, _lines(lines))
 
 
