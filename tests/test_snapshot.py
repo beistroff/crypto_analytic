@@ -1,10 +1,11 @@
 import json
+from dataclasses import replace
 
 import pytest
 from click.testing import CliRunner
 
 from sentinel.cli import cli
-from sentinel.data import flow
+from sentinel.data import exchange, flow
 from sentinel.signals import snapshot
 
 HIERARCHY = [
@@ -87,6 +88,16 @@ def test_snapshot_in_hierarchy_order_and_within_budget(trending):
     assert setup["pullback_high"] == pytest.approx(100 * 1.001**-11, rel=1e-5)
     assert setup["room_pct"] == 1.0  # today's daily wick high is 1% above the price
     assert len(_run("SOL", "--format", "telegram").strip().splitlines()) == 5  # nothing missing
+
+
+def test_stop_inside_half_a_day_is_noise(trending):
+    # Daily candles 10% wide: the daily ATR is about 10, so a stop 2.58 away (1.3 ATR on
+    # 4h) is inside half a day's swing.
+    h4 = exchange.candles("SOL", "4h", snapshot.H4_LIMIT)
+    daily = exchange.candles("SOL", "1d", snapshot.DAILY_LIMIT)
+    wide = [replace(c, high=c.close * 1.05, low=c.close * 0.95) for c in daily.candles]
+    setup = snapshot._setup(h4, replace(daily, candles=wide), 100.0, None)
+    assert (setup.stop_atr, setup.stop_in_noise) == (1.3, True)
 
 
 def test_btc_snapshot_has_no_comparison_with_itself(trending):

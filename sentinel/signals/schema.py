@@ -85,7 +85,8 @@ class Levels(BaseModel):
 class Setup(BaseModel):
     """A trade of 12 h to 7 days, on 4h candles. Trigger: a 4h close above the highest
     4h close of the last 48 h. Stop: 0.25 ATR (4h) under the 48 h wick low; its distance
-    from the price in % and in ATR, flagged ``stop_in_noise`` under 1 ATR. Pullback zone:
+    from the price in % and in ATR, flagged ``stop_in_noise`` under 1 ATR or under half
+    the daily ATR (an ordinary half-day swing would hit it). Pullback zone:
     4h SMA50 to the 48 h close low, only while the price is above the SMA50. Room: from
     the price to the 30-day wick high, in %."""
 

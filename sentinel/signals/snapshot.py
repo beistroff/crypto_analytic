@@ -32,6 +32,7 @@ HOURLY_LIMIT = 200  # 7 days of hourly closes, with room to spare
 H4_LIMIT = 100  # SMA50 and a settled ATR and RSI
 SETUP_CANDLES = 12  # 48 h of 4h candles
 STOP_BUFFER_ATR = 0.25
+NOISE_DAILY_ATR = 0.5  # a stop closer than half a day's ATR sits in an ordinary swing
 NEWS_LIMIT = 3
 MARKET_NEWS_LIMIT = 2
 TITLE_WIDTH = 120
@@ -99,7 +100,7 @@ def build(symbol: str) -> schema.Snapshot:
         flow=_flow(got["flow"]) if "flow" in got else None,
         technicals=coin_technicals,
         levels=levels,
-        setup=_setup(h4, hourly.price, levels) if h4 and hourly else None,
+        setup=_setup(h4, daily, hourly.price, levels) if h4 and hourly else None,
         vs_btc=_vs_btc(daily, btc_daily) if symbol != "BTC" and daily and btc_daily else None,
         missing=missing,
     )
@@ -229,13 +230,20 @@ def _levels(daily: exchange.Candles) -> schema.Levels:
     return schema.Levels(d7=edges(7), d30=edges(30))
 
 
-def _setup(h4: exchange.Candles, price: float, levels: schema.Levels | None) -> schema.Setup | None:
+def _setup(
+    h4: exchange.Candles,
+    daily: exchange.Candles | None,
+    price: float,
+    levels: schema.Levels | None,
+) -> schema.Setup | None:
     """Trigger, stop and pullback zone on 4h candles (rules in ``schema.Setup``)."""
     edges = indicators.range_edges(h4.candles, SETUP_CANDLES)
     atr = indicators.atr(h4.candles)
     if edges is None or atr is None:
         return None
     stop = edges["wick_low"] - STOP_BUFFER_ATR * atr
+    daily_atr = indicators.atr(daily.candles) if daily else None
+    noise = max(atr, NOISE_DAILY_ATR * daily_atr) if daily_atr is not None else atr
     sma50 = indicators.sma([c.close for c in h4.candles], 50)
     zone = sorted((sma50, edges["close_low"])) if sma50 is not None and price > sma50 else None
     month = levels.d30 if levels else None
@@ -244,7 +252,7 @@ def _setup(h4: exchange.Candles, price: float, levels: schema.Levels | None) -> 
         stop=sig(stop),
         stop_pct=rounded((price - stop) / price * 100),
         stop_atr=rounded((price - stop) / atr),
-        stop_in_noise=price - stop < atr,
+        stop_in_noise=price - stop < noise,
         pullback_low=sig(zone[0]) if zone else None,
         pullback_high=sig(zone[1]) if zone else None,
         room_pct=rounded(indicators.pct(month.wick_high, price)) if month else None,

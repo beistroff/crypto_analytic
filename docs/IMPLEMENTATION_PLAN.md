@@ -346,7 +346,7 @@ Why (chat of 19 Oct): replies ran 15 to 20 lines, repeated the BTC gate and unch
 
 ### 2.10 Setup block in the snapshot (`sentinel/signals/snapshot.py`)
 Why (chat of 19 Oct): the agent improvised triggers and stops per coin and argued in prose that a stop 3.7 % away sat inside one day's range. Code computes these the same way every time.
-- [x] `setup` after `levels`, on 4h candles (decided 23 Oct: trades last 12 h to 7 days): breakout trigger (a 4h close above the 48 h close high), pullback zone (4h SMA50 to the 48 h close low, when the price is above the 4h SMA50), stop (0.25 ATR below the 48 h wick low), stop distance in % and in 4h ATR, and room to the 30-day wick high in %. A stop under 1 ATR away is flagged `stop_in_noise`. 4h and 1h RSI in `technicals`.
+- [x] `setup` after `levels`, on 4h candles (decided 23 Oct: trades last 12 h to 7 days): breakout trigger (a 4h close above the 48 h close high), pullback zone (4h SMA50 to the 48 h close low, when the price is above the 4h SMA50), stop (0.25 ATR below the 48 h wick low), stop distance in % and in 4h ATR, and room to the 30-day wick high in %. A stop under 1 ATR (4h) or half the daily ATR away is flagged `stop_in_noise`. 4h and 1h RSI in `technicals`.
 - [x] `AGENTS.md`: quote `setup`; change it only with a stated reason.
 
 **Accept:** hand-checked values on the `trending` fixture; the size test still passes.
