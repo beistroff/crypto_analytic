@@ -50,9 +50,3 @@ variable "write_capacity" {
   type        = number
   default     = 2
 }
-
-variable "enable_point_in_time_recovery" {
-  description = "Continuous backups (PITR, $0.20 per GB-month). Off to keep the cost at $0; the tables have no backup."
-  type        = bool
-  default     = false
-}

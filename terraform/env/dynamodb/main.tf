@@ -50,10 +50,6 @@ resource "aws_dynamodb_table" "real" {
     write_capacity  = local.write_cap
   }
 
-  point_in_time_recovery {
-    enabled = var.enable_point_in_time_recovery
-  }
-
   tags = {
     Name = var.real_table_name
   }
@@ -121,10 +117,6 @@ resource "aws_dynamodb_table" "sim" {
   ttl {
     attribute_name = "ttl"
     enabled        = true
-  }
-
-  point_in_time_recovery {
-    enabled = var.enable_point_in_time_recovery
   }
 
   tags = {
