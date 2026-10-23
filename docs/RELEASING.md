@@ -13,10 +13,6 @@ aws-vault exec sentinel-deploy -- sentinel market scan --limit 10 --format teleg
 
 ## 2. Push and open the PR
 
-```bash
-git push -u origin feat/<short-name>
-```
-
 Fill the body from `.github/pull_request_template.md` (What and why, Changes, Checked, After merge) in a file outside the repo, then:
 
 ```bash
