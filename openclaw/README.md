@@ -75,6 +75,11 @@ Done by hand over SSM once bootstrap has finished (`~/sentinel/.ready` exists). 
     openclaw automations add --name "Daily backup" --cron "0 3 * * *" --tz UTC --command-argv '["/home/ubuntu/sentinel/src/ops/s3_backup.sh"]' --command-env PATH=/snap/bin:/usr/local/bin:/usr/bin:/bin --timeout-seconds 600 --no-deliver
     openclaw automations run <id>
     ```
+15. Prediction scorer (plan 3.6): an OpenClaw command automation runs `sentinel predict score` every hour with no model call and sends nothing to Telegram. It checks every logged test call that is due against the exchange candles; `sentinel predict export` shows the results. The run history (`openclaw automations runs <id>`) has one line per run, such as `Due 2: 1 graded, 1 done`.
+    ```bash
+    openclaw automations add --name "Prediction scorer" --every 1h --command-argv '["/home/ubuntu/sentinel/venv/bin/sentinel","predict","score","--format","telegram"]' --command-env SENTINEL_LOG_LEVEL=ERROR --timeout-seconds 300 --no-deliver
+    openclaw automations run <id>
+    ```
 
 Things learned on the way:
 - Gemini free tier: the 3.x Flash models allow 5 requests a minute and 20 a day, the Lite models 15 and 500, Pro models none. OpenClaw retries a rate-limited call up to 10 times and Google counts each try, so the free Flash models cannot carry an agent on their own. Google Search grounding has no free quota for Gemini 3 and newer.

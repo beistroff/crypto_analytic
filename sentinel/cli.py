@@ -24,7 +24,7 @@ from sentinel.config import get_settings
 from sentinel.data import SourceError
 from sentinel.portfolio import service
 from sentinel.portfolio.service import JournalError
-from sentinel.predict import journal
+from sentinel.predict import journal, scorer
 from sentinel.predict.journal import PredictError
 from sentinel.store.real import VersionConflict
 
@@ -305,6 +305,24 @@ def predict_log(raw: str, symbol: str, model: str, source: str, fmt: str) -> Non
 def predict_show(pred_id: str, fmt: str) -> None:
     """A logged call in full: reasons, BTC context, snapshot, validator result."""
     _emit(views.prediction(journal.show(pred_id)), fmt)
+
+
+@predict.command("score")
+@FORMAT
+@_source_errors
+def predict_score(fmt: str) -> None:
+    """Check every due call once against the market (an OpenClaw automation runs this
+    every hour, sending nothing)."""
+    _emit(views.prediction_scored(scorer.score()), fmt)
+
+
+@predict.command("export")
+@click.option("--days", type=click.IntRange(1, 90), default=14)
+@FORMAT
+@_source_errors
+def predict_export(days: int, fmt: str) -> None:
+    """The calls of the last days with their results and hit rates, for a review."""
+    _emit(views.predictions_exported(journal.export(days), days), fmt)
 
 
 @cli.group()

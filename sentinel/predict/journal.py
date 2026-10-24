@@ -7,6 +7,9 @@ compact snapshot: the price, the coin's daily RSI, and BTC's regime and 24 h cha
 same regime ``snapshot`` and ``market scan`` give. ``model`` names the chat model, so
 calls from different models can be compared later. The first score check is due an
 hour after the call.
+
+``export`` lists the calls of the last days, with the scorer's results, for a review in
+a Claude chat (the agent never reviews its own calls).
 """
 
 from __future__ import annotations
@@ -87,6 +90,13 @@ def log(symbol: str, raw: str, model: str, source: str = "chat") -> Prediction:
     if not PredictionRepo().add(prediction):
         raise PredictError(f"a call for {symbol} was logged at the same moment, log it again")
     return prediction
+
+
+def export(days: int) -> list[Prediction]:
+    """The calls logged over the last ``days`` UTC days, today included, oldest first."""
+    today = _now().date()
+    dates = [f"{today - timedelta(days=n):%Y-%m-%d}" for n in reversed(range(days))]
+    return PredictionRepo().logged(dates)
 
 
 def show(pred_id: str) -> Prediction:
