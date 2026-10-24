@@ -64,8 +64,8 @@ The plan is split in three. **Core** makes the agent useful day to day: good mar
 | 7 | Core | 2.10 setup block in the snapshot (4h) | Done |
 | 8 | Core | 2.4 NewsAPI rework and `news world`, CMC coin names, no-swap flow out of `missing` | Done |
 | 9 | Core | 2.11 scan watchlist | Done |
-| 10 | Core | Minimal prediction journal, in two PRs (decided 24 Oct): 10a 3.3 validator and 3.4 log; 10b 3.6 outcome scorer, 3.7 export and review skill | 10a done, 10b next |
-| 11 | Research | 3.1 clients, 3.2 prompts, 3.5 runner | |
+| 10 | Core | Minimal prediction journal, in two PRs (decided 24 Oct): 10a 3.3 validator and 3.4 log; 10b 3.6 outcome scorer, 3.7 export and review skill | Done |
+| 11 | Research | 3.1 clients, 3.2 prompts, 3.5 runner | Next |
 | 12 | Research | Phase 5 Naive Bayes (5.1 to 5.5), graded by the same outcome scorer | |
 | 13 | Research | Phase 9 freeze, run and analysis | |
 | - | Later | revisit the chat model order once the agent is stable (free Gemini first, Haiku as the fallback; DeepSeek as a fallback if the experiment shows it is good), 1.6, 1.7 `lesson share`, 2.4 GDELT, 2.4 scheduled world-news watcher (Lambda or instance timer that flags major events), 2.5 whale proxy, 2.6 `--save`, 2.7 CMC pass-through, 5.6, Phases 4, 6, 7 and 8, `openclaw/configure.sh` (before the next rebuild) | |
@@ -400,20 +400,20 @@ Minimal by design (2026-10-19): the agent logs its calls; it never scores or rev
 - [ ] System cron on EC2 at 09:00 and 21:00 UTC. This runs outside OpenClaw on purpose, so every arm gets an identical prompt and exact token logging.
 
 ### 3.6 Outcome scorer (hourly, code only, no LLM)
-Records what the market did after each call, with zero model tokens. It is the answer key: the agent's calls (3.4, 3.5) and Naive Bayes' calls (Phase 5) are graded by the same scorer, and Naive Bayes learns from its outcomes. Core version: runs on the instance from the system crontab. The Lambda version waits for Phase 6.
-- [ ] `score_handler` queries `GSI2` for `OPEN` items with `due_at <= now`, fetches hourly candles since the prediction (plain `requests` to the exchange REST API, no `ccxt` in Lambda), and fills each horizon in `checks`: price, return, hit.
-- [ ] Records `target_hit_first` (target touched before stop, or the reverse, or neither) and `max_adverse_pct`.
-- [ ] A FLAT call (HOLD) is a hit when the price stays within ±1 % at the horizon.
-- [ ] Sets the next `due_at`; after the 168 h check, sets `status = DONE` and removes the `GSI2` attributes.
+Records what the market did after each call, with zero model tokens. It is the answer key: the agent's calls (3.4, 3.5) and Naive Bayes' calls (Phase 5) are graded by the same scorer, and Naive Bayes learns from its outcomes. Core version: `sentinel predict score`, an hourly OpenClaw command automation on the instance that sends nothing (decided 24 Oct, like the watch check). The Lambda version waits for Phase 6.
+- [x] Queries `GSI2` for `OPEN` items with `due_at <= now`, fetches candles since the prediction (15-minute up to 12 h, hourly above), and fills `checks` at each standard horizon up to the call's own (decided 24 Oct): price, return, hit. BUY is a hit above the entry, SELL below.
+- [x] Records `target_hit_first` (target touched before stop, or the reverse, or neither) and `max_adverse_pct`.
+- [x] A FLAT call (HOLD) is a hit when the price stays within ±1 % at the horizon.
+- [x] Sets the next `due_at`; after the call's own horizon, sets `status = DONE` and removes the `GSI2` attributes.
 
 ### 3.7 Export and review (outside the agent)
 Changed 2026-10-19: no report crons and no reviews by the agent. The user reviews the logs in a Claude chat, where the token budget is larger.
-- [ ] `sentinel predict export [--days 14]`: the calls and their outcomes, compact, to paste into a chat.
-- [ ] A review skill in the repo, `.claude/skills/review-predictions/SKILL.md`, usable in Claude Code or pasted into any Claude chat with an export: hit rate per horizon, where the reasoning went wrong, recurring patterns, and at most 5 drafted lessons.
-- [ ] Lessons the user approves go to `memory/prediction_lessons.md` (separate from the real-trade lessons), which the 3.4 skill reads before a call.
+- [x] `sentinel predict export [--days 14]`: the calls and their outcomes, compact, to paste into a chat, with hit rates per horizon and per model computed by code.
+- [x] A review skill in the repo, `.claude/skills/review-predictions/SKILL.md`, usable in Claude Code or pasted into any Claude chat with an export: hit rate per horizon, where the reasoning went wrong, recurring patterns, and at most 5 drafted lessons.
+- [x] Lessons the user approves go to `memory/prediction_lessons.md` (separate from the real-trade lessons), which the 3.4 skill reads before a call. The user sends them to the agent, which writes the file.
 - [ ] [Research] Per-arm hit rates with n and Wilson intervals move to the 9.3 analysis.
 
-**Accept (end of Phase 3, core part):** a chat call is logged with its snapshot; the scorer fills its checks up to 168 h; the export of a week fits in one chat message; the review skill turns it into lessons.
+**Accept (end of Phase 3, core part):** a chat call is logged with its snapshot; the scorer fills its checks up to its horizon; the export of a week fits in one chat message; the review skill turns it into lessons.
 
 ---
 

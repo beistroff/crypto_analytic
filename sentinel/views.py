@@ -9,6 +9,7 @@ that fails is reported in ``missing`` instead of failing the whole command.
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterable
 from dataclasses import asdict, dataclass
 from decimal import Decimal
 from typing import Any
@@ -19,6 +20,7 @@ from sentinel.alerts import watch as alerts_watch
 from sentinel.data import SourceError, cmc, exchange, feargreed, newsapi
 from sentinel.eval.rules import is_scalp_candidate, rules_signal
 from sentinel.portfolio import service
+from sentinel.predict.scorer import ScoreResult
 from sentinel.signals import scan as signals_scan
 from sentinel.signals import snapshot as signals_snapshot
 from sentinel.signals.snapshot import rounded, sig
@@ -353,6 +355,108 @@ def prediction(pred: Prediction) -> View:
     elif pred.risk_note:
         lines.append(f"Risk: {pred.risk_note}")
     return View(_prediction(pred), _lines(lines))
+
+
+def prediction_scored(result: ScoreResult) -> View:
+    """One line for the automation's run history; nothing is sent to Telegram."""
+    data = {
+        "checked": result.checked,
+        "graded": [p.pred_id for p in result.graded],
+        "done": result.done,
+        "missing": result.missing,
+    }
+    line = f"Due {result.checked}: {len(result.graded)} graded, {result.done} done"
+    if result.missing:
+        line += f"; no candles: {', '.join(result.missing)}"
+    return View(data, line)
+
+
+EXPORT_COLUMNS = [
+    "at",
+    "id",
+    "sym",
+    "model",
+    "action",
+    "h",
+    "conf",
+    "entry",
+    "target",
+    "stop",
+    "valid",
+    "ret",
+    "hit",
+    "first",
+    "adverse",
+    "btc",
+    "reasons",
+]
+
+
+def predictions_exported(preds: list[Prediction], days: int) -> View:
+    """Every call with its result at its own horizon, plus hit rates computed here, so a
+    review never has to count."""
+    rows, graded = [], []
+    for p in preds:
+        check = p.checks.get(f"h{p.horizon_h}")
+        if check:
+            graded.append((p, check["hit"]))
+        rows.append(
+            [
+                p.created_at[:16],
+                p.pred_id,
+                p.symbol,
+                p.model,
+                p.action,
+                p.horizon_h,
+                _num(p.confidence),
+                _num(p.entry),
+                None if p.target is None else _num(p.target),
+                None if p.stop is None else _num(p.stop),
+                p.valid,
+                _num(check["return_pct"]) if check else None,
+                check["hit"] if check else None,
+                p.target_hit_first,
+                None if p.max_adverse_pct is None else _num(p.max_adverse_pct),
+                p.snapshot.get("btc_regime"),
+                "; ".join(p.reasons),
+            ]
+        )
+    by_horizon = _hit_rates((f"{p.horizon_h}h", hit) for p, hit in graded)
+    by_model = _hit_rates((p.model, hit) for p, hit in graded)
+    summary = {
+        "calls": len(preds),
+        "graded": len(graded),
+        "open": len(preds) - len(graded),
+        "invalid": sum(not p.valid for p in preds),
+        "by_horizon": by_horizon,
+        "by_model": by_model,
+    }
+    data = {"days": days, "summary": summary, "columns": EXPORT_COLUMNS, "rows": rows}
+    lines = [
+        f"Calls {days}d: {len(preds)}, graded {len(graded)}, open {summary['open']}, "
+        f"invalid {summary['invalid']}",
+        "By horizon: " + _rates_text(by_horizon),
+        "By model: " + _rates_text(by_model),
+    ]
+    return View(data, _lines(lines))
+
+
+def _hit_rates(pairs: Iterable[tuple[str, bool]]) -> dict[str, dict[str, int]]:
+    rates: dict[str, dict[str, int]] = {}
+    for name, hit in pairs:
+        rate = rates.setdefault(name, {"n": 0, "hits": 0})
+        rate["n"] += 1
+        rate["hits"] += hit
+    for rate in rates.values():
+        rate["hit_pct"] = round(rate["hits"] / rate["n"] * 100)
+    return rates
+
+
+def _rates_text(rates: dict[str, dict[str, int]]) -> str:
+    return (
+        ", ".join(f"{name} {r['hits']}/{r['n']} ({r['hit_pct']}%)" for name, r in rates.items())
+        or "none graded"
+    )
 
 
 def trade_added(result: dict[str, Any]) -> View:

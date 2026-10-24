@@ -6,7 +6,7 @@ prediction is scored), so the checks find them without a Scan.
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, fields
+from dataclasses import asdict, dataclass, field, fields
 from decimal import Decimal
 from typing import Any
 
@@ -170,8 +170,10 @@ class WatchRepo:
 class Prediction:
     """A call logged from chat: a ``PRED`` item without a ``watch`` map.
 
-    It sits in the sparse GSI2 under ``OPEN`` until the scorer has checked every horizon.
-    ``snapshot`` is the market the call was made in (price, RSI, BTC's regime).
+    It sits in the sparse GSI2 under ``OPEN`` until the scorer has checked every horizon
+    up to its own, keyed by the next ``due_at``. ``snapshot`` is the market the call was
+    made in (price, RSI, BTC's regime); ``checks`` holds the scorer's results by horizon
+    (``{"h4": {"price", "return_pct", "hit"}}``).
     """
 
     pred_id: str
@@ -194,7 +196,10 @@ class Prediction:
     warnings: list[str]
     due_at: str
     source: str = "chat"
-    status: str = "OPEN"
+    status: str = "OPEN"  # OPEN or DONE
+    checks: dict[str, Any] = field(default_factory=dict)
+    target_hit_first: str | None = None  # target, stop or neither (BUY and SELL)
+    max_adverse_pct: Decimal | None = None
 
     @property
     def key(self) -> dict[str, str]:
@@ -217,6 +222,7 @@ class Prediction:
     def from_item(cls, item: dict[str, Any]) -> Prediction:
         values = {f.name: item.get(f.name) for f in fields(cls)}
         values["horizon_h"] = int(item["horizon_h"])
+        values["checks"] = item.get("checks") or {}
         return cls(**values)
 
 
@@ -235,3 +241,54 @@ class PredictionRepo:
         )
         found = [item for item in items if "watch" not in item]
         return Prediction.from_item(found[0]) if found else None
+
+    def logged(self, dates: list[str]) -> list[Prediction]:
+        """The calls logged on ``dates`` (``YYYY-MM-DD``), watches left out, oldest first."""
+        items: list[dict[str, Any]] = []
+        for date in dates:
+            items += query(
+                _table(),
+                KeyConditionExpression="PK = :pk",
+                ExpressionAttributeValues=marshal({":pk": f"PRED#{date}"}),
+            )
+        return [Prediction.from_item(item) for item in items if "watch" not in item]
+
+    def due(self, now: str) -> list[Prediction]:
+        """Open calls with a check due at or before ``now``."""
+        items = query(
+            _table(),
+            IndexName="GSI2",
+            KeyConditionExpression="GSI2PK = :pk AND GSI2SK <= :now",
+            ExpressionAttributeValues=marshal({":pk": "OPEN", ":now": now}),
+        )
+        return [Prediction.from_item(item) for item in items]
+
+    def record(
+        self,
+        pred: Prediction,
+        checks: dict[str, Any],
+        next_due: str | None,
+        target_hit_first: str | None = None,
+        max_adverse_pct: Decimal | None = None,
+    ) -> None:
+        """Save the checks so far with the next due time, or, with no next one, mark the
+        call DONE (it leaves GSI2) with its path results."""
+        params: dict[str, Any] = {"TableName": _table(), "Key": marshal(pred.key)}
+        if next_due:
+            params["UpdateExpression"] = "SET checks = :c, due_at = :due, GSI2SK = :due"
+            params["ExpressionAttributeValues"] = marshal({":c": checks, ":due": next_due})
+        else:
+            params["UpdateExpression"] = (
+                "SET checks = :c, #s = :done, target_hit_first = :first, "
+                "max_adverse_pct = :adverse REMOVE GSI2PK, GSI2SK"
+            )
+            params["ExpressionAttributeValues"] = marshal(
+                {
+                    ":c": checks,
+                    ":done": "DONE",
+                    ":first": target_hit_first,
+                    ":adverse": max_adverse_pct,
+                }
+            )
+            params["ExpressionAttributeNames"] = {"#s": "status"}  # a reserved word
+        aws.client("dynamodb").update_item(**params)
