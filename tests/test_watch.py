@@ -10,7 +10,7 @@ from sentinel.alerts import watch
 from sentinel.cli import cli
 from sentinel.data import SourceError, exchange
 from sentinel.data.exchange import Candle, Candles
-from sentinel.store.dynamo import Watch
+from sentinel.store.sim import Watch
 
 D = Decimal
 SET_AT = datetime(2026, 10, 20, 9, 30, tzinfo=UTC)

@@ -66,3 +66,8 @@ Short notes per merged PR, newest last: what changed, why, and one number. Detai
 - `sentinel market scan --symbol DOT,ADA` adds coins outside the top N in the same rows; the output names the left-out stablecoins and wrapped coins in `skipped`.
 - Why: DOT was asked about but missing from a top-15 scan, and the agent reported row counts instead of naming what was skipped.
 - Number: 1 extra CMC credit only when `--symbol` names a coin outside the top N; 149 tests pass.
+
+## #22 Prediction log (24 Oct)
+- `sentinel predict log` checks a chat call (lean validator: entry within 1 % of the price, target and stop on the right sides, horizon, confidence) and stores it in `sentinel-sim` with the chat model and a compact snapshot; `predict show` reads it back. The `test-trade-scenario` skill tells the agent how.
+- Why: calls made in chat were lost in the Telegram history, so nobody could say how often the agent is right; the scorer (10b) and the model comparison grade these items.
+- Number: 0 CMC or NewsAPI credits per call (exchange candles only); 151 tests pass.

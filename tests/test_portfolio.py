@@ -8,7 +8,7 @@ from click.testing import CliRunner
 from sentinel.cli import cli
 from sentinel.portfolio import service
 from sentinel.portfolio.service import JournalError
-from sentinel.store.dynamo import PositionRepo, TradeRepo, VersionConflict
+from sentinel.store.real import PositionRepo, TradeRepo, VersionConflict
 
 D = Decimal
 

@@ -31,7 +31,7 @@ from ulid import ULID
 from sentinel.data import SourceError, exchange
 from sentinel.data.exchange import PERIOD, Timeframe
 from sentinel.portfolio.service import plain
-from sentinel.store.dynamo import Watch, WatchRepo
+from sentinel.store.sim import Watch, WatchRepo
 
 TRIGGERS = ("touch_below", "close_below", "close_above")
 CLOSE_TIMEFRAMES = ("1d", "4h")

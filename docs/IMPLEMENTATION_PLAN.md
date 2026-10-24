@@ -64,7 +64,7 @@ The plan is split in three. **Core** makes the agent useful day to day: good mar
 | 7 | Core | 2.10 setup block in the snapshot (4h) | Done |
 | 8 | Core | 2.4 NewsAPI rework and `news world`, CMC coin names, no-swap flow out of `missing` | Done |
 | 9 | Core | 2.11 scan watchlist | Done |
-| 10 | Core | Minimal prediction journal: 3.3 validator, 3.4 log, 3.6 outcome scorer, 3.7 export and review skill | Next |
+| 10 | Core | Minimal prediction journal, in two PRs (decided 24 Oct): 10a 3.3 validator and 3.4 log; 10b 3.6 outcome scorer, 3.7 export and review skill | 10a done, 10b next |
 | 11 | Research | 3.1 clients, 3.2 prompts, 3.5 runner | |
 | 12 | Research | Phase 5 Naive Bayes (5.1 to 5.5), graded by the same outcome scorer | |
 | 13 | Research | Phase 9 freeze, run and analysis | |
@@ -128,7 +128,8 @@ crypto_analytic/
     models/
       features.py  naive_bayes.py  dataset.py  train.py
     store/
-      dynamo.py                 # repositories for both tables
+      base.py                   # shared DynamoDB helpers
+      real.py  sim.py           # repositories for sentinel-real and sentinel-sim
       migrate.py                # S3 / JSON / CSV import
     portfolio/
       service.py                # buy, sell, average price, realised P&L
@@ -228,7 +229,7 @@ Read each legacy script first and keep its behaviour, then improve.
 
 **Accept:** tables exist; the EC2 role can put and query; `tests/conftest.py` creates identical tables in `moto` from one shared spec.
 
-### 1.5 Data access layer (`sentinel/store/dynamo.py`, `sentinel/portfolio/service.py`)
+### 1.5 Data access layer (`sentinel/store/real.py`, `sentinel/portfolio/service.py`)
 - [x] Repositories: `TradeRepo`, `PositionRepo` and the starting balance (`BaselineRepo`). The others (`LessonRepo`, `PredictionRepo`, `SnapshotRepo`, `VoteRepo`, `ReportRepo`) come with the tasks that use them.
 - [x] Buy and sell write the trade and update the position in one `TransactWriteItems`, with a condition on `version` (optimistic locking).
 - [x] Average cost method: a buy updates `avg_price`; a sell keeps `avg_price` and adds `(sell_price - avg_price) * qty - fee` to `realised_pnl`; position closes when `qty` is below 1e-9.
@@ -380,19 +381,18 @@ So the agent can ask CMC for more than the fixed commands without ever holding t
 - [ ] `prompt_hash` = sha256 of the rendered template without the data.
 
 ### 3.3 Deterministic validator (`sentinel/predict/validator.py`)
-Runs on every answer before anything else:
-- [ ] `btc_context` not empty, and its direction agrees with the snapshot's BTC 24 h sign.
-- [ ] `entry` within 1% of the snapshot price.
-- [ ] Levels stated in an answer match the snapshot's computed levels: a stated range low above the snapshot's 7-day wick low (or a range high below its wick high) is rejected, and a level called a close level must match the close range.
-- [ ] BUY: `target > entry > stop`; SELL: `target < entry < stop`; HOLD: no target or stop needed.
-- [ ] `horizon_h` in {1, 6, 24, 48}; `confidence` between 0 and 1; reward-to-risk of 1 or more (warning only).
-- [ ] On failure: one retry with the error list; if it fails again, store with `valid = false` (counted in the results).
+Runs on every answer before anything else (lean version, decided 24 Oct: no parsing of free text, and the schema states no range levels to compare):
+- [x] `btc_context` not empty.
+- [x] `entry` within 1% of the live price.
+- [x] BUY: `target > entry > stop`; SELL: `target < entry < stop`; HOLD: no target or stop needed.
+- [x] `horizon_h` in {1, 4, 12, 24, 72, 168} (decided 24 Oct: scalps 1 to 12 h, trades 1 to 7 days; calls of a month or more are investments and are not logged); `confidence` between 0 and 1; reward-to-risk of 1 or more (warning only).
+- [x] On failure: the call is stored with `valid = false` and its errors (counted in the results); no retry in code.
 
 ### 3.4 Chat path: `test-trade-scenario` skill
 Minimal by design (2026-10-19): the agent logs its calls; it never scores or reviews them, which would spend its token budget.
-- [ ] `sentinel predict log --json '<PredictionOut>' --symbol XRP --source chat` validates, stores a `PRED` item in `sentinel-sim` (coin, verdict, entry, trigger, stop, horizon and the snapshot it was based on) and returns the id plus a short message.
-- [ ] `sentinel predict show <id>` returns the full reasoning ("details").
-- [ ] Skill folder `skills/test-trade-scenario/SKILL.md`: read `memory/prediction_lessons.md`, build the snapshot, decide, log, reply in the short format. `memory/lessons_learned.md` stays for real trades only.
+- [x] `sentinel predict log --json '<PredictionOut>' --symbol XRP --model M --source chat` validates, stores a `PRED` item in `sentinel-sim` (coin, verdict, entry, trigger, stop, horizon, the chat model, and a compact snapshot from exchange candles: price, RSI, BTC regime and 24 h change) and returns the id plus a short message.
+- [x] `sentinel predict show <id>` returns the full reasoning ("details").
+- [x] Skill folder `skills/test-trade-scenario/SKILL.md`: read `memory/prediction_lessons.md`, build the snapshot, decide, log, reply in the short format. `memory/lessons_learned.md` stays for real trades only.
 
 ### 3.5 Scheduled path: experiment runner
 - [ ] `sentinel experiment run --slot 09|21` reads `experiment.yaml`, builds one snapshot per coin, runs every arm, stores one `PRED` per arm.
@@ -403,7 +403,8 @@ Minimal by design (2026-10-19): the agent logs its calls; it never scores or rev
 Records what the market did after each call, with zero model tokens. It is the answer key: the agent's calls (3.4, 3.5) and Naive Bayes' calls (Phase 5) are graded by the same scorer, and Naive Bayes learns from its outcomes. Core version: runs on the instance from the system crontab. The Lambda version waits for Phase 6.
 - [ ] `score_handler` queries `GSI2` for `OPEN` items with `due_at <= now`, fetches hourly candles since the prediction (plain `requests` to the exchange REST API, no `ccxt` in Lambda), and fills each horizon in `checks`: price, return, hit.
 - [ ] Records `target_hit_first` (target touched before stop, or the reverse, or neither) and `max_adverse_pct`.
-- [ ] Sets the next `due_at`; after the 48 h check, sets `status = DONE` and removes the `GSI2` attributes.
+- [ ] A FLAT call (HOLD) is a hit when the price stays within ±1 % at the horizon.
+- [ ] Sets the next `due_at`; after the 168 h check, sets `status = DONE` and removes the `GSI2` attributes.
 
 ### 3.7 Export and review (outside the agent)
 Changed 2026-10-19: no report crons and no reviews by the agent. The user reviews the logs in a Claude chat, where the token budget is larger.
@@ -412,7 +413,7 @@ Changed 2026-10-19: no report crons and no reviews by the agent. The user review
 - [ ] Lessons the user approves go to `memory/prediction_lessons.md` (separate from the real-trade lessons), which the 3.4 skill reads before a call.
 - [ ] [Research] Per-arm hit rates with n and Wilson intervals move to the 9.3 analysis.
 
-**Accept (end of Phase 3, core part):** a chat call is logged with its snapshot; the scorer fills its 24 h and 48 h checks; the export of a week fits in one chat message; the review skill turns it into lessons.
+**Accept (end of Phase 3, core part):** a chat call is logged with its snapshot; the scorer fills its checks up to 168 h; the export of a week fits in one chat message; the review skill turns it into lessons.
 
 ---
 
@@ -594,7 +595,7 @@ All items carry `type` and `created_at`. Keys are strings.
 | Type | PK | SK | Indexes | Attributes |
 | --- | --- | --- | --- | --- |
 | SNAP | `SNAP#{SYM}` | `{ts}` | none | schema_version, payload (JSON string), missing, ttl (180 days) |
-| PRED | `PRED#{date}` | `{ts}#{SYM}#{arm}` | GSI1: `SYM#{SYM}` / `{ts}`; GSI2 (sparse): `OPEN` / `{due_at}`, or `WATCH` / `{created_at}` while a watch is active | pred_id, symbol, arm, model, model_version, variant, source (chat/scheduled), action, direction, confidence, horizon_h, entry, target, stop, btc_context, btc_regime, reasons, rationale_full, prompt_hash, snapshot_ref, tokens_in, tokens_out, cost_usd, latency_ms, valid, validator_errors, nb_p_up, gate_triggered, original_action, revised, status (OPEN/DONE), due_at, checks (map: `h1`, `h6`, `h24`, `h48` each with price, return_pct, hit), target_hit_first, max_adverse_pct, watch (map, 1.9: trigger, timeframe (close triggers), status active/hit/removed, hit_at, hit_price, removed_at) |
+| PRED | `PRED#{date}` | `{ts}#{SYM}#{arm}` | GSI1: `SYM#{SYM}` / `{ts}`; GSI2 (sparse): `OPEN` / `{due_at}`, or `WATCH` / `{created_at}` while a watch is active | pred_id, symbol, arm, model, model_version, variant, source (chat/scheduled), action, direction, confidence, horizon_h, entry, target, stop, btc_context, btc_regime, reasons, rationale_full, prompt_hash, snapshot_ref, tokens_in, tokens_out, cost_usd, latency_ms, valid, validator_errors, warnings, risk_note, snapshot (chat calls: price, rsi14, btc_regime, btc_chg_24h), nb_p_up, gate_triggered, original_action, revised, status (OPEN/DONE), due_at, checks (map: `h1`, `h4`, `h12`, `h24`, `h72`, `h168` each with price, return_pct, hit), target_hit_first, max_adverse_pct, watch (map, 1.9: trigger, timeframe (close triggers), status active/hit/removed, hit_at, hit_price, removed_at) |
 | VOTE | `PRED#{date}` | `{ts}#{SYM}#cluster#VOTE#{model}#{round}` | none | role, action, confidence, reason, tokens, cost_usd |
 | ALERT | `ALERT#{rule}#{SYM}` | `{ts}` | none | value, ttl (6 h cooldown) |
 | REPORT | `REPORT#{daily|weekly}` | `{date}` | none | text, metrics (map) |

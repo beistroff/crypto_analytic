@@ -9,7 +9,7 @@ that fails is reported in ``missing`` instead of failing the whole command.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from decimal import Decimal
 from typing import Any
 
@@ -22,7 +22,7 @@ from sentinel.portfolio import service
 from sentinel.signals import scan as signals_scan
 from sentinel.signals import snapshot as signals_snapshot
 from sentinel.signals.snapshot import rounded, sig
-from sentinel.store.dynamo import Watch
+from sentinel.store.sim import Prediction, Watch
 
 # Legacy whale_monitor.py: a 1 h pump above this many percent is worth an alert.
 WHALE_PUMP_1H_PCT = 1.5
@@ -306,6 +306,53 @@ def watch_checked(result: alerts_watch.CheckResult) -> View:
         return View(data, NO_REPLY)
     lines = [alerts_watch.alert(w) for w in result.hits]
     return View(data, "\n".join([*lines, "Ask your AI agent for a fresh look before acting."]))
+
+
+def _prediction(pred: Prediction) -> dict[str, Any]:
+    data = asdict(pred)
+    data["id"] = data.pop("pred_id")
+    for name in ("confidence", "entry", "target", "stop"):
+        data[name] = None if data[name] is None else _num(data[name])
+    data["snapshot"] = {
+        name: _num(value) if isinstance(value, Decimal) else value
+        for name, value in pred.snapshot.items()
+    }
+    return data
+
+
+def _levels_line(pred: Prediction) -> str:
+    line = f"entry {service.plain(pred.entry)}"
+    if pred.target is not None:
+        line += f", target {service.plain(pred.target)}"
+    if pred.stop is not None:
+        line += f", stop {service.plain(pred.stop)}"
+    return line
+
+
+def prediction_logged(pred: Prediction) -> View:
+    line = f"Logged {pred.symbol} {pred.action} {pred.horizon_h}h ({pred.pred_id}): "
+    line += _levels_line(pred) + "."
+    if pred.validator_errors:
+        line += f" Invalid: {'; '.join(pred.validator_errors)}."
+    if pred.warnings:
+        line += f" Warning: {'; '.join(pred.warnings)}."
+    return View(_prediction(pred), line)
+
+
+def prediction(pred: Prediction) -> View:
+    """A logged call in full (the "details")."""
+    lines = [
+        f"{pred.symbol} {pred.action} ({pred.direction}) {pred.horizon_h}h, "
+        f"confidence {service.plain(pred.confidence)}, by {pred.model} at {pred.created_at}",
+        _levels_line(pred).capitalize(),
+        f"BTC: {pred.btc_context}",
+        "Reasons: " + ("; ".join(pred.reasons) or "none"),
+    ]
+    if pred.validator_errors:
+        lines.append(f"Invalid: {'; '.join(pred.validator_errors)}")
+    elif pred.risk_note:
+        lines.append(f"Risk: {pred.risk_note}")
+    return View(_prediction(pred), _lines(lines))
 
 
 def trade_added(result: dict[str, Any]) -> View:
