@@ -10,7 +10,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
-HORIZONS = (1, 6, 24, 48)
+HORIZONS = (1, 4, 12, 24, 72, 168)  # scalps 1 to 12 h, trades 1 to 7 days
 ENTRY_TOLERANCE_PCT = 1.0
 
 

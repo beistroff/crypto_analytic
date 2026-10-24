@@ -384,7 +384,7 @@ Runs on every answer before anything else (lean version, decided 24 Oct: no pars
 - [x] `btc_context` not empty.
 - [x] `entry` within 1% of the live price.
 - [x] BUY: `target > entry > stop`; SELL: `target < entry < stop`; HOLD: no target or stop needed.
-- [x] `horizon_h` in {1, 6, 24, 48}; `confidence` between 0 and 1; reward-to-risk of 1 or more (warning only).
+- [x] `horizon_h` in {1, 4, 12, 24, 72, 168} (decided 24 Oct: scalps 1 to 12 h, trades 1 to 7 days; calls of a month or more are investments and are not logged); `confidence` between 0 and 1; reward-to-risk of 1 or more (warning only).
 - [x] On failure: the call is stored with `valid = false` and its errors (counted in the results); no retry in code.
 
 ### 3.4 Chat path: `test-trade-scenario` skill
@@ -402,7 +402,8 @@ Minimal by design (2026-10-19): the agent logs its calls; it never scores or rev
 Records what the market did after each call, with zero model tokens. It is the answer key: the agent's calls (3.4, 3.5) and Naive Bayes' calls (Phase 5) are graded by the same scorer, and Naive Bayes learns from its outcomes. Core version: runs on the instance from the system crontab. The Lambda version waits for Phase 6.
 - [ ] `score_handler` queries `GSI2` for `OPEN` items with `due_at <= now`, fetches hourly candles since the prediction (plain `requests` to the exchange REST API, no `ccxt` in Lambda), and fills each horizon in `checks`: price, return, hit.
 - [ ] Records `target_hit_first` (target touched before stop, or the reverse, or neither) and `max_adverse_pct`.
-- [ ] Sets the next `due_at`; after the 48 h check, sets `status = DONE` and removes the `GSI2` attributes.
+- [ ] A FLAT call (HOLD) is a hit when the price stays within ±1 % at the horizon.
+- [ ] Sets the next `due_at`; after the 168 h check, sets `status = DONE` and removes the `GSI2` attributes.
 
 ### 3.7 Export and review (outside the agent)
 Changed 2026-10-19: no report crons and no reviews by the agent. The user reviews the logs in a Claude chat, where the token budget is larger.
@@ -411,7 +412,7 @@ Changed 2026-10-19: no report crons and no reviews by the agent. The user review
 - [ ] Lessons the user approves go to `memory/prediction_lessons.md` (separate from the real-trade lessons), which the 3.4 skill reads before a call.
 - [ ] [Research] Per-arm hit rates with n and Wilson intervals move to the 9.3 analysis.
 
-**Accept (end of Phase 3, core part):** a chat call is logged with its snapshot; the scorer fills its 24 h and 48 h checks; the export of a week fits in one chat message; the review skill turns it into lessons.
+**Accept (end of Phase 3, core part):** a chat call is logged with its snapshot; the scorer fills its checks up to 168 h; the export of a week fits in one chat message; the review skill turns it into lessons.
 
 ---
 
@@ -593,7 +594,7 @@ All items carry `type` and `created_at`. Keys are strings.
 | Type | PK | SK | Indexes | Attributes |
 | --- | --- | --- | --- | --- |
 | SNAP | `SNAP#{SYM}` | `{ts}` | none | schema_version, payload (JSON string), missing, ttl (180 days) |
-| PRED | `PRED#{date}` | `{ts}#{SYM}#{arm}` | GSI1: `SYM#{SYM}` / `{ts}`; GSI2 (sparse): `OPEN` / `{due_at}`, or `WATCH` / `{created_at}` while a watch is active | pred_id, symbol, arm, model, model_version, variant, source (chat/scheduled), action, direction, confidence, horizon_h, entry, target, stop, btc_context, btc_regime, reasons, rationale_full, prompt_hash, snapshot_ref, tokens_in, tokens_out, cost_usd, latency_ms, valid, validator_errors, warnings, risk_note, snapshot (chat calls: price, rsi14, btc_regime, btc_chg_24h), nb_p_up, gate_triggered, original_action, revised, status (OPEN/DONE), due_at, checks (map: `h1`, `h6`, `h24`, `h48` each with price, return_pct, hit), target_hit_first, max_adverse_pct, watch (map, 1.9: trigger, timeframe (close triggers), status active/hit/removed, hit_at, hit_price, removed_at) |
+| PRED | `PRED#{date}` | `{ts}#{SYM}#{arm}` | GSI1: `SYM#{SYM}` / `{ts}`; GSI2 (sparse): `OPEN` / `{due_at}`, or `WATCH` / `{created_at}` while a watch is active | pred_id, symbol, arm, model, model_version, variant, source (chat/scheduled), action, direction, confidence, horizon_h, entry, target, stop, btc_context, btc_regime, reasons, rationale_full, prompt_hash, snapshot_ref, tokens_in, tokens_out, cost_usd, latency_ms, valid, validator_errors, warnings, risk_note, snapshot (chat calls: price, rsi14, btc_regime, btc_chg_24h), nb_p_up, gate_triggered, original_action, revised, status (OPEN/DONE), due_at, checks (map: `h1`, `h4`, `h12`, `h24`, `h72`, `h168` each with price, return_pct, hit), target_hit_first, max_adverse_pct, watch (map, 1.9: trigger, timeframe (close triggers), status active/hit/removed, hit_at, hit_price, removed_at) |
 | VOTE | `PRED#{date}` | `{ts}#{SYM}#cluster#VOTE#{model}#{round}` | none | role, action, confidence, reason, tokens, cost_usd |
 | ALERT | `ALERT#{rule}#{SYM}` | `{ts}` | none | value, ttl (6 h cooldown) |
 | REPORT | `REPORT#{daily|weekly}` | `{date}` | none | text, metrics (map) |
