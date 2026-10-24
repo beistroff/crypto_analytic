@@ -22,7 +22,7 @@ from sentinel.portfolio import service
 from sentinel.signals import scan as signals_scan
 from sentinel.signals import snapshot as signals_snapshot
 from sentinel.signals.snapshot import rounded, sig
-from sentinel.store.dynamo import Prediction, Watch
+from sentinel.store.sim import Prediction, Watch
 
 # Legacy whale_monitor.py: a 1 h pump above this many percent is worth an alert.
 WHALE_PUMP_1H_PCT = 1.5

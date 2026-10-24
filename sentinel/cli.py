@@ -26,7 +26,7 @@ from sentinel.portfolio import service
 from sentinel.portfolio.service import JournalError
 from sentinel.predict import journal
 from sentinel.predict.journal import PredictError
-from sentinel.store.dynamo import VersionConflict
+from sentinel.store.real import VersionConflict
 
 FORMAT = click.option("--format", "fmt", type=click.Choice(["json", "telegram"]), default="json")
 

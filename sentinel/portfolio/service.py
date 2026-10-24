@@ -19,7 +19,7 @@ from typing import Any
 
 from ulid import ULID
 
-from sentinel.store.dynamo import BaselineRepo, Position, PositionRepo, TradeRepo, trade_item
+from sentinel.store.real import BaselineRepo, Position, PositionRepo, TradeRepo, trade_item
 
 ZERO = Decimal(0)
 EPSILON = Decimal("1e-9")

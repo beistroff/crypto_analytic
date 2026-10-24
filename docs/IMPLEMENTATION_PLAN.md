@@ -128,7 +128,8 @@ crypto_analytic/
     models/
       features.py  naive_bayes.py  dataset.py  train.py
     store/
-      dynamo.py                 # repositories for both tables
+      base.py                   # shared DynamoDB helpers
+      real.py  sim.py           # repositories for sentinel-real and sentinel-sim
       migrate.py                # S3 / JSON / CSV import
     portfolio/
       service.py                # buy, sell, average price, realised P&L
@@ -228,7 +229,7 @@ Read each legacy script first and keep its behaviour, then improve.
 
 **Accept:** tables exist; the EC2 role can put and query; `tests/conftest.py` creates identical tables in `moto` from one shared spec.
 
-### 1.5 Data access layer (`sentinel/store/dynamo.py`, `sentinel/portfolio/service.py`)
+### 1.5 Data access layer (`sentinel/store/real.py`, `sentinel/portfolio/service.py`)
 - [x] Repositories: `TradeRepo`, `PositionRepo` and the starting balance (`BaselineRepo`). The others (`LessonRepo`, `PredictionRepo`, `SnapshotRepo`, `VoteRepo`, `ReportRepo`) come with the tasks that use them.
 - [x] Buy and sell write the trade and update the position in one `TransactWriteItems`, with a condition on `version` (optimistic locking).
 - [x] Average cost method: a buy updates `avg_price`; a sell keeps `avg_price` and adds `(sell_price - avg_price) * qty - fee` to `realised_pnl`; position closes when `qty` is below 1e-9.

@@ -22,7 +22,7 @@ from sentinel.data import exchange
 from sentinel.predict.validator import PredictionOut, check
 from sentinel.signals import indicators, snapshot
 from sentinel.signals.snapshot import DAILY_LIMIT, HOURLY_LIMIT, iso, rounded, sig
-from sentinel.store.dynamo import Prediction, PredictionRepo
+from sentinel.store.sim import Prediction, PredictionRepo
 
 FIRST_CHECK = timedelta(hours=1)
 SYMBOL = re.compile(r"[A-Z0-9]{1,15}")
