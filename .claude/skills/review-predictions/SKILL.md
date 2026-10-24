@@ -39,7 +39,7 @@ Done when every horizon and model in `summary` has a sentence.
 
 ## 3. Find where the reasoning failed
 
-Group the misses by what they share: BTC regime (`btc`), horizon, action, coin, the reasons cited, a stop placed too close (`first = stop` with a small `adverse`). For a miss worth a closer look, `sentinel predict show <id>` prints the full call. Invalid calls (`valid` false) count as misses and show where the agent misread the snapshot.
+Group the misses by what they share: BTC regime (`btc`), horizon, action, coin, the reasons cited, a stop placed too close (`first = stop` with a small `adverse`). For a miss worth a closer look, `sentinel predict show <id>` prints the full call. Invalid calls (`valid` false) are graded by price like the rest; `summary.invalid` counts them, and their errors show where the agent misread the snapshot.
 
 Done when each recurring miss pattern is named with its count and two or three example ids.
 

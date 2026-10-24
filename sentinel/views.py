@@ -313,13 +313,15 @@ def watch_checked(result: alerts_watch.CheckResult) -> View:
 def _prediction(pred: Prediction) -> dict[str, Any]:
     data = asdict(pred)
     data["id"] = data.pop("pred_id")
-    for name in ("confidence", "entry", "target", "stop"):
+    for name in ("confidence", "entry", "target", "stop", "max_adverse_pct"):
         data[name] = None if data[name] is None else _num(data[name])
-    data["snapshot"] = {
-        name: _num(value) if isinstance(value, Decimal) else value
-        for name, value in pred.snapshot.items()
-    }
+    data["snapshot"] = _floats(pred.snapshot)
+    data["checks"] = {name: _floats(check) for name, check in pred.checks.items()}
     return data
+
+
+def _floats(values: dict[str, Any]) -> dict[str, Any]:
+    return {name: _num(v) if isinstance(v, Decimal) else v for name, v in values.items()}
 
 
 def _levels_line(pred: Prediction) -> str:

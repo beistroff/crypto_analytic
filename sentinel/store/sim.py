@@ -210,12 +210,12 @@ class Prediction:
             **self.key,
             "GSI1PK": f"SYM#{self.symbol}",
             "GSI1SK": self.created_at,
-            "GSI2PK": self.status,
-            "GSI2SK": self.due_at,
             "type": "PRED",
             "arm": "chat",
             **asdict(self),
         }
+        if self.status == "OPEN":  # only open calls sit in the sparse GSI2
+            item["GSI2PK"], item["GSI2SK"] = "OPEN", self.due_at
         return {name: value for name, value in item.items() if value is not None}
 
     @classmethod
@@ -270,25 +270,35 @@ class PredictionRepo:
         next_due: str | None,
         target_hit_first: str | None = None,
         max_adverse_pct: Decimal | None = None,
-    ) -> None:
+    ) -> bool:
         """Save the checks so far with the next due time, or, with no next one, mark the
-        call DONE (it leaves GSI2) with its path results."""
-        params: dict[str, Any] = {"TableName": _table(), "Key": marshal(pred.key)}
+        call DONE (it leaves GSI2) with its path results. False when the call is no longer
+        OPEN: an overlapping run finished it first, and its result stands."""
+        params: dict[str, Any] = {
+            "TableName": _table(),
+            "Key": marshal(pred.key),
+            "ConditionExpression": "#s = :open",
+            "ExpressionAttributeNames": {"#s": "status"},  # a reserved word
+        }
         if next_due:
             params["UpdateExpression"] = "SET checks = :c, due_at = :due, GSI2SK = :due"
-            params["ExpressionAttributeValues"] = marshal({":c": checks, ":due": next_due})
+            values = {":c": checks, ":due": next_due}
         else:
             params["UpdateExpression"] = (
                 "SET checks = :c, #s = :done, target_hit_first = :first, "
                 "max_adverse_pct = :adverse REMOVE GSI2PK, GSI2SK"
             )
-            params["ExpressionAttributeValues"] = marshal(
-                {
-                    ":c": checks,
-                    ":done": "DONE",
-                    ":first": target_hit_first,
-                    ":adverse": max_adverse_pct,
-                }
-            )
-            params["ExpressionAttributeNames"] = {"#s": "status"}  # a reserved word
-        aws.client("dynamodb").update_item(**params)
+            values = {
+                ":c": checks,
+                ":done": "DONE",
+                ":first": target_hit_first,
+                ":adverse": max_adverse_pct,
+            }
+        params["ExpressionAttributeValues"] = marshal({**values, ":open": "OPEN"})
+        try:
+            aws.client("dynamodb").update_item(**params)
+        except ClientError as exc:
+            if exc.response.get("Error", {}).get("Code") == "ConditionalCheckFailedException":
+                return False
+            raise
+        return True

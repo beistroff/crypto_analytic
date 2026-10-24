@@ -385,7 +385,7 @@ Runs on every answer before anything else (lean version, decided 24 Oct: no pars
 - [x] `btc_context` not empty.
 - [x] `entry` within 1% of the live price.
 - [x] BUY: `target > entry > stop`; SELL: `target < entry < stop`; HOLD: no target or stop needed.
-- [x] `horizon_h` in {1, 4, 12, 24, 72, 168} (decided 24 Oct: scalps 1 to 12 h, trades 1 to 7 days; calls of a month or more are investments and are not logged); `confidence` between 0 and 1; reward-to-risk of 1 or more (warning only).
+- [x] `horizon_h` in {1, 4, 12, 24, 72, 168} (decided 24 Oct: scalps 1 to 12 h, trades 1 to 7 days; calls of a month or more are investments and are not logged; another horizon is refused like bad JSON, since the scorer could never grade it); `confidence` between 0 and 1; reward-to-risk of 1 or more (warning only).
 - [x] On failure: the call is stored with `valid = false` and its errors (counted in the results); no retry in code.
 
 ### 3.4 Chat path: `test-trade-scenario` skill

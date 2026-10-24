@@ -5,6 +5,7 @@ from decimal import Decimal
 import pytest
 from click.testing import CliRunner
 
+from sentinel import views
 from sentinel.cli import cli
 from sentinel.data import exchange
 from sentinel.data.exchange import Candle, Candles
@@ -91,7 +92,7 @@ def _pred(symbol, action, horizon_h, target=None, stop=None, **extra):
         created_at="2026-10-17T12:20:00.000Z",
         model="haiku",
         action=action,
-        direction={"BUY": "UP", "HOLD": "FLAT"}[action],
+        direction={"BUY": "UP", "SELL": "DOWN", "HOLD": "FLAT"}[action],
         confidence=D("0.6"),
         horizon_h=horizon_h,
         entry=D(100),
@@ -110,7 +111,8 @@ def _pred(symbol, action, horizon_h, target=None, stop=None, **extra):
 
 
 def test_score_checks_each_horizon_up_to_the_calls_own(tables, monkeypatch):
-    """XRP climbs 0.5 a quarter-hour from 100 (lows 1.5 under the close); ADA stays at 100.3."""
+    """XRP climbs 0.5 a quarter-hour from 100; ADA and DOT stay at 100.3. Highs are 0.5
+    over the close, lows 1.5 under."""
     clock = {"now": NOW}
 
     def candles(symbol, timeframe, limit=200):
@@ -128,10 +130,11 @@ def test_score_checks_each_horizon_up_to_the_calls_own(tables, monkeypatch):
     repo = PredictionRepo()
     repo.add(_pred("XRP", "BUY", 4, target=D(103), stop=D(98)))
     repo.add(_pred("ADA", "HOLD", 1))
+    repo.add(_pred("DOT", "SELL", 4, target=D(97), stop=D(101)))
 
     clock["now"] = NOW + timedelta(minutes=65)
     run = CliRunner().invoke(cli, ["predict", "score", "--format", "telegram"])
-    assert run.output == "Due 2: 2 graded, 1 done\n"
+    assert run.output == "Due 3: 3 graded, 1 done\n"
     buy, hold = repo.get("ID-XRP", "2026-10-17"), repo.get("ID-ADA", "2026-10-17")
     # The 13:15 close is nearest 13:20; the 13:30 candle is still open.
     assert buy.checks == {"h1": {"price": D("101.5"), "return_pct": D("1.5"), "hit": True}}
@@ -141,10 +144,16 @@ def test_score_checks_each_horizon_up_to_the_calls_own(tables, monkeypatch):
 
     clock["now"] = NOW + timedelta(minutes=255)
     scorer.score()
-    buy = repo.get("ID-XRP", "2026-10-17")
+    buy, sell = repo.get("ID-XRP", "2026-10-17"), repo.get("ID-DOT", "2026-10-17")
     assert buy.checks["h4"] == {"price": D("107.5"), "return_pct": D("7.5"), "hit": True}
-    assert (buy.status, buy.target_hit_first, buy.max_adverse_pct) == ("DONE", "target", D("-1.5"))
+    # The worst move counts only candles that open after the call: the 12:30 low of 99.
+    assert (buy.status, buy.target_hit_first, buy.max_adverse_pct) == ("DONE", "target", D(-1))
+    assert sell.checks["h4"]["hit"] is False  # +0.3% on a SELL
+    assert (sell.target_hit_first, sell.max_adverse_pct) == ("neither", D("-0.8"))
     assert repo.due("2026-10-18T00:00:00Z") == []
+    # `predict show` prints a scored call as JSON.
+    shown = json.loads(json.dumps(views.prediction(buy).data))
+    assert shown["checks"]["h4"] == {"price": 107.5, "return_pct": 7.5, "hit": True}
 
 
 def test_export_lists_calls_with_hit_rates(tables, monkeypatch):

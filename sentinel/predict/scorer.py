@@ -5,12 +5,16 @@ model tokens.
 nothing; the results show through ``predict export``. A call is checked at each standard
 horizon up to its own (1, 4, 12, 24, 72 or 168 h). The price then is the close of the
 candle that closes nearest that time: 15-minute candles up to 12 h, hourly ones above. A
-check whose candle is still open waits for the next run.
+check whose candle is still open waits for the next run; one whose time the candles no
+longer reach (300 of them: 75 h of 15-minute candles, 12.5 days of hourly ones, so only
+after a long outage) is never graded with a later price: the coin is reported in
+``missing`` instead.
 
 - Hit: BUY when the price is above the entry, SELL when below, HOLD when within ±1 %.
 - After its own horizon the call is DONE, with ``target_hit_first`` (target, stop or
   neither; both touched in one candle counts as stop) and ``max_adverse_pct``, the worst
-  move against the call in percent of the entry (0 or less).
+  move against the call in percent of the entry (0 or less). Both read the candles that
+  open after the call, so a wick from before it never counts.
 """
 
 from __future__ import annotations
@@ -55,9 +59,9 @@ def score() -> ScoreResult:
         created = datetime.fromisoformat(pred.created_at)
         timeframe: Timeframe = "15m" if pred.horizon_h <= 12 else "1h"
         period = exchange.PERIOD[timeframe]
-        limit = min(exchange.OKX_MAX_LIMIT, int((now - created) / period) + 2)
         try:
-            candles = exchange.candles(pred.symbol, timeframe, limit).candles
+            # One fixed limit, so calls on the same coin share one cached fetch.
+            candles = exchange.candles(pred.symbol, timeframe, exchange.OKX_MAX_LIMIT).candles
         except (SourceError, requests.RequestException) as exc:
             log.warning("no candles", extra={"symbol": pred.symbol, "error": str(exc)})
             if pred.symbol not in result.missing:
@@ -69,8 +73,14 @@ def score() -> ScoreResult:
             if f"h{h}" in checks:
                 continue
             at = created + timedelta(hours=h)
+            if at > now:
+                break
             candle = min(candles, key=lambda c: abs(c.ts + period - at))
             if not candle.closed:
+                break
+            if abs(candle.ts + period - at) > period / 2:  # the candles no longer reach it
+                if pred.symbol not in result.missing:
+                    result.missing.append(pred.symbol)
                 break
             checks[f"h{h}"] = _check(pred, candle.close)
         if len(checks) == len(pred.checks):
@@ -80,13 +90,9 @@ def score() -> ScoreResult:
         if pending:
             repo.record(pred, checks, iso(created + timedelta(hours=pending[0])))
             continue
-        window = [
-            c
-            for c in candles
-            if c.ts + period > created and c.ts < created + timedelta(hours=pred.horizon_h)
-        ]
-        repo.record(pred, checks, None, _first(pred, window), _adverse(pred, window))
-        result.done += 1
+        window = [c for c in candles if created <= c.ts < created + timedelta(hours=pred.horizon_h)]
+        if repo.record(pred, checks, None, _first(pred, window), _adverse(pred, window)):
+            result.done += 1
     return result
 
 
