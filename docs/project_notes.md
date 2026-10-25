@@ -76,3 +76,8 @@ Short notes per merged PR, newest last: what changed, why, and one number. Detai
 - `sentinel predict score` (hourly, silent, no model) checks each logged call at every horizon up to its own: BUY hits above the entry, SELL below, HOLD within ±1 %; then target or stop first and the worst move against. `predict export` lists the calls with hit rates per horizon and per model; the `review-predictions` skill turns an export into at most 5 lessons for `memory/prediction_lessons.md`.
 - Why: logged calls need a grade before anyone can say how far to trust the agent, and the same scorer will grade the model comparison.
 - Number: 0 model tokens per grade; 153 tests pass. Steps 9 and 10 ship as v0.1.8.
+
+## #24 Plan: runner schedule and coins (25 Oct)
+- Docs only: the 3.5 runner runs 3 times a day, follow the sun (00:05, 08:05, 16:05 UTC, just after funding settles), one call per coin per run for one fixed horizon, on a fixed list of 20 coins; 9.1 checks each coin's data and recounts the cost.
+- Why: 09:00 and 21:00 were placeholders; funding times and the UTC daily close are real market events, and a fixed list keeps model skill apart from coin selection.
+- Number: 60 calls a day per arm; Haiku about $0.40 for the 14-day run.
