@@ -241,6 +241,9 @@ class Prediction:
     def from_item(cls, item: dict[str, Any]) -> Prediction:
         values = {f.name: item.get(f.name) for f in fields(cls)}
         values["horizon_h"] = int(item["horizon_h"])
+        for name in ("tokens_in", "tokens_out", "latency_ms"):  # Decimal from DynamoDB
+            if values[name] is not None:
+                values[name] = int(values[name])
         values["checks"] = item.get("checks") or {}
         return cls(**values)
 

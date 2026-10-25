@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import time
 
+import httpx
+import httpx2
 from google import genai
 from google.genai import errors, types
 from pydantic import BaseModel, ValidationError
@@ -34,6 +36,9 @@ def call[T: BaseModel](model: str, system: str, user: str, schema: type[T]) -> t
         )
     except errors.APIError as exc:
         raise LLMError(f"gemini {exc.code} {exc.status}") from exc
+    # The SDK retries timeouts and lost connections, then raises its HTTP library's error.
+    except (httpx.HTTPError, httpx2.HTTPError) as exc:
+        raise LLMError(f"gemini {type(exc).__name__}") from exc
     latency_ms = round((time.monotonic() - start) * 1000)
     try:
         parsed = schema.model_validate_json(response.text or "")

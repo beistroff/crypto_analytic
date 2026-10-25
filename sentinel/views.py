@@ -314,7 +314,7 @@ def watch_checked(result: alerts_watch.CheckResult) -> View:
 def _prediction(pred: Prediction) -> dict[str, Any]:
     data = asdict(pred)
     data["id"] = data.pop("pred_id")
-    for name in ("confidence", "entry", "target", "stop", "max_adverse_pct"):
+    for name in ("confidence", "entry", "target", "stop", "max_adverse_pct", "cost_usd"):
         data[name] = None if data[name] is None else _num(data[name])
     data["snapshot"] = _floats(pred.snapshot)
     data["checks"] = {name: _floats(check) for name, check in pred.checks.items()}

@@ -2,6 +2,7 @@ import json
 from datetime import UTC, datetime
 from types import SimpleNamespace
 
+import httpx
 import pytest
 
 from sentinel import views
@@ -70,6 +71,8 @@ def test_run_calls_every_arm_once_per_slot(trending, tables, tmp_path, monkeypat
         200,
     )
     assert xrp.snapshot["btc_regime"] == "risk_on" and xrp.snapshot_ref == "2026-10-17T12:20:00Z"
+    shown = json.loads(json.dumps(views.prediction(xrp).data))  # what `predict show` prints
+    assert (shown["tokens_in"], shown["cost_usd"], shown["latency_ms"]) == (1000, 0.0002, 900)
     snap = tables.get_item(
         TableName="sentinel-sim", Key={"PK": {"S": "SNAP#XRP"}, "SK": {"S": xrp.snapshot_ref}}
     )["Item"]
@@ -129,4 +132,11 @@ def test_clients_return_the_answer_with_tokens_and_cost(monkeypatch):
     assert usage == Usage("gemini-3.5-flash-lite-001", 900, 200, usage.latency_ms, 0.0)
     answer.text = '{"action": "BUY"}'
     with pytest.raises(LLMError, match="not in the schema"):
+        gemini.call("gemini-3.5-flash-lite", "system", "user", PredictionOut)
+
+    def lost(**_):
+        raise httpx.ConnectError("connection reset")  # after the SDK's own retries
+
+    models.generate_content = lost
+    with pytest.raises(LLMError, match="ConnectError"):
         gemini.call("gemini-3.5-flash-lite", "system", "user", PredictionOut)
