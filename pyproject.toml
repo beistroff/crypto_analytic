@@ -23,6 +23,9 @@ ec2 = [
     "click>=8.1",
     "feedparser>=6.0.14",
     "google-genai>=2.33",
+    # Imported for their network errors (the Gemini SDK runs on either), not only pulled in.
+    "httpx>=0.28",
+    "httpx2>=2.16",
     "python-ulid>=3",
     "pyyaml>=6.0",
 ]
