@@ -542,7 +542,7 @@ Other users share their lessons the same way (`<user>_lessons_learned.md`), so t
 ## Phase 9: Experiment freeze, run and analysis [Research: freeze, a 14-day run, then the analysis]
 
 ### 9.1 Freeze
-- [ ] `experiment.yaml` committed with arms, coin list, horizon, exact model ids, validator and gate thresholds, NB model version, prompt hashes. Git tag `experiment-v1`.
+- [ ] `experiment.yaml` committed with arms, coin list, horizon, exact model ids, validator and gate thresholds, NB model version, prompt hashes, and `end_date` 14 days after the first run (runs make no calls from then on). Git tag `experiment-v1`. Only then the runner automation is added (`openclaw/README.md` step 16); before the freeze, runs happen only by hand.
 - [ ] Each of the 20 coins (3.5) checked with `sentinel snapshot`: `missing` empty, at least 300 daily candles, an OKX swap for funding (XMR has none, which is known), SUI and TON first.
 - [ ] Reflection and NB retraining switched off.
 

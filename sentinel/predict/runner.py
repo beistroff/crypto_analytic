@@ -23,7 +23,7 @@ import random
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Literal
@@ -60,6 +60,7 @@ class Experiment(BaseModel):
     horizon_h: Horizon
     coins: list[str]
     arms: list[Arm]
+    end_date: date | None = None  # no calls from this UTC day on: a forgotten automation costs 0
 
 
 @dataclass
@@ -72,6 +73,7 @@ class RunResult:
     skipped: int = 0  # stored by an earlier run of the slot
     missing: list[str] = field(default_factory=list)  # coins with no snapshot price
     cost_usd: float = 0.0
+    ended: str | None = None  # the experiment's end date, once it has passed
 
 
 def _now() -> datetime:
@@ -92,6 +94,9 @@ def run(slot: str | None = None, path: Path = EXPERIMENT) -> RunResult:
     experiment = load(path)
     now = _now()
     result = RunResult(date=f"{now:%Y-%m-%d}", slot=slot or SLOTS[now.hour // 8])
+    if experiment.end_date and now.date() >= experiment.end_date:
+        result.ended = f"{experiment.end_date}"
+        return result
     system = (PROMPTS / "system.md").read_text(encoding="utf-8")
     templates = {
         name: (PROMPTS / f"{name}.md").read_text(encoding="utf-8")

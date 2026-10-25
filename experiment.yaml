@@ -4,6 +4,10 @@
 
 horizon_h: 24
 
+# Runs make no model calls from this UTC date on. Set it at the freeze to 14 days after
+# the first run; until the freeze the automation is not added and runs happen by hand.
+end_date:
+
 # The same 20 coins for every arm (decided 25 Oct).
 coins: [BTC, ETH, SOL, BNB, ADA, XRP, LINK, XMR, ZEC, LTC, AAVE, UNI, NEAR, AVAX, SUI, TON, DOT, XLM, TRX, DOGE]
 

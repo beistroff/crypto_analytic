@@ -88,6 +88,13 @@ def test_run_calls_every_arm_once_per_slot(trending, tables, tmp_path, monkeypat
     assert [model for model, _ in calls] == ["claude-haiku-5-5"]  # only B on SOL again
     assert again.skipped == 5 and again.failed == {"B": ["SOL"]}
 
+    calls.clear()
+    path.write_text(EXPERIMENT + "end_date: 2026-10-17\n", encoding="utf-8")
+    ended = runner.run(path=path)
+    assert calls == [] and views.experiment_ran(ended).text == (
+        "Run 2026-10-17 08: experiment ended 2026-10-17"
+    )
+
 
 def test_clients_return_the_answer_with_tokens_and_cost(monkeypatch):
     monkeypatch.setattr(anthropic_.aws, "get_secret", lambda name: "test")

@@ -453,6 +453,8 @@ def experiment_ran(result: RunResult) -> View:
     """One line for the automation's run history; nothing is sent to Telegram."""
     data = asdict(result)
     data["cost_usd"] = round(result.cost_usd, 4)
+    if result.ended:
+        return View(data, f"Run {result.date} {result.slot}: experiment ended {result.ended}")
     arms = ", ".join(
         f"{name} {n}" + (f" ({result.invalid[name]} invalid)" if result.invalid[name] else "")
         for name, n in result.stored.items()
