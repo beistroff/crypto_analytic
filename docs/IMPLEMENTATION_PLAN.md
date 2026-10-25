@@ -65,7 +65,7 @@ The plan is split in three. **Core** makes the agent useful day to day: good mar
 | 8 | Core | 2.4 NewsAPI rework and `news world`, CMC coin names, no-swap flow out of `missing` | Done |
 | 9 | Core | 2.11 scan watchlist | Done |
 | 10 | Core | Minimal prediction journal, in two PRs (decided 24 Oct): 10a 3.3 validator and 3.4 log; 10b 3.6 outcome scorer, 3.7 export and review skill | Done |
-| 11 | Research | 3.1 clients, 3.2 prompts, 3.5 runner | Next |
+| 11 | Research | 3.1 clients, 3.2 prompts, 3.5 runner (3 follow-the-sun runs a day, 20 fixed coins) | Next |
 | 12 | Research | Phase 5 Naive Bayes (5.1 to 5.5), graded by the same outcome scorer | |
 | 13 | Research | Phase 9 freeze, run and analysis | |
 | - | Later | revisit the chat model order once the agent is stable (free Gemini first, Haiku as the fallback; DeepSeek as a fallback if the experiment shows it is good), 1.6, 1.7 `lesson share`, 2.4 GDELT, 2.4 scheduled world-news watcher (Lambda or instance timer that flags major events), 2.5 whale proxy, 2.6 `--save`, 2.7 CMC pass-through, 5.6, Phases 4, 6, 7 and 8, `openclaw/configure.sh` (before the next rebuild) | |
@@ -395,9 +395,10 @@ Minimal by design (2026-10-19): the agent logs its calls; it never scores or rev
 - [x] Skill folder `skills/test-trade-scenario/SKILL.md`: read `memory/prediction_lessons.md`, build the snapshot, decide, log, reply in the short format. `memory/lessons_learned.md` stays for real trades only.
 
 ### 3.5 Scheduled path: experiment runner
-- [ ] `sentinel experiment run --slot 09|21` reads `experiment.yaml`, builds one snapshot per coin, runs every arm, stores one `PRED` per arm.
+- [ ] `sentinel experiment run --slot 00|08|16` reads `experiment.yaml`, builds one snapshot per coin, runs every arm, stores one `PRED` per arm: one call per coin per run, for the one horizon fixed in `experiment.yaml` (24 h suggested, set at the 9.1 freeze).
+- [ ] Coins: a fixed list of 20 in `experiment.yaml`, the same for every arm (decided 25 Oct; a list that changed daily would mix model skill with coin selection): BTC, ETH, SOL, BNB, ADA, XRP, LINK, XMR, ZEC, LTC, AAVE, UNI, NEAR, AVAX, SUI, TON, DOT, XLM, TRX, DOGE.
 - [ ] Idempotency key: date + slot + symbol + arm (re-runs skip existing items).
-- [ ] System cron on EC2 at 09:00 and 21:00 UTC. This runs outside OpenClaw on purpose, so every arm gets an identical prompt and exact token logging.
+- [ ] System cron on EC2 at 00:05, 08:05 and 16:05 UTC (decided 25 Oct, follow the sun: just after funding settles at 00, 08 and 16 UTC and, at 00:05, after the UTC daily close; the Asia, Europe and US sessions can be compared). This runs outside OpenClaw on purpose, so every arm gets an identical prompt and exact token logging.
 
 ### 3.6 Outcome scorer (hourly, code only, no LLM)
 Records what the market did after each call, with zero model tokens. It is the answer key: the agent's calls (3.4, 3.5) and Naive Bayes' calls (Phase 5) are graded by the same scorer, and Naive Bayes learns from its outcomes. Core version: `sentinel predict score`, an hourly OpenClaw command automation on the instance that sends nothing (decided 24 Oct, like the watch check). The Lambda version waits for Phase 6.
@@ -541,7 +542,8 @@ Other users share their lessons the same way (`<user>_lessons_learned.md`), so t
 ## Phase 9: Experiment freeze, run and analysis [Research: freeze, a 14-day run, then the analysis]
 
 ### 9.1 Freeze
-- [ ] `experiment.yaml` committed with arms, coin list, exact model ids, validator and gate thresholds, NB model version, prompt hashes. Git tag `experiment-v1`.
+- [ ] `experiment.yaml` committed with arms, coin list, horizon, exact model ids, validator and gate thresholds, NB model version, prompt hashes. Git tag `experiment-v1`.
+- [ ] Each of the 20 coins (3.5) checked with `sentinel snapshot`: `missing` empty, at least 300 daily candles, an OKX swap for funding (XMR has none, which is known), SUI and TON first.
 - [ ] Reflection and NB retraining switched off.
 
 | Arm | Model | Prompt | Gate |
@@ -555,7 +557,7 @@ Other users share their lessons the same way (`<user>_lessons_learned.md`), so t
 | NB | Naive Bayes only | none | n/a |
 | RULES | Legacy fixed rules | none | n/a |
 
-Daily volume: 20 snapshots, so about 40 Flash calls plus gate re-checks, 20 Haiku and 20 Sonnet. Expected cost for 28 days: Sonnet about $6 (about $3 through the Batch API), Haiku about $0.30, Flash free.
+Daily volume (25 Oct): 20 coins × 3 runs = 60 snapshots, so 60 calls a day per arm plus gate re-checks. Expected cost for 14 days: Haiku about $0.0005 a call, about $0.40; Sonnet about $0.009 a call, about $7.50, over the $5 limit, so S1 covers only a few coins if any; free Gemini Flash allows 20 calls a day, so the Gemini arms need Flash Lite (500 a day).
 
 Shortened (2026-10-16): the run is 14 days. The final arms are chosen at the freeze to fit the $5 monthly Anthropic limit (S1 only if the budget allows), DeepSeek's price on OpenRouter (D1 only if a free variant exists or the credit it needs is small) and the free Gemini quota (5 requests a minute and 20 a day for 3.x Flash, so the Gemini arms may need a Flash Lite model).
 
