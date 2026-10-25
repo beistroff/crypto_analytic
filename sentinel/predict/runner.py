@@ -41,7 +41,7 @@ EXPERIMENT = Path(__file__).resolve().parents[2] / "experiment.yaml"
 PROMPTS = Path(__file__).resolve().parents[1] / "llm" / "prompts"
 SLOTS = ("00", "08", "16")
 
-Caller = Callable[[str, str, str, type[PredictionOut]], tuple[PredictionOut, Usage]]
+Caller = Callable[[str, str, str, type[PredictionOut], int], tuple[PredictionOut, Usage]]
 CALLERS: dict[str, Caller] = {"gemini": gemini.call, "anthropic": anthropic_.call}
 
 log = logging.getLogger(__name__)
@@ -54,6 +54,7 @@ class Arm(BaseModel):
     prompt: Literal["freeform", "structured"]
     sample: int | None = None  # coins per run; all of them when not set
     min_interval_s: float = 0.0  # between two calls to the same model
+    attempts: int = 3  # tries per call; each counts against a free daily quota
 
 
 class Experiment(BaseModel):
@@ -133,7 +134,9 @@ def run(slot: str | None = None, path: Path = EXPERIMENT) -> RunResult:
             )
             _pace(arm, last_call)
             try:
-                out, usage = CALLERS[arm.provider](arm.model, system, user, PredictionOut)
+                out, usage = CALLERS[arm.provider](
+                    arm.model, system, user, PredictionOut, arm.attempts
+                )
                 if out.horizon_h != experiment.horizon_h:  # refused like bad JSON (plan 3.3)
                     raise LLMError(f"horizon {out.horizon_h} h, not {experiment.horizon_h} h")
             except LLMError as exc:

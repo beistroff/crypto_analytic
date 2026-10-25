@@ -18,9 +18,13 @@ TIMEOUT_S = 120.0
 CACHE_WRITE, CACHE_READ = 1.25, 0.1  # of the input price
 
 
-def call[T: BaseModel](model: str, system: str, user: str, schema: type[T]) -> tuple[T, Usage]:
+def call[T: BaseModel](
+    model: str, system: str, user: str, schema: type[T], attempts: int = 3
+) -> tuple[T, Usage]:
     client = anthropic.Anthropic(
-        api_key=aws.get_secret("anthropic_api_key"), timeout=TIMEOUT_S, max_retries=3
+        api_key=aws.get_secret("anthropic_api_key"),
+        timeout=TIMEOUT_S,
+        max_retries=attempts - 1,
     )
     start = time.monotonic()
     try:

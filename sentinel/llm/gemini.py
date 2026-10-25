@@ -14,14 +14,22 @@ from pydantic import BaseModel, ValidationError
 from sentinel import aws
 from sentinel.llm import LLMError, Usage
 
-TIMEOUT_MS = 120_000
-RETRY = types.HttpRetryOptions(attempts=3, initial_delay=2.0, http_status_codes=[429, 500, 503])
+# The SDK sends the timeout to Google as the request's deadline, and free-tier requests can
+# wait in a queue: at 2 minutes Gemini 3.8 Flash answered 504 DEADLINE_EXCEEDED every time.
+TIMEOUT_MS = 600_000
+RETRY_CODES = [429, 500, 503]
 
 
-def call[T: BaseModel](model: str, system: str, user: str, schema: type[T]) -> tuple[T, Usage]:
+def call[T: BaseModel](
+    model: str, system: str, user: str, schema: type[T], attempts: int = 3
+) -> tuple[T, Usage]:
+    """``attempts`` counts every try against the daily quota (1: no retry)."""
+    retry = types.HttpRetryOptions(
+        attempts=attempts, initial_delay=2.0, http_status_codes=RETRY_CODES
+    )
     client = genai.Client(
         api_key=aws.get_secret("gemini_api_key"),
-        http_options=types.HttpOptions(timeout=TIMEOUT_MS, retry_options=RETRY),
+        http_options=types.HttpOptions(timeout=TIMEOUT_MS, retry_options=retry),
     )
     start = time.monotonic()
     try:

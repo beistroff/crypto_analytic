@@ -30,7 +30,7 @@ coins: [XRP, SOL, NOPE]
 arms:
   - {name: A, provider: gemini, model: flash-lite, prompt: freeform}
   - {name: B, provider: anthropic, model: claude-haiku-5-5, prompt: structured}
-  - {name: C, provider: gemini, model: flash, prompt: structured, sample: 1}
+  - {name: C, provider: gemini, model: flash, prompt: structured, sample: 1, attempts: 1}
   - {name: D, provider: gemini, model: pro, prompt: structured, sample: 1}
 """
 
@@ -38,10 +38,11 @@ arms:
 def test_run_calls_every_arm_once_per_slot(trending, tables, tmp_path, monkeypatch):
     path = tmp_path / "experiment.yaml"
     path.write_text(EXPERIMENT, encoding="utf-8")
-    calls = []
+    calls, attempts = [], {}
 
-    def fake(model, system, user, schema):
+    def fake(model, system, user, schema, tries):
         calls.append((model, user))
+        attempts[model] = tries
         if model == "claude-haiku-5-5" and "SOL" in user:
             raise LLMError("anthropic 529")
         entry = 90.0 if model == "claude-haiku-5-5" else 100.0  # B's entry is off: invalid
@@ -58,6 +59,7 @@ def test_run_calls_every_arm_once_per_slot(trending, tables, tmp_path, monkeypat
         {"A": 0, "B": 1, "C": 0, "D": 0},
     )
     assert (result.failed, result.missing) == ({"B": ["SOL"]}, ["NOPE"])
+    assert (attempts["flash"], attempts["pro"]) == (1, 3)  # C: no retry, D: the default
     assert "BTC first" in calls[1][1] and "BTC first" not in calls[0][1]  # A freeform, B structured
     assert views.experiment_ran(result).text == (
         "Run 2026-10-17 08: A 2, B 1 (1 invalid), C 1, D 1; $0.0010; B failed: SOL; "
