@@ -396,7 +396,7 @@ Minimal by design (2026-10-19): the agent logs its calls; it never scores or rev
 
 ### 3.5 Scheduled path: experiment runner
 - [x] `sentinel experiment run --slot 00|08|16` reads `experiment.yaml`, builds one snapshot per coin (stored as a `SNAP` item; without NewsAPI's day-old news, which keeps the free plan's quota for chat), runs every arm, stores one `PRED` per arm: one call per coin per run, for the one horizon fixed in `experiment.yaml` (24 h suggested, set at the 9.1 freeze).
-- [x] Coins: a fixed list of 20 in `experiment.yaml`, the same for every arm (decided 25 Oct; a list that changed daily would mix model skill with coin selection): BTC, ETH, SOL, BNB, ADA, XRP, LINK, XMR, ZEC, LTC, AAVE, UNI, NEAR, AVAX, SUI, TON, DOT, XLM, TRX, DOGE. An arm on a model with a small free quota calls a random sample of them per run (F1: 4 coins, decided 25 Oct), the same sample on a re-run.
+- [x] Coins: a fixed list of 20 in `experiment.yaml`, the same for every arm (decided 25 Oct; a list that changed daily would mix model skill with coin selection): BTC, ETH, SOL, BNB, ADA, XRP, LINK, XMR, ZEC, LTC, AAVE, UNI, NEAR, AVAX, SUI, TON, DOT, XLM, TRX, DOGE. An arm on a model with a small free quota or a high price calls a random sample of them per run (F1 and S1: the same 4 coins, decided 25 Oct), the same sample on a re-run.
 - [x] Idempotency key: date + slot + symbol + arm (re-runs skip existing items).
 - [x] An OpenClaw command automation at 00:05, 08:05 and 16:05 UTC (decided 25 Oct, follow the sun: just after funding settles at 00, 08 and 16 UTC and, at 00:05, after the UTC daily close; the Asia, Europe and US sessions can be compared). It makes no model call in OpenClaw, so every arm gets an identical prompt and exact token logging.
 
@@ -553,12 +553,12 @@ Other users share their lessons the same way (`<user>_lessons_learned.md`), so t
 | L1G | Gemini Flash Lite | structured (reuses L1's answer) | on; an extra call only when triggered |
 | F1 | Gemini Flash, 4 random coins per run | structured | off |
 | H1 | Claude Haiku 5.5 | structured | off |
-| S1 | Claude Sonnet 5.5 | structured | off |
+| S1 | Claude Sonnet 5.5, F1's 4 coins per run | structured | off |
 | D1 | DeepSeek (through OpenRouter) | structured | off |
 | NB | Naive Bayes only | none | n/a |
 | RULES | Legacy fixed rules | none | n/a |
 
-Daily volume (25 Oct): 20 coins × 3 runs = 60 snapshots, so 60 calls a day per arm plus gate re-checks. Expected cost for 14 days: Haiku about $0.0005 a call, about $0.40; Sonnet about $0.009 a call, about $7.50, over the $5 limit, so S1 covers only a few coins if any; free Gemini Flash allows 20 calls a day and 5 a minute, so the full Gemini arms run on Flash Lite (500 a day, 15 a minute) and F1 calls 4 random coins per run, 12 a day (decided 25 Oct).
+Daily volume (25 Oct): 20 coins × 3 runs = 60 snapshots, so 60 calls a day per arm plus gate re-checks. Expected cost for 14 days: Haiku about $0.0005 a call, about $0.40; Sonnet about $0.01 to $0.03 a call with its default thinking, far over the $5 limit on all coins, so S1 calls F1's 4 coins per run, 12 a day, about $2 to $5 for 14 days (decided 25 Oct; check the first day's cost); free Gemini Flash allows 20 calls a day and 5 a minute, so the full Gemini arms run on Flash Lite (500 a day, 15 a minute) and F1 calls 4 random coins per run, 12 a day (decided 25 Oct).
 
 Shortened (2026-10-16): the run is 14 days. The final arms are chosen at the freeze to fit the $5 monthly Anthropic limit (S1 only if the budget allows), DeepSeek's price on OpenRouter (D1 only if a free variant exists or the credit it needs is small) and the free Gemini quota (5 requests a minute and 20 a day for 3.x Flash, so the Gemini arms may need a Flash Lite model).
 
@@ -569,7 +569,7 @@ Shortened (2026-10-16): the run is 14 days. The final arms are chosen at the fre
 - [ ] `sentinel eval export --out data/experiment.parquet`.
 - [ ] Scripts producing tables and figures for the write-up:
   - Wilson intervals (`statsmodels proportion_confint(method="wilson")`) and exact binomial test against 50% (`scipy.stats.binomtest`).
-  - McNemar (`statsmodels mcnemar`): L1 vs H1, L1 vs L1G, L0 vs L1, and F1 vs L1 and H1 on F1's coins only; S1 vs L1 if S1 runs.
+  - McNemar (`statsmodels mcnemar`): L1 vs H1, L1 vs L1G, L0 vs L1, and F1 vs S1, L1 and H1 on F1's coins only.
   - Cochran's Q (`statsmodels cochrans_q`) across L0, L1, L1G, then McNemar with Holm correction.
   - Brier score with Murphy decomposition and a reliability diagram.
   - Wilcoxon signed-rank (`scipy.stats.wilcoxon`) on paired simulated returns.

@@ -31,6 +31,7 @@ arms:
   - {name: A, provider: gemini, model: flash-lite, prompt: freeform}
   - {name: B, provider: anthropic, model: claude-haiku-5-5, prompt: structured}
   - {name: C, provider: gemini, model: flash, prompt: structured, sample: 1}
+  - {name: D, provider: gemini, model: pro, prompt: structured, sample: 1}
 """
 
 
@@ -50,19 +51,21 @@ def test_run_calls_every_arm_once_per_slot(trending, tables, tmp_path, monkeypat
     monkeypatch.setattr(runner, "_now", lambda: NOW)
 
     result = runner.run(path=path)
-    # NOPE has no candles; C's random coin for this slot is XRP; B failed on SOL.
+    # NOPE has no candles; C and D share this slot's random coin, SOL; B failed on SOL.
     assert (result.slot, result.stored, result.invalid) == (
         "08",
-        {"A": 2, "B": 1, "C": 1},
-        {"A": 0, "B": 1, "C": 0},
+        {"A": 2, "B": 1, "C": 1, "D": 1},
+        {"A": 0, "B": 1, "C": 0, "D": 0},
     )
     assert (result.failed, result.missing) == ({"B": ["SOL"]}, ["NOPE"])
     assert "BTC first" in calls[1][1] and "BTC first" not in calls[0][1]  # A freeform, B structured
     assert views.experiment_ran(result).text == (
-        "Run 2026-10-17 08: A 2, B 1 (1 invalid), C 1; $0.0008; B failed: SOL; no snapshot: NOPE"
+        "Run 2026-10-17 08: A 2, B 1 (1 invalid), C 1, D 1; $0.0010; B failed: SOL; "
+        "no snapshot: NOPE"
     )
 
     preds = {(p.symbol, p.arm): p for p in PredictionRepo().logged(["2026-10-17"])}
+    assert {("SOL", "C"), ("SOL", "D")} <= preds.keys()
     xrp = preds["XRP", "B"]
     assert (xrp.source, xrp.slot, xrp.model_version, xrp.tokens_out) == (
         "scheduled",
@@ -83,7 +86,7 @@ def test_run_calls_every_arm_once_per_slot(trending, tables, tmp_path, monkeypat
     calls.clear()
     again = runner.run(path=path)
     assert [model for model, _ in calls] == ["claude-haiku-5-5"]  # only B on SOL again
-    assert again.skipped == 4 and again.failed == {"B": ["SOL"]}
+    assert again.skipped == 5 and again.failed == {"B": ["SOL"]}
 
 
 def test_clients_return_the_answer_with_tokens_and_cost(monkeypatch):

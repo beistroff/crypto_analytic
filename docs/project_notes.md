@@ -83,6 +83,6 @@ Short notes per merged PR, newest last: what changed, why, and one number. Detai
 - Number: 60 calls a day per arm; Haiku about $0.40 for the 14-day run.
 
 ## #25 Experiment runner (25 Oct)
-- `sentinel experiment run` (an OpenClaw command automation at 00:05, 08:05 and 16:05 UTC) builds one snapshot per coin of `experiment.yaml`, stores it, and has every arm call its model directly on it: Gemini Flash Lite with and without the BTC-first reading order (L0, L1), Gemini Flash on 4 random coins (F1, its free quota is 20 a day) and Haiku 5.5 (H1). The answers go through the validator into the prediction journal; the hourly scorer grades them.
+- `sentinel experiment run` (an OpenClaw command automation at 00:05, 08:05 and 16:05 UTC) builds one snapshot per coin of `experiment.yaml`, stores it, and has every arm call its model directly on it: Gemini Flash Lite with and without the BTC-first reading order (L0, L1), Gemini Flash on 4 random coins (F1, its free quota is 20 a day), Haiku 5.5 (H1), and Sonnet 5.5 on F1's same 4 coins (S1, for the price). The answers go through the validator into the prediction journal; the hourly scorer grades them.
 - Why: the research question needs every model on identical inputs, with exact tokens and cost; a chat turn through the agent would cost 10 to 20 times more and differ per model.
-- Number: 132 calls a day (L0 60, L1 60, F1 12) on the free tier plus 60 Haiku calls at about $0.0005 each; 0 NewsAPI requests; 155 tests pass. Ships as v0.1.9.
+- Number: 132 calls a day (L0 60, L1 60, F1 12) on the free tier, 60 Haiku calls at about $0.0005 each and 12 Sonnet calls at about $0.01 to $0.03 each; 0 NewsAPI requests; 155 tests pass. Ships as v0.1.9.

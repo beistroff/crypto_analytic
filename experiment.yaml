@@ -8,7 +8,8 @@ horizon_h: 24
 coins: [BTC, ETH, SOL, BNB, ADA, XRP, LINK, XMR, ZEC, LTC, AAVE, UNI, NEAR, AVAX, SUI, TON, DOT, XLM, TRX, DOGE]
 
 # min_interval_s: seconds between two calls to the same model (free-tier requests per
-# minute). sample: coins per run, picked at random (the same pick on a re-run of a slot).
+# minute). sample: coins per run, picked at random (the same pick on a re-run of a slot,
+# and for every arm with the same sample).
 arms:
   # Gemini Flash Lite, free: 15 requests a minute, 500 a day. The same model with and
   # without the BTC-first reading order (does the hierarchy help?).
@@ -17,5 +18,9 @@ arms:
   # Gemini Flash, free: 5 requests a minute, 20 a day (shared with the agent's fallback),
   # so 4 coins per run, 12 calls a day.
   - {name: F1, provider: gemini, model: gemini-3.8-flash, prompt: structured, sample: 4, min_interval_s: 13}
-  # Claude Haiku 5.5, paid (the $5 monthly cap): about $0.0005 a call.
+  # Claude Haiku 5.5, paid (the $5 monthly cap, shared with the agent's chat): about
+  # $0.0005 a call.
   - {name: H1, provider: anthropic, model: claude-haiku-5-5, prompt: structured}
+  # Claude Sonnet 5.5, paid: about $0.01 to $0.03 a call (its thinking is billed as
+  # output), so only F1's 4 coins per run, 12 calls a day (decided 25 Oct).
+  - {name: S1, provider: anthropic, model: claude-sonnet-5-5, prompt: structured, sample: 4}

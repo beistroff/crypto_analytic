@@ -9,9 +9,10 @@ quota for chat) is stored as a ``SNAP`` item, and each answer goes through the v
 into the prediction journal, where the hourly scorer grades it like a chat call.
 
 An arm with ``sample`` calls only that many coins per run, picked at random from the date
-and slot, so a re-run picks the same ones. A re-run skips the calls already stored for the
-date, slot, coin and arm, so it only retries the calls that failed (each is logged and
-named in the result, and a later slot does not make it up).
+and slot, so a re-run picks the same ones, and arms with the same ``sample`` share them
+(Gemini Flash and Sonnet are compared on the same coins). A re-run skips the calls already
+stored for the date, slot, coin and arm, so it only retries the calls that failed (each is
+logged and named in the result, and a later slot does not make it up).
 """
 
 from __future__ import annotations
@@ -166,7 +167,7 @@ def run(slot: str | None = None, path: Path = EXPERIMENT) -> RunResult:
 def _coins(experiment: Experiment, arm: Arm, result: RunResult) -> set[str]:
     if arm.sample is None:
         return set(experiment.coins)
-    rng = random.Random(f"{result.date}/{result.slot}/{arm.name}")
+    rng = random.Random(f"{result.date}/{result.slot}")
     return set(rng.sample(experiment.coins, arm.sample))
 
 
