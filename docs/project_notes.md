@@ -71,3 +71,8 @@ Short notes per merged PR, newest last: what changed, why, and one number. Detai
 - `sentinel predict log` checks a chat call (lean validator: entry within 1 % of the price, target and stop on the right sides, horizon, confidence) and stores it in `sentinel-sim` with the chat model and a compact snapshot; `predict show` reads it back. The `test-trade-scenario` skill tells the agent how.
 - Why: calls made in chat were lost in the Telegram history, so nobody could say how often the agent is right; the scorer (10b) and the model comparison grade these items.
 - Number: 0 CMC or NewsAPI credits per call (exchange candles only); 151 tests pass.
+
+## #23 Prediction scorer, export and review (24 Oct)
+- `sentinel predict score` (hourly, silent, no model) checks each logged call at every horizon up to its own: BUY hits above the entry, SELL below, HOLD within ±1 %; then target or stop first and the worst move against. `predict export` lists the calls with hit rates per horizon and per model; the `review-predictions` skill turns an export into at most 5 lessons for `memory/prediction_lessons.md`.
+- Why: logged calls need a grade before anyone can say how far to trust the agent, and the same scorer will grade the model comparison.
+- Number: 0 model tokens per grade; 153 tests pass. Steps 9 and 10 ship as v0.1.8.

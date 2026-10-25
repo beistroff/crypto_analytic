@@ -1,16 +1,18 @@
 """Deterministic checks on a call before it is stored (plan 3.3).
 
 A call that fails is still stored, with ``valid = false`` and its errors, so the results
-count it. Reward-to-risk under 1 is only a warning.
+count it. Reward-to-risk under 1 is only a warning. A horizon outside ``HORIZONS`` is
+refused with the JSON errors instead, since the scorer could never grade it.
 """
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Literal, get_args
 
 from pydantic import BaseModel
 
-HORIZONS = (1, 4, 12, 24, 72, 168)  # scalps 1 to 12 h, trades 1 to 7 days
+Horizon = Literal[1, 4, 12, 24, 72, 168]  # scalps 1 to 12 h, trades 1 to 7 days
+HORIZONS: tuple[int, ...] = get_args(Horizon)
 ENTRY_TOLERANCE_PCT = 1.0
 
 
@@ -21,7 +23,7 @@ class PredictionOut(BaseModel):
     action: Literal["BUY", "SELL", "HOLD"]
     direction: Literal["UP", "DOWN", "FLAT"]
     confidence: float
-    horizon_h: int
+    horizon_h: Horizon
     entry: float
     target: float | None = None
     stop: float | None = None
@@ -45,8 +47,6 @@ def check(pred: PredictionOut, price: float) -> tuple[list[str], list[str]]:
             errors.append("BUY needs target > entry > stop")
         elif pred.action == "SELL" and not target < pred.entry < stop:
             errors.append("SELL needs target < entry < stop")
-    if pred.horizon_h not in HORIZONS:
-        errors.append(f"horizon_h {pred.horizon_h} is not one of {', '.join(map(str, HORIZONS))}")
     if not 0 <= pred.confidence <= 1:
         errors.append(f"confidence {pred.confidence:g} is not between 0 and 1")
     warnings = []
