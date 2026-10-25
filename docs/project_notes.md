@@ -81,3 +81,8 @@ Short notes per merged PR, newest last: what changed, why, and one number. Detai
 - Docs only: the 3.5 runner runs 3 times a day, follow the sun (00:05, 08:05, 16:05 UTC, just after funding settles), one call per coin per run for one fixed horizon, on a fixed list of 20 coins; 9.1 checks each coin's data and recounts the cost.
 - Why: 09:00 and 21:00 were placeholders; funding times and the UTC daily close are real market events, and a fixed list keeps model skill apart from coin selection.
 - Number: 60 calls a day per arm; Haiku about $0.40 for the 14-day run.
+
+## #26 News rule and backup output (25 Oct)
+- Fix PR (gaps G-19, G-16): `AGENTS.md` sends questions about what moves the market, macro or the week ahead to `news world` together with the snapshot's fresh feed headlines, and says only NewsAPI's are a day late. The documented backup time is 04:00 UTC, after OpenClaw's 03:00 job, and a real backup prints errors only.
+- Why: asked what moved markets this week, the agent fetched no world news and missed a war headline it had shown that day; the backup's run summary stored every copy and progress line.
+- Number: one rule line changed; the backup summary goes from one line per file to two lines.
