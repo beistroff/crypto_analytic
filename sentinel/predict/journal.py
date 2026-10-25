@@ -17,6 +17,7 @@ from __future__ import annotations
 import re
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+from typing import Any
 
 from pydantic import ValidationError
 from ulid import ULID
@@ -59,8 +60,31 @@ def log(symbol: str, raw: str, model: str, source: str = "chat") -> Prediction:
     btc_hourly = exchange.candles("BTC", "1h", HOURLY_LIMIT)
     btc = snapshot.btc_context(btc_hourly, snapshot.technicals(btc_daily, btc_hourly), None)
     price = daily.price
+    snap = {
+        "price": sig(price),
+        "rsi14": rounded(indicators.rsi([c.close for c in daily.candles]), 1),
+        "btc_regime": btc.regime,
+        "btc_chg_24h": btc.chg_24h,
+    }
+    prediction = new(symbol, pred, model, price, snap, now, source=source)
+    if not PredictionRepo().add(prediction):
+        raise PredictError(f"a call for {symbol} was logged at the same moment, log it again")
+    return prediction
+
+
+def new(
+    symbol: str,
+    pred: PredictionOut,
+    model: str,
+    price: float,
+    snap: dict[str, Any],
+    now: datetime,
+    **extra: Any,
+) -> Prediction:
+    """A checked call, ready to store: ``snap`` is the compact snapshot (price, RSI, BTC's
+    regime and 24 h change), ``extra`` any further ``Prediction`` fields."""
     errors, warnings = check(pred, price)
-    prediction = Prediction(
+    return Prediction(
         pred_id=str(ULID.from_datetime(now)),
         symbol=symbol,
         created_at=f"{now:%Y-%m-%dT%H:%M:%S}.{now.microsecond // 1000:03d}Z",
@@ -75,21 +99,13 @@ def log(symbol: str, raw: str, model: str, source: str = "chat") -> Prediction:
         btc_context=pred.btc_context,
         reasons=pred.reasons,
         risk_note=pred.risk_note,
-        snapshot={
-            "price": _dec(sig(price)),
-            "rsi14": _dec(rounded(indicators.rsi([c.close for c in daily.candles]), 1)),
-            "btc_regime": btc.regime,
-            "btc_chg_24h": _dec(btc.chg_24h),
-        },
+        snapshot={name: _dec(v) if isinstance(v, float) else v for name, v in snap.items()},
         valid=not errors,
         validator_errors=errors,
         warnings=warnings,
         due_at=iso(now + FIRST_CHECK),
-        source=source,
+        **extra,
     )
-    if not PredictionRepo().add(prediction):
-        raise PredictError(f"a call for {symbol} was logged at the same moment, log it again")
-    return prediction
 
 
 def export(days: int) -> list[Prediction]:

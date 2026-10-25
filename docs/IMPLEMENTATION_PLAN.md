@@ -65,8 +65,8 @@ The plan is split in three. **Core** makes the agent useful day to day: good mar
 | 8 | Core | 2.4 NewsAPI rework and `news world`, CMC coin names, no-swap flow out of `missing` | Done |
 | 9 | Core | 2.11 scan watchlist | Done |
 | 10 | Core | Minimal prediction journal, in two PRs (decided 24 Oct): 10a 3.3 validator and 3.4 log; 10b 3.6 outcome scorer, 3.7 export and review skill | Done |
-| 11 | Research | 3.1 clients, 3.2 prompts, 3.5 runner (3 follow-the-sun runs a day, 20 fixed coins) | Next |
-| 12 | Research | Phase 5 Naive Bayes (5.1 to 5.5), graded by the same outcome scorer | |
+| 11 | Research | 3.1 clients, 3.2 prompts, 3.5 runner (3 follow-the-sun runs a day, 20 fixed coins) | Done |
+| 12 | Research | Phase 5 Naive Bayes (5.1 to 5.5), graded by the same outcome scorer | Next |
 | 13 | Research | Phase 9 freeze, run and analysis | |
 | - | Later | revisit the chat model order once the agent is stable (free Gemini first, Haiku as the fallback; DeepSeek as a fallback if the experiment shows it is good), 1.6, 1.7 `lesson share`, 2.4 GDELT, 2.4 scheduled world-news watcher (Lambda or instance timer that flags major events), 2.5 whale proxy, 2.6 `--save`, 2.7 CMC pass-through, 5.6, Phases 4, 6, 7 and 8, `openclaw/configure.sh` (before the next rebuild) | |
 
@@ -371,14 +371,14 @@ So the agent can ask CMC for more than the fixed commands without ever holding t
 ## Phase 3: Prediction journal and models [Core: 3.3, 3.4, 3.6, 3.7; Research: 3.1, 3.2, 3.5]
 
 ### 3.1 LLM clients (`sentinel/llm/`)
-- [ ] One interface `call(system, user, schema) -> (parsed, usage)` for Gemini (`google-genai`), Anthropic (`anthropic`, models `claude-sonnet-5-5` and `claude-haiku-5-5`) and OpenRouter (OpenAI-compatible), which also serves the DeepSeek arm (model id in config). Check DeepSeek's price and data terms when the client is built; the arms only ever see market snapshots, never portfolio or personal data.
-- [ ] JSON output mode, retries on 429 with backoff, and logged tokens in and out, latency and cost (prices in `config.py`: Sonnet 5.5 $2 / $10 per million tokens in / out, Haiku 5.5 $0.10 / $0.50, Gemini free tier $0).
-- [ ] Record the exact model id string returned by each API.
+- [x] One interface `call(system, user, schema) -> (parsed, usage)` for Gemini (`google-genai`) and Anthropic (`anthropic`, models `claude-sonnet-5-5` and `claude-haiku-5-5`). OpenRouter (OpenAI-compatible, for the DeepSeek arm, model id in config) is built only if D1 is chosen at the 9.1 freeze (it needs `/sentinel/openrouter_api_key`). Check DeepSeek's price and data terms when that client is built; the arms only ever see market snapshots, never portfolio or personal data.
+- [x] JSON output mode, retries on 429 with backoff, and logged tokens in and out, latency and cost (prices in `config.py`: Sonnet 5.5 $2 / $10 per million tokens in / out, Haiku 5.5 $0.10 / $0.50, Gemini free tier $0).
+- [x] Record the exact model id string returned by each API.
 
 ### 3.2 Prompts and output schema
-- [ ] `PredictionOut` (Appendix D). `btc_context` comes first and is required.
-- [ ] Templates: `system.md` (core of SOUL and IDENTITY plus analyst rules), `freeform.md` (today's style, for arm F0), `structured.md` (hierarchy, for all other arms), `gate_recheck.md`.
-- [ ] `prompt_hash` = sha256 of the rendered template without the data.
+- [x] `PredictionOut` (Appendix D). `btc_context` comes first and is required.
+- [x] Templates: `system.md` (core of SOUL and IDENTITY plus analyst rules, without the BTC-first order), `freeform.md` (today's style, for arm L0), `structured.md` (hierarchy, for all other arms). `gate_recheck.md` comes with the gate (step 12).
+- [x] `prompt_hash` = sha256 of the rendered template without the data.
 
 ### 3.3 Deterministic validator (`sentinel/predict/validator.py`)
 Runs on every answer before anything else (lean version, decided 24 Oct: no parsing of free text, and the schema states no range levels to compare):
@@ -395,10 +395,10 @@ Minimal by design (2026-10-19): the agent logs its calls; it never scores or rev
 - [x] Skill folder `skills/test-trade-scenario/SKILL.md`: read `memory/prediction_lessons.md`, build the snapshot, decide, log, reply in the short format. `memory/lessons_learned.md` stays for real trades only.
 
 ### 3.5 Scheduled path: experiment runner
-- [ ] `sentinel experiment run --slot 00|08|16` reads `experiment.yaml`, builds one snapshot per coin, runs every arm, stores one `PRED` per arm: one call per coin per run, for the one horizon fixed in `experiment.yaml` (24 h suggested, set at the 9.1 freeze).
-- [ ] Coins: a fixed list of 20 in `experiment.yaml`, the same for every arm (decided 25 Oct; a list that changed daily would mix model skill with coin selection): BTC, ETH, SOL, BNB, ADA, XRP, LINK, XMR, ZEC, LTC, AAVE, UNI, NEAR, AVAX, SUI, TON, DOT, XLM, TRX, DOGE.
-- [ ] Idempotency key: date + slot + symbol + arm (re-runs skip existing items).
-- [ ] System cron on EC2 at 00:05, 08:05 and 16:05 UTC (decided 25 Oct, follow the sun: just after funding settles at 00, 08 and 16 UTC and, at 00:05, after the UTC daily close; the Asia, Europe and US sessions can be compared). This runs outside OpenClaw on purpose, so every arm gets an identical prompt and exact token logging.
+- [x] `sentinel experiment run --slot 00|08|16` reads `experiment.yaml`, builds one snapshot per coin (stored as a `SNAP` item; without NewsAPI's day-old news, which keeps the free plan's quota for chat), runs every arm, stores one `PRED` per arm: one call per coin per run, for the one horizon fixed in `experiment.yaml` (24 h suggested, set at the 9.1 freeze).
+- [x] Coins: a fixed list of 20 in `experiment.yaml`, the same for every arm (decided 25 Oct; a list that changed daily would mix model skill with coin selection): BTC, ETH, SOL, BNB, ADA, XRP, LINK, XMR, ZEC, LTC, AAVE, UNI, NEAR, AVAX, SUI, TON, DOT, XLM, TRX, DOGE. An arm on a model with a small free quota calls a random sample of them per run (F1: 4 coins, decided 25 Oct), the same sample on a re-run.
+- [x] Idempotency key: date + slot + symbol + arm (re-runs skip existing items).
+- [x] An OpenClaw command automation at 00:05, 08:05 and 16:05 UTC (decided 25 Oct, follow the sun: just after funding settles at 00, 08 and 16 UTC and, at 00:05, after the UTC daily close; the Asia, Europe and US sessions can be compared). It makes no model call in OpenClaw, so every arm gets an identical prompt and exact token logging.
 
 ### 3.6 Outcome scorer (hourly, code only, no LLM)
 Records what the market did after each call, with zero model tokens. It is the answer key: the agent's calls (3.4, 3.5) and Naive Bayes' calls (Phase 5) are graded by the same scorer, and Naive Bayes learns from its outcomes. Core version: `sentinel predict score`, an hourly OpenClaw command automation on the instance that sends nothing (decided 24 Oct, like the watch check). The Lambda version waits for Phase 6.
@@ -548,16 +548,17 @@ Other users share their lessons the same way (`<user>_lessons_learned.md`), so t
 
 | Arm | Model | Prompt | Gate |
 | --- | --- | --- | --- |
-| F0 | Gemini Flash | freeform | off |
-| F1 | Gemini Flash | structured | off |
-| F1G | Gemini Flash | structured (reuses F1's answer) | on; an extra call only when triggered |
+| L0 | Gemini Flash Lite | freeform | off |
+| L1 | Gemini Flash Lite | structured | off |
+| L1G | Gemini Flash Lite | structured (reuses L1's answer) | on; an extra call only when triggered |
+| F1 | Gemini Flash, 4 random coins per run | structured | off |
 | H1 | Claude Haiku 5.5 | structured | off |
 | S1 | Claude Sonnet 5.5 | structured | off |
 | D1 | DeepSeek (through OpenRouter) | structured | off |
 | NB | Naive Bayes only | none | n/a |
 | RULES | Legacy fixed rules | none | n/a |
 
-Daily volume (25 Oct): 20 coins × 3 runs = 60 snapshots, so 60 calls a day per arm plus gate re-checks. Expected cost for 14 days: Haiku about $0.0005 a call, about $0.40; Sonnet about $0.009 a call, about $7.50, over the $5 limit, so S1 covers only a few coins if any; free Gemini Flash allows 20 calls a day, so the Gemini arms need Flash Lite (500 a day).
+Daily volume (25 Oct): 20 coins × 3 runs = 60 snapshots, so 60 calls a day per arm plus gate re-checks. Expected cost for 14 days: Haiku about $0.0005 a call, about $0.40; Sonnet about $0.009 a call, about $7.50, over the $5 limit, so S1 covers only a few coins if any; free Gemini Flash allows 20 calls a day and 5 a minute, so the full Gemini arms run on Flash Lite (500 a day, 15 a minute) and F1 calls 4 random coins per run, 12 a day (decided 25 Oct).
 
 Shortened (2026-10-16): the run is 14 days. The final arms are chosen at the freeze to fit the $5 monthly Anthropic limit (S1 only if the budget allows), DeepSeek's price on OpenRouter (D1 only if a free variant exists or the credit it needs is small) and the free Gemini quota (5 requests a minute and 20 a day for 3.x Flash, so the Gemini arms may need a Flash Lite model).
 
@@ -568,8 +569,8 @@ Shortened (2026-10-16): the run is 14 days. The final arms are chosen at the fre
 - [ ] `sentinel eval export --out data/experiment.parquet`.
 - [ ] Scripts producing tables and figures for the write-up:
   - Wilson intervals (`statsmodels proportion_confint(method="wilson")`) and exact binomial test against 50% (`scipy.stats.binomtest`).
-  - McNemar (`statsmodels mcnemar`): F1 vs S1, F1 vs H1, F1 vs F1G, F0 vs F1.
-  - Cochran's Q (`statsmodels cochrans_q`) across F0, F1, F1G, then McNemar with Holm correction.
+  - McNemar (`statsmodels mcnemar`): L1 vs H1, L1 vs L1G, L0 vs L1, and F1 vs L1 and H1 on F1's coins only; S1 vs L1 if S1 runs.
+  - Cochran's Q (`statsmodels cochrans_q`) across L0, L1, L1G, then McNemar with Holm correction.
   - Brier score with Murphy decomposition and a reliability diagram.
   - Wilcoxon signed-rank (`scipy.stats.wilcoxon`) on paired simulated returns.
   - Block bootstrap by day for return differences.
@@ -597,7 +598,7 @@ All items carry `type` and `created_at`. Keys are strings.
 | Type | PK | SK | Indexes | Attributes |
 | --- | --- | --- | --- | --- |
 | SNAP | `SNAP#{SYM}` | `{ts}` | none | schema_version, payload (JSON string), missing, ttl (180 days) |
-| PRED | `PRED#{date}` | `{ts}#{SYM}#{arm}` | GSI1: `SYM#{SYM}` / `{ts}`; GSI2 (sparse): `OPEN` / `{due_at}`, or `WATCH` / `{created_at}` while a watch is active | pred_id, symbol, arm, model, model_version, variant, source (chat/scheduled), action, direction, confidence, horizon_h, entry, target, stop, btc_context, btc_regime, reasons, rationale_full, prompt_hash, snapshot_ref, tokens_in, tokens_out, cost_usd, latency_ms, valid, validator_errors, warnings, risk_note, snapshot (chat calls: price, rsi14, btc_regime, btc_chg_24h), nb_p_up, gate_triggered, original_action, revised, status (OPEN/DONE), due_at, checks (map: `h1`, `h4`, `h12`, `h24`, `h72`, `h168` each with price, return_pct, hit), target_hit_first, max_adverse_pct, watch (map, 1.9: trigger, timeframe (close triggers), status active/hit/removed, hit_at, hit_price, removed_at) |
+| PRED | `PRED#{date}` | `{ts}#{SYM}#{arm}` | GSI1: `SYM#{SYM}` / `{ts}`; GSI2 (sparse): `OPEN` / `{due_at}`, or `WATCH` / `{created_at}` while a watch is active | pred_id, symbol, arm, slot (scheduled calls: 00, 08 or 16), model, model_version, variant, source (chat/scheduled), action, direction, confidence, horizon_h, entry, target, stop, btc_context, btc_regime, reasons, rationale_full, prompt_hash, snapshot_ref, tokens_in, tokens_out, cost_usd, latency_ms, valid, validator_errors, warnings, risk_note, snapshot (chat calls: price, rsi14, btc_regime, btc_chg_24h), nb_p_up, gate_triggered, original_action, revised, status (OPEN/DONE), due_at, checks (map: `h1`, `h4`, `h12`, `h24`, `h72`, `h168` each with price, return_pct, hit), target_hit_first, max_adverse_pct, watch (map, 1.9: trigger, timeframe (close triggers), status active/hit/removed, hit_at, hit_price, removed_at) |
 | VOTE | `PRED#{date}` | `{ts}#{SYM}#cluster#VOTE#{model}#{round}` | none | role, action, confidence, reason, tokens, cost_usd |
 | ALERT | `ALERT#{rule}#{SYM}` | `{ts}` | none | value, ttl (6 h cooldown) |
 | REPORT | `REPORT#{daily|weekly}` | `{date}` | none | text, metrics (map) |

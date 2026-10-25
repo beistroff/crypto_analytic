@@ -81,3 +81,8 @@ Short notes per merged PR, newest last: what changed, why, and one number. Detai
 - Docs only: the 3.5 runner runs 3 times a day, follow the sun (00:05, 08:05, 16:05 UTC, just after funding settles), one call per coin per run for one fixed horizon, on a fixed list of 20 coins; 9.1 checks each coin's data and recounts the cost.
 - Why: 09:00 and 21:00 were placeholders; funding times and the UTC daily close are real market events, and a fixed list keeps model skill apart from coin selection.
 - Number: 60 calls a day per arm; Haiku about $0.40 for the 14-day run.
+
+## #25 Experiment runner (25 Oct)
+- `sentinel experiment run` (an OpenClaw command automation at 00:05, 08:05 and 16:05 UTC) builds one snapshot per coin of `experiment.yaml`, stores it, and has every arm call its model directly on it: Gemini Flash Lite with and without the BTC-first reading order (L0, L1), Gemini Flash on 4 random coins (F1, its free quota is 20 a day) and Haiku 5.5 (H1). The answers go through the validator into the prediction journal; the hourly scorer grades them.
+- Why: the research question needs every model on identical inputs, with exact tokens and cost; a chat turn through the agent would cost 10 to 20 times more and differ per model.
+- Number: 132 calls a day (L0 60, L1 60, F1 12) on the free tier plus 60 Haiku calls at about $0.0005 each; 0 NewsAPI requests; 155 tests pass. Ships as v0.1.9.

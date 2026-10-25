@@ -1,0 +1,21 @@
+# Experiment runner (plan 3.5): `sentinel experiment run` reads this at 00:05, 08:05 and
+# 16:05 UTC. Every arm calls its model on the same snapshot of each coin; the hourly
+# scorer grades the calls. Frozen at the 9.1 freeze (git tag experiment-v1).
+
+horizon_h: 24
+
+# The same 20 coins for every arm (decided 25 Oct).
+coins: [BTC, ETH, SOL, BNB, ADA, XRP, LINK, XMR, ZEC, LTC, AAVE, UNI, NEAR, AVAX, SUI, TON, DOT, XLM, TRX, DOGE]
+
+# min_interval_s: seconds between two calls to the same model (free-tier requests per
+# minute). sample: coins per run, picked at random (the same pick on a re-run of a slot).
+arms:
+  # Gemini Flash Lite, free: 15 requests a minute, 500 a day. The same model with and
+  # without the BTC-first reading order (does the hierarchy help?).
+  - {name: L0, provider: gemini, model: gemini-3.5-flash-lite, prompt: freeform, min_interval_s: 4.5}
+  - {name: L1, provider: gemini, model: gemini-3.5-flash-lite, prompt: structured, min_interval_s: 4.5}
+  # Gemini Flash, free: 5 requests a minute, 20 a day (shared with the agent's fallback),
+  # so 4 coins per run, 12 calls a day.
+  - {name: F1, provider: gemini, model: gemini-3.8-flash, prompt: structured, sample: 4, min_interval_s: 13}
+  # Claude Haiku 5.5, paid (the $5 monthly cap): about $0.0005 a call.
+  - {name: H1, provider: anthropic, model: claude-haiku-5-5, prompt: structured}
