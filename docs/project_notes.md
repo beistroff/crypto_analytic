@@ -85,4 +85,9 @@ Short notes per merged PR, newest last: what changed, why, and one number. Detai
 ## #25 Experiment runner (25 Oct)
 - `sentinel experiment run` (an OpenClaw command automation at 00:05, 08:05 and 16:05 UTC) builds one snapshot per coin of `experiment.yaml`, stores it, and has every arm call its model directly on it: Gemini Flash Lite with and without the BTC-first reading order (L0, L1), Gemini Flash on 4 random coins (F1, its free quota is 20 a day), Haiku 5.5 (H1), and Sonnet 5.5 on F1's same 4 coins (S1, for the price). The answers go through the validator into the prediction journal; the hourly scorer grades them.
 - Why: the research question needs every model on identical inputs, with exact tokens and cost; a chat turn through the agent would cost 10 to 20 times more and differ per model.
-- Number: 132 calls a day (L0 60, L1 60, F1 12) on the free tier, 60 Haiku calls at about $0.0005 each and 12 Sonnet calls at about $0.01 to $0.03 each; 0 NewsAPI requests; 155 tests pass. Ships as v0.1.9.
+- Number: 132 calls a day (L0 60, L1 60, F1 12) on the free tier, 60 Haiku calls at about $0.001 each and 12 Sonnet calls at about $0.0075 each (measured 26 Oct: $0.05 a run, about $2.10 for 14 days); 0 NewsAPI requests; 155 tests pass. Ships as v0.1.9.
+
+## #26 News rule and backup output (25 Oct)
+- Fix PR (gaps G-19, G-16): `AGENTS.md` sends questions about what moves the market, macro or the week ahead to `news world` together with the snapshot's fresh feed headlines, and says only NewsAPI's are a day late. The documented backup time is 04:00 UTC, after OpenClaw's 03:00 job, and a real backup prints errors only.
+- Why: asked what moved markets this week, the agent fetched no world news and missed a major market-moving headline it had shown that day; the backup's run summary stored every copy and progress line.
+- Number: one rule line changed; the backup summary goes from one line per file to two lines.
