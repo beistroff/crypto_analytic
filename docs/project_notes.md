@@ -91,3 +91,8 @@ Short notes per merged PR, newest last: what changed, why, and one number. Detai
 - Fix PR (gaps G-19, G-16): `AGENTS.md` sends questions about what moves the market, macro or the week ahead to `news world` together with the snapshot's fresh feed headlines, and says only NewsAPI's are a day late. The documented backup time is 04:00 UTC, after OpenClaw's 03:00 job, and a real backup prints errors only.
 - Why: asked what moved markets this week, the agent fetched no world news and missed a major market-moving headline it had shown that day; the backup's run summary stored every copy and progress line.
 - Number: one rule line changed; the backup summary goes from one line per file to two lines.
+
+## #27 One command per call (26 Oct)
+- Fix PR: `AGENTS.md` and the daily scan prompt say to run one `sentinel` command per call, never joined with `&&`, `;` or a pipe.
+- Why: on 26 Oct the daily scan sent both of its commands in one exec call; the allowlist matches one command, so it refused the line and no scan went out.
+- Number: two sentences; 1 failed scan in 8 runs.
