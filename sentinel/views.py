@@ -21,7 +21,7 @@ from sentinel.data import SourceError, cmc, exchange, feargreed, newsapi
 from sentinel.eval.rules import is_scalp_candidate, rules_signal
 from sentinel.portfolio import service
 from sentinel.predict.runner import RunResult
-from sentinel.predict.scorer import ScoreResult
+from sentinel.predict.scorer import MIN_GAIN_PCT, ScoreResult
 from sentinel.signals import scan as signals_scan
 from sentinel.signals import snapshot as signals_snapshot
 from sentinel.signals.snapshot import rounded, sig
@@ -398,11 +398,12 @@ EXPORT_COLUMNS = [
 def predictions_exported(preds: list[Prediction], days: int) -> View:
     """Every call with its result at its own horizon, plus hit rates computed here, so a
     review never has to count."""
-    rows, graded = [], []
+    rows, graded, returns = [], [], []
     for p in preds:
         check = p.checks.get(f"h{p.horizon_h}")
         if check:
             graded.append((p, check["hit"]))
+            returns.append(check["return_pct"])
         rows.append(
             [
                 p.created_at[:16],
@@ -426,6 +427,13 @@ def predictions_exported(preds: list[Prediction], days: int) -> View:
         )
     by_horizon = _hit_rates((f"{p.horizon_h}h", hit) for p, hit in graded)
     by_model = _hit_rates((_who(p), hit) for p, hit in graded)
+    # BUY and SELL are right on direction, HOLD when waiting was right: kept apart. Waiting
+    # is right on most quiet or falling days, so a HOLD rate means something only above
+    # what always waiting would have scored on the same calls.
+    by_call = _hit_rates((p.action, hit) for p, hit in graded)
+    wait_baseline = (
+        round(sum(r <= MIN_GAIN_PCT for r in returns) / len(returns) * 100) if returns else None
+    )
     summary = {
         "calls": len(preds),
         "graded": len(graded),
@@ -433,6 +441,8 @@ def predictions_exported(preds: list[Prediction], days: int) -> View:
         "invalid": sum(not p.valid for p in preds),
         "by_horizon": by_horizon,
         "by_model": by_model,
+        "by_call": by_call,
+        "wait_baseline_pct": wait_baseline,
     }
     data = {"days": days, "summary": summary, "columns": EXPORT_COLUMNS, "rows": rows}
     lines = [
@@ -440,6 +450,9 @@ def predictions_exported(preds: list[Prediction], days: int) -> View:
         f"invalid {summary['invalid']}",
         "By horizon: " + _rates_text(by_horizon),
         "By model: " + _rates_text(by_model),
+        "By call: "
+        + _rates_text(by_call)
+        + (f"; always waiting: {wait_baseline}%" if wait_baseline is not None else ""),
     ]
     return View(data, _lines(lines))
 

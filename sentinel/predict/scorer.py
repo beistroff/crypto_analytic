@@ -10,7 +10,9 @@ longer reach (300 of them: 75 h of 15-minute candles, 12.5 days of hourly ones, 
 after a long outage) is never graded with a later price: the coin is reported in
 ``missing`` instead.
 
-- Hit: BUY when the price is above the entry, SELL when below, HOLD when within ±1 %.
+- Hit: BUY when the price is above the entry, SELL when below. HOLD means "wait, do not
+  buy now" (decided 26 Oct): a hit when buying would not have paid, i.e. the price is
+  not more than 1 % above the entry; a drop counts as a hit, since waiting was better.
 - After its own horizon the call is DONE, with ``target_hit_first`` (target, stop or
   neither; both touched in one candle counts as stop) and ``max_adverse_pct``, the worst
   move against the call in percent of the entry (0 or less). Both read the candles that
@@ -32,7 +34,7 @@ from sentinel.predict.validator import HORIZONS
 from sentinel.signals.snapshot import iso, sig
 from sentinel.store.sim import Prediction, PredictionRepo
 
-FLAT_BAND_PCT = 1.0
+MIN_GAIN_PCT = 1.0  # a rise of 1 % or less after a HOLD did not make buying worth it
 
 log = logging.getLogger(__name__)
 
@@ -103,7 +105,7 @@ def _check(pred: Prediction, price: float) -> dict[str, object]:
     elif pred.action == "SELL":
         hit = ret < 0
     else:
-        hit = abs(ret) <= FLAT_BAND_PCT
+        hit = ret <= MIN_GAIN_PCT
     return {
         "price": Decimal(str(sig(price))),
         "return_pct": Decimal(str(round(ret, 2))),
