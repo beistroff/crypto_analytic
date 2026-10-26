@@ -97,6 +97,8 @@ def build(symbol: str, popular_news: bool = True) -> schema.Snapshot:
             fear_greed=got["feargreed"].value if "feargreed" in got else None,
             total_mcap_chg_24h=rounded(metrics.total_mcap_chg_24h) if metrics else None,
             stablecoin_share=rounded(metrics.stablecoin_share, 1) if metrics else None,
+            vol_chg_24h=rounded(metrics.vol_chg_24h, 1) if metrics else None,
+            alt_vol_share=rounded(metrics.alt_vol_share, 1) if metrics else None,
             headlines=news["market"],
         ),
         macro=macro,
@@ -222,6 +224,7 @@ def _flow(item: flow.Flow) -> schema.Flow:
         oi_usd=round(item.oi_usd),
         oi_chg_7d=rounded(item.oi_chg_7d),
         long_short=round(item.long_short, 2),
+        taker_buy_pct=rounded(item.taker_buy_pct, 1),
     )
 
 

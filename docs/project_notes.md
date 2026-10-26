@@ -96,3 +96,8 @@ Short notes per merged PR, newest last: what changed, why, and one number. Detai
 - Fix PR: `AGENTS.md` and the daily scan prompt say to run one `sentinel` command per call, never joined with `&&`, `;` or a pipe.
 - Why: on 26 Oct the daily scan sent both of its commands in one exec call; the allowlist matches one command, so it refused the line and no scan went out.
 - Number: two sentences; 1 failed scan in 8 runs.
+
+## #29 Money flow (26 Oct)
+- The snapshot adds where money moves: the total crypto volume's change against yesterday and its share outside BTC (`market`), and the coin's spot taker buy share over 24 h (`flow`). The market scan adds `v_mc` and `vol_z30` per coin; `AGENTS.md` says how to read them and to name the numbers behind any flow claim.
+- Why: the agent judged price and positioning but could not see money moving into stablecoins, out of BTC or into one coin; the old agent's whale talk was a story without such data.
+- Number: one extra OKX call per snapshot (free, keyless), 0 extra CMC credits; snapshot JSON grows by about 80 characters, the scan by two columns.

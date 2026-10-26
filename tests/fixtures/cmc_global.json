@@ -8,6 +8,8 @@
       "USD": {
         "total_market_cap": 2800000000000,
         "total_volume_24h": 110000000000,
+        "altcoin_volume_24h": 66000000000,
+        "total_volume_24h_yesterday_percentage_change": -12.345,
         "stablecoin_market_cap": 220000000000,
         "total_market_cap_yesterday_percentage_change": 1.234
       }
