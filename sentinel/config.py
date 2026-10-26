@@ -85,6 +85,14 @@ FOMC_DECISIONS: tuple[date, ...] = (
 )
 
 
+# USD per million tokens in and out for the paid models (Anthropic list prices, checked
+# 2026-10-25). Gemini runs on the free tier and costs nothing.
+LLM_PRICES: dict[str, tuple[float, float]] = {
+    "claude-haiku-5-5": (0.10, 0.50),
+    "claude-sonnet-5-5": (2.00, 10.00),
+}
+
+
 class Settings(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -102,6 +110,7 @@ class Settings(BaseModel):
     candle_cache_s: float = 300.0
     cache_dir: Path = Path("~/.cache/sentinel").expanduser()
     fomc_decisions: tuple[date, ...] = FOMC_DECISIONS
+    llm_prices: dict[str, tuple[float, float]] = Field(default_factory=lambda: dict(LLM_PRICES))
 
     @field_validator("log_level", mode="before")
     @classmethod

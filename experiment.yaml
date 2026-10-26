@@ -1,0 +1,33 @@
+# Experiment runner (plan 3.5): `sentinel experiment run` reads this at 00:05, 08:05 and
+# 16:05 UTC. Every arm calls its model on the same snapshot of each coin; the hourly
+# scorer grades the calls. Frozen at the 9.1 freeze (git tag experiment-v1).
+
+horizon_h: 24
+
+# Runs make no model calls from this UTC date on. Set it at the freeze to 14 days after
+# the first run; until the freeze the automation is not added and runs happen by hand.
+end_date:
+
+# The same 20 coins for every arm (decided 25 Oct).
+coins: [BTC, ETH, SOL, BNB, ADA, XRP, LINK, XMR, ZEC, LTC, AAVE, UNI, NEAR, AVAX, SUI, TON, DOT, XLM, TRX, DOGE]
+
+# min_interval_s: seconds between two calls to the same model (free-tier requests per
+# minute). sample: coins per run, picked at random (the same pick on a re-run of a slot,
+# and for every arm with the same sample).
+arms:
+  # Gemini Flash Lite, free: 15 requests a minute, 500 a day. The same model with and
+  # without the BTC-first reading order (does the hierarchy help?).
+  - {name: L0, provider: gemini, model: gemini-3.5-flash-lite, prompt: freeform, min_interval_s: 4.5}
+  - {name: L1, provider: gemini, model: gemini-3.5-flash-lite, prompt: structured, min_interval_s: 4.5}
+  # Gemini Flash, free: 5 requests a minute, 20 a day, so 4 coins per run, 12 calls a day.
+  # 3.7, not the newest 3.8: on 25 Oct 3.8 timed out or was overloaded on every call, and
+  # 3.8 is the agent's first chat fallback (each model has its own quota). Two attempts,
+  # a minute apart: every try counts against the 20, so at most 8 a run (3 of 4 coins
+  # answered on 26 Oct, one only on its retry).
+  - {name: F1, provider: gemini, model: gemini-3.7-flash, prompt: structured, sample: 4, min_interval_s: 13, attempts: 2}
+  # Claude Haiku 5.5, paid (the $5 monthly cap, shared with the agent's chat): about
+  # $0.0005 a call.
+  - {name: H1, provider: anthropic, model: claude-haiku-5-5, prompt: structured}
+  # Claude Sonnet 5.5, paid: about $0.01 to $0.03 a call (its thinking is billed as
+  # output), so only F1's 4 coins per run, 12 calls a day (decided 25 Oct).
+  - {name: S1, provider: anthropic, model: claude-sonnet-5-5, prompt: structured, sample: 4}

@@ -42,7 +42,9 @@ TITLE_WIDTH = 120
 log = logging.getLogger(__name__)
 
 
-def build(symbol: str) -> schema.Snapshot:
+def build(symbol: str, popular_news: bool = True) -> schema.Snapshot:
+    """``popular_news=False`` leaves out NewsAPI's day-old coin news (``coin_news`` is
+    null, not missing), so the experiment runs keep the free plan's daily quota for chat."""
     symbol = symbol.upper()
     now = _now()
     jobs: dict[str, Callable[[], Any]] = {
@@ -51,10 +53,11 @@ def build(symbol: str) -> schema.Snapshot:
         "feargreed": feargreed.latest,
         "cmc_global": cmc.global_metrics,
         "rss": lambda: news_rss.recent(now),
-        "news": lambda: newsapi.headlines(symbol, POPULAR_NEWS_LIMIT),
         "flow": lambda: flow.flow(symbol),
         "h4": lambda: exchange.candles(symbol, "4h", H4_LIMIT),
     }
+    if popular_news:
+        jobs["news"] = lambda: newsapi.headlines(symbol, POPULAR_NEWS_LIMIT)
     if symbol != "BTC":
         jobs["daily"] = lambda: exchange.candles(symbol, "1d", DAILY_LIMIT)
         jobs["hourly"] = lambda: exchange.candles(symbol, "1h", HOURLY_LIMIT)
@@ -70,7 +73,7 @@ def build(symbol: str) -> schema.Snapshot:
     if (symbol != "BTC" and (daily is None or hourly is None)) or h4 is None:
         missing.append("candles")
     sources = ("feargreed", "cmc_global", "rss", "news", "flow")
-    missing += [name for name in sources if name not in got]
+    missing += [name for name in sources if name not in got and name in jobs]
     feeds = got.get("rss")
     if feeds:
         missing += [f"rss:{name}" for name in feeds.failed]

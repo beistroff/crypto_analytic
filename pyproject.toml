@@ -18,10 +18,16 @@ dependencies = [
 [project.optional-dependencies]
 # Libraries are added to an extra when the first module uses them (see docs/IMPLEMENTATION_PLAN.md, section 3).
 ec2 = [
+    "anthropic>=2.3",
     "boto3>=1.35",
     "click>=8.1",
     "feedparser>=6.0.14",
+    "google-genai>=2.33",
+    # Imported for their network errors (the Gemini SDK runs on either), not only pulled in.
+    "httpx>=0.28",
+    "httpx2>=2.16",
     "python-ulid>=3",
+    "pyyaml>=6.0",
 ]
 # boto3 is part of the Lambda runtime, so nothing beyond the core yet.
 lambda = []
@@ -40,6 +46,9 @@ version = { attr = "sentinel.__version__" }
 
 [tool.setuptools.packages.find]
 include = ["sentinel*"]
+
+[tool.setuptools.package-data]
+"sentinel.llm" = ["prompts/*.md"]
 
 [tool.ruff]
 target-version = "py312"

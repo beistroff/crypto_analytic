@@ -24,7 +24,7 @@ from sentinel.config import get_settings
 from sentinel.data import SourceError
 from sentinel.portfolio import service
 from sentinel.portfolio.service import JournalError
-from sentinel.predict import journal, scorer
+from sentinel.predict import journal, runner, scorer
 from sentinel.predict.journal import PredictError
 from sentinel.store.real import VersionConflict
 
@@ -323,6 +323,21 @@ def predict_score(fmt: str) -> None:
 def predict_export(days: int, fmt: str) -> None:
     """The calls of the last days with their results and hit rates, for a review."""
     _emit(views.predictions_exported(journal.export(days), days), fmt)
+
+
+@cli.group()
+def experiment() -> None:
+    """The model comparison: every arm calls the same snapshots (experiment.yaml)."""
+
+
+@experiment.command("run")
+@click.option("--slot", type=click.Choice(runner.SLOTS), help="Default: the current UTC slot.")
+@FORMAT
+@_source_errors
+def experiment_run(slot: str | None, fmt: str) -> None:
+    """One run: a snapshot per coin, a call per arm (an OpenClaw automation runs this at
+    00:05, 08:05 and 16:05 UTC, sending nothing)."""
+    _emit(views.experiment_ran(runner.run(slot)), fmt)
 
 
 @cli.group()

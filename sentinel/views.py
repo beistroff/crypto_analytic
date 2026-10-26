@@ -20,6 +20,7 @@ from sentinel.alerts import watch as alerts_watch
 from sentinel.data import SourceError, cmc, exchange, feargreed, newsapi
 from sentinel.eval.rules import is_scalp_candidate, rules_signal
 from sentinel.portfolio import service
+from sentinel.predict.runner import RunResult
 from sentinel.predict.scorer import ScoreResult
 from sentinel.signals import scan as signals_scan
 from sentinel.signals import snapshot as signals_snapshot
@@ -313,7 +314,7 @@ def watch_checked(result: alerts_watch.CheckResult) -> View:
 def _prediction(pred: Prediction) -> dict[str, Any]:
     data = asdict(pred)
     data["id"] = data.pop("pred_id")
-    for name in ("confidence", "entry", "target", "stop", "max_adverse_pct"):
+    for name in ("confidence", "entry", "target", "stop", "max_adverse_pct", "cost_usd"):
         data[name] = None if data[name] is None else _num(data[name])
     data["snapshot"] = _floats(pred.snapshot)
     data["checks"] = {name: _floats(check) for name, check in pred.checks.items()}
@@ -407,7 +408,7 @@ def predictions_exported(preds: list[Prediction], days: int) -> View:
                 p.created_at[:16],
                 p.pred_id,
                 p.symbol,
-                p.model,
+                _who(p),
                 p.action,
                 p.horizon_h,
                 _num(p.confidence),
@@ -424,7 +425,7 @@ def predictions_exported(preds: list[Prediction], days: int) -> View:
             ]
         )
     by_horizon = _hit_rates((f"{p.horizon_h}h", hit) for p, hit in graded)
-    by_model = _hit_rates((p.model, hit) for p, hit in graded)
+    by_model = _hit_rates((_who(p), hit) for p, hit in graded)
     summary = {
         "calls": len(preds),
         "graded": len(graded),
@@ -441,6 +442,31 @@ def predictions_exported(preds: list[Prediction], days: int) -> View:
         "By model: " + _rates_text(by_model),
     ]
     return View(data, _lines(lines))
+
+
+def _who(pred: Prediction) -> str:
+    """The chat model, or the experiment arm and its model (two arms share a model)."""
+    return pred.model if pred.arm == "chat" else f"{pred.arm} {pred.model}"
+
+
+def experiment_ran(result: RunResult) -> View:
+    """One line for the automation's run history; nothing is sent to Telegram."""
+    data = asdict(result)
+    data["cost_usd"] = round(result.cost_usd, 4)
+    if result.ended:
+        return View(data, f"Run {result.date} {result.slot}: experiment ended {result.ended}")
+    arms = ", ".join(
+        f"{name} {n}" + (f" ({result.invalid[name]} invalid)" if result.invalid[name] else "")
+        for name, n in result.stored.items()
+    )
+    line = f"Run {result.date} {result.slot}: {arms or 'no calls'}; ${result.cost_usd:.4f}"
+    if result.skipped:
+        line += f"; {result.skipped} done before"
+    for name, coins in result.failed.items():
+        line += f"; {name} failed: {', '.join(coins)}"
+    if result.missing:
+        line += f"; no snapshot: {', '.join(result.missing)}"
+    return View(data, line)
 
 
 def _hit_rates(pairs: Iterable[tuple[str, bool]]) -> dict[str, dict[str, int]]:

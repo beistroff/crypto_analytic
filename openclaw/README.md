@@ -80,6 +80,11 @@ Done by hand over SSM once bootstrap has finished (`~/sentinel/.ready` exists). 
     openclaw automations add --name "Prediction scorer" --every 1h --command-argv '["/home/ubuntu/sentinel/venv/bin/sentinel","predict","score","--format","telegram"]' --command-env SENTINEL_LOG_LEVEL=ERROR --timeout-seconds 300 --no-deliver
     openclaw automations run <id>
     ```
+16. Experiment runs (plan 3.5): an OpenClaw command automation runs `sentinel experiment run` at 00:05, 08:05 and 16:05 UTC with no model call in OpenClaw and sends nothing to Telegram. Each run takes the 20 coins of `experiment.yaml`, and every arm (Gemini Flash Lite on all of them; Haiku on all; Gemini Flash and Sonnet on the same 4 random ones) calls its model directly on the same snapshot; the calls go into the prediction journal and the hourly scorer grades them. A run takes about 10 minutes, up to an hour when free Gemini queues its answers (it waits between free Gemini calls and gives each up to 10 minutes); its run history line looks like `Run 2026-10-26 08: L0 20, L1 20, F1 4, H1 20, S1 4; $0.0900`. Add it only at the experiment freeze (plan 9.1), not with a release, after setting `end_date` in `experiment.yaml` to 14 days after the first run: from that date the runs make no model calls (`experiment ended`), so a forgotten automation costs nothing; remove it then.
+    ```bash
+    openclaw automations add --name "Experiment run" --cron "5 0,8,16 * * *" --tz UTC --command-argv '["/home/ubuntu/sentinel/venv/bin/sentinel","experiment","run","--format","telegram"]' --command-env SENTINEL_LOG_LEVEL=ERROR --timeout-seconds 3600 --no-deliver
+    openclaw automations run <id>
+    ```
 
 Things learned on the way:
 - Gemini free tier: the 3.x Flash models allow 5 requests a minute and 20 a day, the Lite models 15 and 500, Pro models none. OpenClaw retries a rate-limited call up to 10 times and Google counts each try, so the free Flash models cannot carry an agent on their own. Google Search grounding has no free quota for Gemini 3 and newer.

@@ -1,4 +1,5 @@
-"""The sim table (``sentinel-sim``): watches and logged predictions, both ``PRED`` items.
+"""The sim table (``sentinel-sim``): watches and predictions, both ``PRED`` items, and the
+snapshots experiment runs showed the models (``SNAP`` items).
 
 Open items sit in the sparse GSI2 (``WATCH`` while a watch is active, ``OPEN`` until a
 prediction is scored), so the checks find them without a Scan.
@@ -7,6 +8,7 @@ prediction is scored), so the checks find them without a Scan.
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field, fields
+from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any
 
@@ -14,7 +16,10 @@ from botocore.exceptions import ClientError
 
 from sentinel import aws
 from sentinel.config import get_settings
+from sentinel.signals.schema import Snapshot
 from sentinel.store.base import marshal, query, unmarshal
+
+SNAPSHOT_TTL = timedelta(days=180)
 
 
 def _table() -> str:
@@ -168,12 +173,15 @@ class WatchRepo:
 
 @dataclass(frozen=True)
 class Prediction:
-    """A call logged from chat: a ``PRED`` item without a ``watch`` map.
+    """A call, logged from chat or made by an experiment arm: a ``PRED`` item without a
+    ``watch`` map.
 
     It sits in the sparse GSI2 under ``OPEN`` until the scorer has checked every horizon
     up to its own, keyed by the next ``due_at``. ``snapshot`` is the market the call was
     made in (price, RSI, BTC's regime); ``checks`` holds the scorer's results by horizon
-    (``{"h4": {"price", "return_pct", "hit"}}``).
+    (``{"h4": {"price", "return_pct", "hit"}}``). Experiment calls also name their run
+    ``slot``, the full snapshot they saw (``snapshot_ref``, a ``SNAP`` item's ``as_of``),
+    the prompt and what the call cost.
     """
 
     pred_id: str
@@ -195,7 +203,16 @@ class Prediction:
     validator_errors: list[str]
     warnings: list[str]
     due_at: str
-    source: str = "chat"
+    source: str = "chat"  # chat or scheduled
+    arm: str = "chat"  # an experiment arm's name for scheduled calls
+    slot: str | None = None  # the experiment run: 00, 08 or 16 UTC
+    model_version: str | None = None  # the model id the API answered with
+    prompt_hash: str | None = None
+    snapshot_ref: str | None = None
+    tokens_in: int | None = None
+    tokens_out: int | None = None
+    cost_usd: Decimal | None = None
+    latency_ms: int | None = None
     status: str = "OPEN"  # OPEN or DONE
     checks: dict[str, Any] = field(default_factory=dict)
     target_hit_first: str | None = None  # target, stop or neither (BUY and SELL)
@@ -203,7 +220,10 @@ class Prediction:
 
     @property
     def key(self) -> dict[str, str]:
-        return {"PK": f"PRED#{self.created_at[:10]}", "SK": f"{self.created_at}#{self.symbol}#chat"}
+        return {
+            "PK": f"PRED#{self.created_at[:10]}",
+            "SK": f"{self.created_at}#{self.symbol}#{self.arm}",
+        }
 
     def item(self) -> dict[str, Any]:
         item = {
@@ -211,7 +231,6 @@ class Prediction:
             "GSI1PK": f"SYM#{self.symbol}",
             "GSI1SK": self.created_at,
             "type": "PRED",
-            "arm": "chat",
             **asdict(self),
         }
         if self.status == "OPEN":  # only open calls sit in the sparse GSI2
@@ -222,6 +241,9 @@ class Prediction:
     def from_item(cls, item: dict[str, Any]) -> Prediction:
         values = {f.name: item.get(f.name) for f in fields(cls)}
         values["horizon_h"] = int(item["horizon_h"])
+        for name in ("tokens_in", "tokens_out", "latency_ms"):  # Decimal from DynamoDB
+            if values[name] is not None:
+                values[name] = int(values[name])
         values["checks"] = item.get("checks") or {}
         return cls(**values)
 
@@ -302,3 +324,22 @@ class PredictionRepo:
                 return False
             raise
         return True
+
+
+class SnapshotRepo:
+    def add(self, snap: Snapshot) -> bool:
+        """Store the snapshot an experiment run showed every arm, for 180 days (DynamoDB
+        deletes it after ``ttl``); False when one with the same time exists."""
+        as_of = datetime.fromisoformat(snap.as_of)
+        return _put_new(
+            {
+                "PK": f"SNAP#{snap.symbol}",
+                "SK": snap.as_of,
+                "type": "SNAP",
+                "created_at": snap.as_of,
+                "schema_version": snap.schema_version,
+                "payload": snap.model_dump_json(),
+                "missing": snap.missing,
+                "ttl": int((as_of + SNAPSHOT_TTL).timestamp()),
+            }
+        )
