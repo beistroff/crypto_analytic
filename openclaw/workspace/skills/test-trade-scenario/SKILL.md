@@ -10,7 +10,7 @@ A test call is a prediction, not a trade: nothing is bought and no money is set 
 ## "Test trade XRP 24h"
 
 1. If `memory/prediction_lessons.md` exists, read it first: lessons from scored calls.
-2. Run `sentinel snapshot XRP` and decide as you would for any analysis (BTC first). The horizon is the one asked for: 1, 4 or 12 hours for a scalp, 24, 72 or 168 hours (1, 3 or 7 days) for a trade (24 if none is given). Calls for a month or longer are investments, not test calls: do not log them. A FLAT call (HOLD) says the price stays within ±1 % over the horizon.
+2. Run `sentinel snapshot XRP` and decide as you would for any analysis (BTC first). The horizon is the one asked for: 1, 4 or 12 hours for a scalp, 24, 72 or 168 hours (1, 3 or 7 days) for a trade (24 if none is given). Calls for a month or longer are investments, not test calls: do not log them. A HOLD (direction FLAT) means "wait, do not buy now"; it is right when buying would not have paid (the price is not more than 1 % above the entry at the horizon).
 3. Write the call as JSON and log it, with the model you run on as `--model`:
 
 ```bash

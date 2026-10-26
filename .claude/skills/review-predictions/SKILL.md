@@ -24,7 +24,7 @@ The export is JSON:
 How a call is graded:
 - BUY is a hit when the price is above the entry at the horizon.
 - SELL is a hit when the price is below the entry.
-- HOLD is a hit when the price is within ±1 % of the entry.
+- HOLD means "wait, do not buy now": a hit when buying would not have paid (the price is not more than 1 % above the entry). Judge it apart from BUY and SELL (`by_call`): a right wait is not a right direction.
 
 Done when the export is in hand and its date range is known.
 

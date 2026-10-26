@@ -426,6 +426,8 @@ def predictions_exported(preds: list[Prediction], days: int) -> View:
         )
     by_horizon = _hit_rates((f"{p.horizon_h}h", hit) for p, hit in graded)
     by_model = _hit_rates((_who(p), hit) for p, hit in graded)
+    # BUY and SELL are right on direction, HOLD when waiting was right: kept apart.
+    by_call = _hit_rates((p.action, hit) for p, hit in graded)
     summary = {
         "calls": len(preds),
         "graded": len(graded),
@@ -433,6 +435,7 @@ def predictions_exported(preds: list[Prediction], days: int) -> View:
         "invalid": sum(not p.valid for p in preds),
         "by_horizon": by_horizon,
         "by_model": by_model,
+        "by_call": by_call,
     }
     data = {"days": days, "summary": summary, "columns": EXPORT_COLUMNS, "rows": rows}
     lines = [
@@ -440,6 +443,7 @@ def predictions_exported(preds: list[Prediction], days: int) -> View:
         f"invalid {summary['invalid']}",
         "By horizon: " + _rates_text(by_horizon),
         "By model: " + _rates_text(by_model),
+        "By call: " + _rates_text(by_call),
     ]
     return View(data, _lines(lines))
 

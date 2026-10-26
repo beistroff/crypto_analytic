@@ -96,3 +96,8 @@ Short notes per merged PR, newest last: what changed, why, and one number. Detai
 - Fix PR: `AGENTS.md` and the daily scan prompt say to run one `sentinel` command per call, never joined with `&&`, `;` or a pipe.
 - Why: on 26 Oct the daily scan sent both of its commands in one exec call; the allowlist matches one command, so it refused the line and no scan went out.
 - Number: two sentences; 1 failed scan in 8 runs.
+
+## #28 HOLD means wait (26 Oct)
+- A HOLD is graded as "wait, do not buy now": right when buying would not have paid (the price is not more than 1 % above the entry at the horizon); `predict export` adds BUY, SELL and HOLD hit rates apart. The runner prompt and both skills say so.
+- Why: the first experiment runs showed models use HOLD to stay out with low confidence, and the ±1 % band would have graded every careful call in a moving market as a miss.
+- Number: one scoring rule and one export line; the stored return lets the analysis apply either rule.

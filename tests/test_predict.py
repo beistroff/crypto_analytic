@@ -139,7 +139,7 @@ def test_score_checks_each_horizon_up_to_the_calls_own(tables, monkeypatch):
     # The 13:15 close is nearest 13:20; the 13:30 candle is still open.
     assert buy.checks == {"h1": {"price": D("101.5"), "return_pct": D("1.5"), "hit": True}}
     assert (buy.status, buy.due_at) == ("OPEN", "2026-10-17T16:20:00Z")
-    assert hold.checks["h1"]["hit"] is True  # +0.3%, within the 1% band
+    assert hold.checks["h1"]["hit"] is True  # +0.3%: buying would not have paid
     assert (hold.status, hold.target_hit_first, hold.max_adverse_pct) == ("DONE", None, D("-1.2"))
 
     clock["now"] = NOW + timedelta(minutes=255)
@@ -170,6 +170,7 @@ def test_export_lists_calls_with_hit_rates(tables, monkeypatch):
         "invalid": 0,
         "by_horizon": {"4h": {"n": 1, "hits": 1, "hit_pct": 100}},
         "by_model": {"haiku": {"n": 1, "hits": 1, "hit_pct": 100}},
+        "by_call": {"BUY": {"n": 1, "hits": 1, "hit_pct": 100}},
     }
     row = dict(zip(data["columns"], data["rows"][1], strict=True))
     assert (row["sym"], row["ret"], row["hit"], row["btc"]) == ("XRP", 2.0, True, "neutral")
@@ -178,4 +179,5 @@ def test_export_lists_calls_with_hit_rates(tables, monkeypatch):
         "Calls 1d: 2, graded 1, open 1, invalid 0",
         "By horizon: 4h 1/1 (100%)",
         "By model: haiku 1/1 (100%)",
+        "By call: BUY 1/1 (100%)",
     ]
