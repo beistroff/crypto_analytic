@@ -171,6 +171,7 @@ def test_export_lists_calls_with_hit_rates(tables, monkeypatch):
         "by_horizon": {"4h": {"n": 1, "hits": 1, "hit_pct": 100}},
         "by_model": {"haiku": {"n": 1, "hits": 1, "hit_pct": 100}},
         "by_call": {"BUY": {"n": 1, "hits": 1, "hit_pct": 100}},
+        "wait_baseline_pct": 0,  # XRP rose 2%: always waiting would have missed it
     }
     row = dict(zip(data["columns"], data["rows"][1], strict=True))
     assert (row["sym"], row["ret"], row["hit"], row["btc"]) == ("XRP", 2.0, True, "neutral")
@@ -179,5 +180,5 @@ def test_export_lists_calls_with_hit_rates(tables, monkeypatch):
         "Calls 1d: 2, graded 1, open 1, invalid 0",
         "By horizon: 4h 1/1 (100%)",
         "By model: haiku 1/1 (100%)",
-        "By call: BUY 1/1 (100%)",
+        "By call: BUY 1/1 (100%); always waiting: 0%",
     ]

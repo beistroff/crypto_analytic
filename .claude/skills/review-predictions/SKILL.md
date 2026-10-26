@@ -18,13 +18,13 @@ aws-vault exec sentinel-deploy -- sentinel predict export --days 14
 ```
 
 The export is JSON:
-- `summary` has calls, graded, open and invalid counts, plus `by_horizon` and `by_model`, each with `n`, `hits` and `hit_pct`.
+- `summary` has calls, graded, open and invalid counts, plus `by_horizon`, `by_model` and `by_call` (BUY, SELL, HOLD), each with `n`, `hits` and `hit_pct`, and `wait_baseline_pct`.
 - `rows` are arrays named by `columns`. `ret` and `hit` are at the call's own horizon (null while it is open). `first` is `target`, `stop` or `neither`. `adverse` is the worst move against the call in percent, `btc` is BTC's regime when the call was made, and `reasons` is the agent's reasoning.
 
 How a call is graded:
 - BUY is a hit when the price is above the entry at the horizon.
 - SELL is a hit when the price is below the entry.
-- HOLD means "wait, do not buy now": a hit when buying would not have paid (the price is not more than 1 % above the entry). Judge it apart from BUY and SELL (`by_call`): a right wait is not a right direction.
+- HOLD means "wait, do not buy now": a hit when buying would not have paid (the price is not more than 1 % above the entry). Judge it apart from BUY and SELL (`by_call`): a right wait is not a right direction. Waiting is right on most quiet or falling days, so compare the HOLD rate with `wait_baseline_pct` (what always waiting would have scored on the same calls), not with 50 %.
 
 Done when the export is in hand and its date range is known.
 
