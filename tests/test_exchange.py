@@ -103,9 +103,12 @@ def test_flow_from_okx_swap(venues):
         "limit": ["43"],
     }
     assert result.taker_buy_pct == pytest.approx(55.55, abs=0.01)
-    # A taker reply that cannot be read blanks only that field.
-    venues.okx.routes[flow.TAKER_VOLUME] = (500, {})
-    assert flow.flow("sol").taker_buy_pct is None
+    assert result.top_long_short == pytest.approx(0.8757095)  # top traders net short
+    # A taker or top-trader reply that cannot be read blanks only its own field.
+    venues.okx.routes[flow.TAKER_VOLUME] = venues.okx.routes[flow.TOP_TRADERS] = (500, {})
+    blanked = flow.flow("sol")
+    assert (blanked.taker_buy_pct, blanked.top_long_short) == (None, None)
+    assert blanked.long_short == result.long_short
 
 
 def test_flow_for_a_coin_without_a_swap(venues):
@@ -118,6 +121,7 @@ def test_flow_for_a_coin_without_a_swap(venues):
 def test_live_flow():
     live = flow.flow("BTC")
     assert live.oi_chg_7d is not None and 0 < live.taker_buy_pct < 100
+    assert live.top_long_short > 0
 
 
 @pytest.mark.live

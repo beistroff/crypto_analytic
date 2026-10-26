@@ -314,7 +314,8 @@ Why (agent runs of 16 and 17 Oct): the agent fetched raw data and eyeballed it. 
 ### 2.5 Flow and whales (`sentinel/data/flow.py`, `whales.py`) [Core: funding and open interest; whale proxy Later]
 - [x] Funding rate, open interest and its 7-day change, long/short account ratio from OKX public endpoints (verified in the OKX API docs; access from `us-east-1` is checked with 2.1's live check).
 - [x] Taker buy vs sell volume (moved up 26 Oct, money flow): `flow.taker_buy_pct`, the spot share of the last 24 h bought at the ask (OKX `rubik/stat/taker-volume`). The snapshot's `market` also has the total volume's change against yesterday and its share outside BTC (CMC global metrics, no extra credit).
-- [ ] [Later] Whale proxy: share of volume from trades of $100k or more among recent trades.
+- [x] Large traders against the crowd (26 Oct): `flow.top_long_short`, the long over short positions of OKX's top traders, next to `long_short` (all accounts).
+- [ ] [Later] Whale proxy: share of volume from trades of $100k or more among recent trades (26 Oct: OKX's last 500 trades cover only minutes, e.g. 7 for SOL with none that large, so it needs paging or another source). On-chain whale transfers need a keyed service.
 - [ ] [Later] Volume-spike watch: an alert when a top-20 coin's volume jumps while its price is flat.
 
 ### 2.6 Snapshot builder (`sentinel/signals/snapshot.py`)

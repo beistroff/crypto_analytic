@@ -225,6 +225,7 @@ def _flow(item: flow.Flow) -> schema.Flow:
         oi_chg_7d=rounded(item.oi_chg_7d),
         long_short=round(item.long_short, 2),
         taker_buy_pct=rounded(item.taker_buy_pct, 1),
+        top_long_short=rounded(item.top_long_short),
     )
 
 

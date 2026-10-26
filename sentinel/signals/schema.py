@@ -50,6 +50,7 @@ class Flow(BaseModel):
     oi_chg_7d: float | None
     long_short: float
     taker_buy_pct: float | None  # spot market buys taken at the ask, percent of 24 h volume
+    top_long_short: float | None  # OKX's top traders, against `long_short` (all accounts)
 
 
 class Technicals(BaseModel):

@@ -14,6 +14,10 @@ Checked against the OKX API v5 docs and live calls (17 Oct 2026); no key needed:
   hourly ``[ts, sellVol, buyVol]`` (live call 26 Oct 2026; the order as in third-party
   clients). The share of the last 24 h taken at the ask is who is pushing: over 50 %
   buyers, under 50 % sellers. When it cannot be read it is ``None``, not a failure.
+- ``/api/v5/rubik/stat/contracts/long-short-position-ratio-contract-top-trader`` with
+  ``period=1H``: the long over short positions of OKX's top traders, ``[ts, ratio]``
+  (live call 26 Oct 2026). Against ``long_short`` (all accounts) it shows the large
+  traders against the crowd. ``None`` when it cannot be read, like the taker share.
 
 Coins without an OKX swap raise ``SourceError``; the snapshot lists them as missing.
 """
@@ -36,6 +40,7 @@ FUNDING = "/api/v5/public/funding-rate"
 OI_HISTORY = "/api/v5/rubik/stat/contracts/open-interest-history"
 LONG_SHORT = "/api/v5/rubik/stat/contracts/long-short-account-ratio-contract"
 TAKER_VOLUME = "/api/v5/rubik/stat/taker-volume"
+TOP_TRADERS = "/api/v5/rubik/stat/contracts/long-short-position-ratio-contract-top-trader"
 OI_PERIOD = timedelta(hours=4)
 OI_DAYS = 7
 TAKER_HOURS = 24
@@ -50,6 +55,7 @@ class Flow:
     long_short: float
     ts: datetime  # newest open-interest entry
     taker_buy_pct: float | None = None  # spot buys at the ask, percent of 24 h volume
+    top_long_short: float | None = None  # top traders' long over short positions
 
 
 def swap(symbol: str) -> str:
@@ -67,13 +73,14 @@ def flow(symbol: str) -> Flow:
     instrument = swap(symbol)
     span = OI_DAYS * timedelta(days=1)
     # The endpoints have separate rate limits, so they are asked at the same time.
-    with ThreadPoolExecutor(max_workers=4) as pool:
+    with ThreadPoolExecutor(max_workers=5) as pool:
         funding_job = pool.submit(funding, symbol)
         oi_params = {"instId": instrument, "period": "4H", "limit": span // OI_PERIOD + 1}
         oi_job = pool.submit(_get, OI_HISTORY, oi_params)
         ls_params = {"instId": instrument, "period": "1H", "limit": 1}
         ls_job = pool.submit(_get, LONG_SHORT, ls_params)
         taker_job = pool.submit(taker_buy_pct, symbol)
+        top_job = pool.submit(top_long_short, instrument)
     (funding_pct, interval_h), entries = funding_job.result(), oi_job.result()
     long_short = ls_job.result()[0]
 
@@ -91,6 +98,7 @@ def flow(symbol: str) -> Flow:
         long_short=float(long_short[1]),
         ts=newest_ts,
         taker_buy_pct=taker_job.result(),
+        top_long_short=top_job.result(),
     )
 
 
@@ -103,6 +111,14 @@ def taker_buy_pct(symbol: str) -> float | None:
     except (SourceError, requests.RequestException, ValueError, IndexError, TypeError):
         return None
     return bought / (sold + bought) * 100 if sold + bought > 0 else None
+
+
+def top_long_short(instrument: str) -> float | None:
+    """The newest long over short position ratio of OKX's top traders; None when unknown."""
+    try:
+        return float(_get(TOP_TRADERS, {"instId": instrument, "period": "1H", "limit": 1})[0][1])
+    except (SourceError, requests.RequestException, ValueError, IndexError, TypeError):
+        return None
 
 
 def _get(path: str, params: dict[str, Any]) -> list[Any]:
