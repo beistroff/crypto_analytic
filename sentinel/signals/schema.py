@@ -34,7 +34,7 @@ class Market(BaseModel):
     total_mcap_chg_24h: float | None
     stablecoin_share: float | None  # percent of the market cap parked in stablecoins
     vol_chg_24h: float | None  # all crypto volume against yesterday's, percent
-    alt_vol_share: float | None  # percent of the volume outside BTC: rising means rotation
+    alt_vol_share: float | None  # percent of the volume outside BTC (a level, no history)
     headlines: list[Headline] | None  # BTC's, from RSS, last 24 h, newest first
 
 
