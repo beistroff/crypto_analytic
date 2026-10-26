@@ -70,9 +70,9 @@ Done by hand over SSM once bootstrap has finished (`~/sentinel/.ready` exists). 
     aws-vault exec sentinel-deploy -- aws s3api put-bucket-lifecycle-configuration --bucket openclaw-files --lifecycle-configuration file://ops/s3_lifecycle.json
     ```
     `get-bucket-lifecycle-configuration` should now print both rules; a `NoSuchLifecycleConfiguration` error before the first `put` is normal.
-14. Daily backup: an OpenClaw command automation runs `ops/s3_backup.sh` at 03:00 UTC with no model call and sends nothing to Telegram. It copies the workspace and the sentinel folder to `backups/<UTC stamp>/`; the DynamoDB tables are not in it (the trade journal is re-entered by hand if it is ever lost). Remove an older system crontab entry for the script first (`crontab -l`), so it does not run twice. The snap `aws` is in `/snap/bin`, which the gateway's PATH may lack:
+14. Daily backup: an OpenClaw command automation runs `ops/s3_backup.sh` at 04:00 UTC (OpenClaw's own "Memory Dreaming" job runs at 03:00, and two jobs at once crowd the 2 GB instance) with no model call and sends nothing to Telegram. It copies the workspace and the sentinel folder to `backups/<UTC stamp>/`; the DynamoDB tables are not in it (the trade journal is re-entered by hand if it is ever lost). Remove an older system crontab entry for the script first (`crontab -l`), so it does not run twice. The snap `aws` is in `/snap/bin`, which the gateway's PATH may lack:
     ```bash
-    openclaw automations add --name "Daily backup" --cron "0 3 * * *" --tz UTC --command-argv '["/home/ubuntu/sentinel/src/ops/s3_backup.sh"]' --command-env PATH=/snap/bin:/usr/local/bin:/usr/bin:/bin --timeout-seconds 600 --no-deliver
+    openclaw automations add --name "Daily backup" --cron "0 4 * * *" --tz UTC --command-argv '["/home/ubuntu/sentinel/src/ops/s3_backup.sh"]' --command-env PATH=/snap/bin:/usr/local/bin:/usr/bin:/bin --timeout-seconds 600 --no-deliver
     openclaw automations run <id>
     ```
 15. Prediction scorer (plan 3.6): an OpenClaw command automation runs `sentinel predict score` every hour with no model call and sends nothing to Telegram. It checks every logged test call that is due against the exchange candles; `sentinel predict export` shows the results. The run history (`openclaw automations runs <id>`) has one line per run, such as `Due 2: 1 graded, 1 done`.

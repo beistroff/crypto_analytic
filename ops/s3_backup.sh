@@ -9,9 +9,11 @@ set -euo pipefail
 BUCKET="${OPENCLAW_S3_BUCKET:-openclaw-files}"
 REGION="${AWS_REGION:-us-east-1}"
 AGENT_HOME="${AGENT_HOME:-/home/ubuntu}"
-DRY_RUN=()
+# A real run prints only errors, so the automation's run summary stays two lines long;
+# a dry run keeps its listing.
+OUTPUT=(--only-show-errors)
 if [[ "${1:-}" == "--dry-run" ]]; then
-  DRY_RUN=(--dryrun)
+  OUTPUT=(--dryrun)
 fi
 
 TIMESTAMP="$(date -u +%Y-%m-%d_%H-%M_UTC)"
@@ -19,8 +21,8 @@ DEST="s3://${BUCKET}/backups/${TIMESTAMP}"
 echo "Starting backup to ${DEST}/"
 
 aws s3 cp "${AGENT_HOME}/.openclaw/workspace/" "${DEST}/workspace/" --recursive \
-  --region "${REGION}" "${DRY_RUN[@]}"
+  --region "${REGION}" "${OUTPUT[@]}"
 aws s3 cp "${AGENT_HOME}/sentinel/" "${DEST}/sentinel/" --recursive \
-  --exclude "venv/*" --exclude "src/*" --region "${REGION}" "${DRY_RUN[@]}"
+  --exclude "venv/*" --exclude "src/*" --region "${REGION}" "${OUTPUT[@]}"
 
 echo "Backup complete."
