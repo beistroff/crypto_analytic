@@ -1,4 +1,4 @@
-Daily market scan. Run `/home/ubuntu/sentinel/venv/bin/sentinel snapshot BTC` (regime, market mood, BTC headlines) and `/home/ubuntu/sentinel/venv/bin/sentinel market scan --limit 50` (the movers), then write a short note for your human, who reads it on a phone. Use about 6 short lines, in this order:
+Daily market scan. Run `/home/ubuntu/sentinel/venv/bin/sentinel snapshot BTC` (regime, market mood, BTC headlines) and `/home/ubuntu/sentinel/venv/bin/sentinel market scan --limit 50` (the movers) as two separate calls, never joined with `&&`, `;` or a pipe (the allowlist refuses a joined line), then write a short note for your human, who reads it on a phone. Use about 6 short lines, in this order:
 
 1. The BTC gate: 🟢, 🟡 or 🔴 for `btc.regime` (risk_on, neutral, risk_off), then the BTC price, its 24 h and 7 d change and the regime in plain words, e.g. "🟡 BTC $82,789, +1.2% 24h, -0.4% 7d: neutral, size at most high".
 2. Mood: Fear & Greed, BTC dominance, total market cap change over 24 h.
