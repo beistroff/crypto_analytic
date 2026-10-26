@@ -18,6 +18,9 @@ from sentinel.llm import LLMError, Usage
 # wait in a queue: at 2 minutes Gemini 3.8 Flash answered 504 DEADLINE_EXCEEDED every time.
 TIMEOUT_MS = 600_000
 RETRY_CODES = [429, 500, 503]
+# "Overloaded" (503) and the per-minute limit (429) pass within a minute or so; retries
+# 2 s apart all hit the same overload and only used up the daily quota.
+RETRY_DELAY_S = 60.0
 
 
 def call[T: BaseModel](
@@ -25,7 +28,7 @@ def call[T: BaseModel](
 ) -> tuple[T, Usage]:
     """``attempts`` counts every try against the daily quota (1: no retry)."""
     retry = types.HttpRetryOptions(
-        attempts=attempts, initial_delay=2.0, http_status_codes=RETRY_CODES
+        attempts=attempts, initial_delay=RETRY_DELAY_S, http_status_codes=RETRY_CODES
     )
     client = genai.Client(
         api_key=aws.get_secret("gemini_api_key"),

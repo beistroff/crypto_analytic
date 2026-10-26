@@ -21,9 +21,10 @@ arms:
   - {name: L1, provider: gemini, model: gemini-3.5-flash-lite, prompt: structured, min_interval_s: 4.5}
   # Gemini Flash, free: 5 requests a minute, 20 a day, so 4 coins per run, 12 calls a day.
   # 3.7, not the newest 3.8: on 25 Oct 3.8 timed out or was overloaded on every call, and
-  # 3.8 is the agent's first chat fallback (each model has its own quota). One attempt
-  # each: a retry after "overloaded" (503) also counts against the 20.
-  - {name: F1, provider: gemini, model: gemini-3.7-flash, prompt: structured, sample: 4, min_interval_s: 13, attempts: 1}
+  # 3.8 is the agent's first chat fallback (each model has its own quota). Two attempts,
+  # a minute apart: every try counts against the 20, so at most 8 a run (3 of 4 coins
+  # answered on 26 Oct, one only on its retry).
+  - {name: F1, provider: gemini, model: gemini-3.7-flash, prompt: structured, sample: 4, min_interval_s: 13, attempts: 2}
   # Claude Haiku 5.5, paid (the $5 monthly cap, shared with the agent's chat): about
   # $0.0005 a call.
   - {name: H1, provider: anthropic, model: claude-haiku-5-5, prompt: structured}
