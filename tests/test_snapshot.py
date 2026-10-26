@@ -68,6 +68,10 @@ def test_snapshot_in_hierarchy_order_and_within_budget(trending):
     assert data["as_of"] == "2026-10-17T12:20:00Z"
     assert data["btc"]["regime"] == "risk_on"  # above both averages, up 18% in 7 days
     assert data["macro"] == {"next_fomc": "2026-10-28", "days_to_fomc": 11}
+    # Money flow: volume against yesterday, the share outside BTC, and spot takers (a
+    # live OKX reply: 36,612 bought at the ask against 29,295 sold).
+    assert (data["market"]["vol_chg_24h"], data["market"]["alt_vol_share"]) == (-12.3, 60.0)
+    assert data["flow"]["taker_buy_pct"] == 55.6
     assert len(data["coin_news"][0]["title"]) == snapshot.TITLE_WIDTH
     # 7-day wick low: the oldest of the last 7 days (an uptrend), 6 days before today.
     assert data["levels"]["d7"]["wick_low"] == pytest.approx(100 * 1.001**-6 * 0.99, rel=1e-5)

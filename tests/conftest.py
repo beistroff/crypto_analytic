@@ -172,6 +172,8 @@ def apis(make_server, monkeypatch):
                 flow.FUNDING: (200, {}, load_fixture("okx_funding.json")),
                 flow.OI_HISTORY: (200, {}, load_fixture("okx_oi_history.json")),
                 flow.LONG_SHORT: (200, {}, load_fixture("okx_long_short.json")),
+                flow.TAKER_VOLUME: (200, {}, load_fixture("okx_taker_volume.json")),
+                flow.TOP_TRADERS: (200, {}, load_fixture("okx_top_traders.json")),
             }
         )
         servers.kraken.routes["/0/public/OHLC"] = (200, {}, load_fixture("kraken_ohlc.json"))

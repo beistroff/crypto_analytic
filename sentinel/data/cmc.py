@@ -50,6 +50,8 @@ class Market:
     btc_dominance: float | None
     total_mcap_chg_24h: float | None
     stablecoin_share: float | None
+    vol_chg_24h: float | None = None  # all crypto volume against yesterday's, percent
+    alt_vol_share: float | None = None  # percent of the volume outside BTC
 
 
 def listings(limit: int) -> list[Coin]:
@@ -95,16 +97,21 @@ def names() -> dict[str, str]:
 
 
 def global_metrics() -> Market:
-    """Market-wide context: BTC dominance, total market cap 24 h change, stablecoin share."""
+    """Market-wide context: BTC dominance, total market cap 24 h change, stablecoin share,
+    and where the money trades: the volume's change against yesterday and the share of it
+    outside BTC (field names from CMC's API reference, checked 26 Oct 2026)."""
     data = _get("/v1/global-metrics/quotes/latest", {"convert": "USD"})
     usd = data.get("quote", {}).get("USD", {})
     total = usd.get("total_market_cap")
     stable = usd.get("stablecoin_market_cap")
     share = stable / total * 100 if stable is not None and total else None
+    volume, alt_volume = usd.get("total_volume_24h"), usd.get("altcoin_volume_24h")
     return Market(
         btc_dominance=data.get("btc_dominance"),
         total_mcap_chg_24h=usd.get("total_market_cap_yesterday_percentage_change"),
         stablecoin_share=share,
+        vol_chg_24h=usd.get("total_volume_24h_yesterday_percentage_change"),
+        alt_vol_share=alt_volume / volume * 100 if alt_volume is not None and volume else None,
     )
 
 

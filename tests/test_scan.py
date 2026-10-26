@@ -81,6 +81,8 @@ def test_scan_one_row_per_coin_within_budget(top50):
         "to_high_7d": 1.0,
         "funding_pct": -0.0011,
         "news_24h": 0,
+        "v_mc": 0.1,  # the listing's volume is a tenth of its market cap
+        "vol_z30": 0.7,  # volumes cycle 1000 to 1004, the last one high
     }
     lines = _run("--format", "telegram").strip().splitlines()
     assert lines[0] == (

@@ -313,8 +313,10 @@ Why (agent runs of 16 and 17 Oct): the agent fetched raw data and eyeballed it. 
 
 ### 2.5 Flow and whales (`sentinel/data/flow.py`, `whales.py`) [Core: funding and open interest; whale proxy Later]
 - [x] Funding rate, open interest and its 7-day change, long/short account ratio from OKX public endpoints (verified in the OKX API docs; access from `us-east-1` is checked with 2.1's live check).
-- [ ] [Later] Taker buy vs sell volume.
-- [ ] [Later] Whale proxy: share of volume from trades of $100k or more among recent trades.
+- [x] Taker buy vs sell volume (moved up 26 Oct, money flow): `flow.taker_buy_pct`, the spot share of the last 24 h bought at the ask (OKX `rubik/stat/taker-volume`). The snapshot's `market` also has the total volume's change against yesterday and its share outside BTC (CMC global metrics, no extra credit).
+- [x] Large traders against the crowd (26 Oct): `flow.top_long_short`, the long over short positions of OKX's top traders, next to `long_short` (all accounts).
+- [ ] [Later] Whale proxy: share of volume from trades of $100k or more among recent trades (26 Oct: OKX's last 500 trades cover only minutes, e.g. 7 for SOL with none that large, so it needs paging or another source). On-chain whale transfers need a keyed service.
+- [ ] [Later] Volume-spike watch: an alert when a top-20 coin's volume jumps while its price is flat.
 
 ### 2.6 Snapshot builder (`sentinel/signals/snapshot.py`)
 - [x] `sentinel snapshot SYM [--format json|telegram]` returns the pydantic `Snapshot` in hierarchy order (Appendix C) with an `as_of` timestamp: BTC, market mood, macro, coin news, flow, coin technicals, range levels, strength against BTC. Whales (2.5) and portfolio context (1.7) join when their tasks land.
@@ -333,6 +335,7 @@ Replaces the agent's own top-50 scan (about 33 `web_fetch` calls, levels read of
 - [x] One row per coin under `columns`: price, 24 h and 7 d change (CMC, rolling), RSI14, above SMA50 and SMA200, strength against BTC over 7 days, distance to the 7-day wick low and high, funding. Stablecoins and wrapped BTC or ETH are skipped; coins without candles are listed in `missing`.
 - [x] The Telegram form names the stand-outs: strongest and weakest against BTC, nearest the 7-day wick low, RSI extremes.
 - [x] News count per coin (2.4): `news_24h`, the coin's headlines in the RSS feeds over the last 24 h (the feeds are read once per scan). No NewsAPI requests: one per coin would take about 50 s and half of the free plan's 100 a day. Titles come from `sentinel snapshot` for the coins worth a closer look.
+- [x] Money flow per coin (added 26 Oct): `v_mc` (CMC 24 h volume over market cap) and `vol_z30` (yesterday's volume against its 30 days), from data the scan already fetches.
 
 **Accept:** top 50 in about 5 s without NewsAPI (17 Oct, laptop: 5.3 s, 3.1 s with cached candles; about 3,200 characters of JSON); a test for the rows, skipped and missing coins and the size budget.
 

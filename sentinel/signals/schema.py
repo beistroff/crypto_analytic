@@ -32,7 +32,9 @@ class Headline(BaseModel):
 class Market(BaseModel):
     fear_greed: int | None
     total_mcap_chg_24h: float | None
-    stablecoin_share: float | None
+    stablecoin_share: float | None  # percent of the market cap parked in stablecoins
+    vol_chg_24h: float | None  # all crypto volume against yesterday's, percent
+    alt_vol_share: float | None  # percent of the volume outside BTC (a level, no history)
     headlines: list[Headline] | None  # BTC's, from RSS, last 24 h, newest first
 
 
@@ -47,6 +49,8 @@ class Flow(BaseModel):
     oi_usd: float
     oi_chg_7d: float | None
     long_short: float
+    taker_buy_pct: float | None  # spot market buys taken at the ask, percent of 24 h volume
+    top_long_short: float | None  # OKX's top traders, against `long_short` (all accounts)
 
 
 class Technicals(BaseModel):

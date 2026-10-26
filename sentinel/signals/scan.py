@@ -17,6 +17,9 @@ candles and its OKX funding rate, fetched in parallel, plus BTC's hourly candles
   candles on any exchange are listed in ``missing``; coins without an OKX swap have no
   funding rate (``null``). When a rate could not be read (rate limit, outage),
   ``missing`` also names ``funding``.
+- Money flow per coin, from data already fetched: ``v_mc`` (CMC's 24 h volume over market
+  cap) and ``vol_z30`` (the last finished day's volume against its 30 days). A volume
+  jump with a flat price, or one coin heating up while others cool, shows where money moves.
 - News is counted, not listed (titles for 50 coins would not fit the agent's context):
   ``news_24h`` is the coin's headlines in the RSS feeds over the last 24 h (one read of
   each feed for the whole scan). Feeds that cannot be read are ``rss`` in ``missing``.
@@ -61,6 +64,8 @@ class Row:
     to_high_7d: float | None
     funding_pct: float | None
     news_24h: int | None  # RSS headlines in the last 24 h
+    v_mc: float | None  # 24 h volume over market cap: how hot the coin trades
+    vol_z30: float | None  # yesterday's volume in standard deviations from its 30 days
 
 
 COLUMNS = list(Row.__dataclass_fields__)
@@ -203,4 +208,6 @@ def _row(
         to_high_7d=rounded(indicators.pct(week["wick_high"], price)) if week else None,
         funding_pct=None if funding_pct is None else round(funding_pct, 4),
         news_24h=news_24h,
+        v_mc=round(coin.vol_mc, 3) if coin.market_cap > 0 else None,
+        vol_z30=rounded(indicators.volume_z(daily.candles), 1),
     )

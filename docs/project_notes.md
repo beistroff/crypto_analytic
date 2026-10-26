@@ -102,3 +102,8 @@ Short notes per merged PR, newest last: what changed, why, and one number. Detai
 - Why: the first experiment runs showed models use HOLD to stay out with low confidence, and the ±1 % band would have graded every careful call in a moving market as a miss.
 - Number: one scoring rule and one export line; the stored return lets the analysis apply either rule.
 - Same PR, agent rules (`AGENTS.md`) after reviewing a day of chat: state a watch's full entry rule up front and follow it when it hits (an AVAX hit was answered "wait" against its own rule), rank several coins, suggest keeping about 20 % with a break-even stop at the target, and offer to log buy or sell verdicts as test calls so they get measured.
+
+## #29 Money flow (26 Oct)
+- The snapshot adds where money moves: the total crypto volume's change against yesterday and its share outside BTC (`market`), and the coin's spot taker buy share over 24 h and OKX's top traders' long/short next to all accounts' (`flow`). The market scan adds `v_mc` and `vol_z30` per coin; `AGENTS.md` says how to read them and to name the numbers behind any flow claim.
+- Why: the agent judged price and positioning but could not see money moving into stablecoins, out of BTC or into one coin; the old agent's whale talk was a story without such data.
+- Number: two extra OKX calls per snapshot (free, keyless), 0 extra CMC credits; snapshot JSON grows by about 100 characters, the scan by two columns. On 26 Oct SOL's top traders were at 0.88 (net short) against 2.1 for all accounts.
