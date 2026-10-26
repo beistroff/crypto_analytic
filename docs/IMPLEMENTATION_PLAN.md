@@ -407,7 +407,7 @@ Minimal by design (2026-10-19): the agent logs its calls; it never scores or rev
 Records what the market did after each call, with zero model tokens. It is the answer key: the agent's calls (3.4, 3.5) and Naive Bayes' calls (Phase 5) are graded by the same scorer, and Naive Bayes learns from its outcomes. Core version: `sentinel predict score`, an hourly OpenClaw command automation on the instance that sends nothing (decided 24 Oct, like the watch check). The Lambda version waits for Phase 6.
 - [x] Queries `GSI2` for `OPEN` items with `due_at <= now`, fetches candles since the prediction (15-minute up to 12 h, hourly above), and fills `checks` at each standard horizon up to the call's own (decided 24 Oct): price, return, hit. BUY is a hit above the entry, SELL below.
 - [x] Records `target_hit_first` (target touched before stop, or the reverse, or neither) and `max_adverse_pct`.
-- [x] A FLAT call (HOLD) is a hit when the price stays within ±1 % at the horizon.
+- [x] A HOLD (FLAT) means "wait, do not buy now" (changed 26 Oct: models and the agent use HOLD to stay out, and a ±1 % band graded careful calls as misses): a hit when buying would not have paid, i.e. the price is not more than 1 % above the entry. The export reports BUY, SELL and HOLD hit rates apart (`by_call`).
 - [x] Sets the next `due_at`; after the call's own horizon, sets `status = DONE` and removes the `GSI2` attributes.
 
 ### 3.7 Export and review (outside the agent)
