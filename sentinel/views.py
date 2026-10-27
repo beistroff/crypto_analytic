@@ -19,6 +19,8 @@ import requests
 from sentinel.alerts import watch as alerts_watch
 from sentinel.data import SourceError, cmc, exchange, feargreed, newsapi
 from sentinel.eval.rules import is_scalp_candidate, rules_signal
+from sentinel.models.dataset import Built
+from sentinel.models.train import Trained
 from sentinel.portfolio import service
 from sentinel.predict.runner import RunResult
 from sentinel.predict.scorer import MIN_GAIN_PCT, ScoreResult
@@ -480,6 +482,32 @@ def experiment_ran(result: RunResult) -> View:
     if result.missing:
         line += f"; no snapshot: {', '.join(result.missing)}"
     return View(data, line)
+
+
+def dataset_built(built: Built) -> View:
+    rows = sum(built.rows.values())
+    line = (
+        f"Dataset {built.key}: {rows} rows, {built.first} to {built.last}, {len(built.rows)} coins"
+    )
+    if built.missing:
+        line += f"; no candles: {', '.join(built.missing)}"
+    return View(asdict(built), line)
+
+
+def model_trained(trained: Trained) -> View:
+    """The stored model and its walk-forward scores against the two baselines."""
+    report = trained.report
+    lines = [
+        f"Model {trained.key}: {trained.train_rows} rows to {trained.trained_until}",
+        f"Walk-forward: {report['folds']} months, {report['test_rows']} rows, "
+        f"{report['test_up_pct']} % up",
+    ]
+    for name in ("nb", "logreg", "base"):
+        s = report[name]
+        lines.append(
+            f"{name}: accuracy {s['accuracy']}, Brier {s['brier']}, log-loss {s['log_loss']}"
+        )
+    return View(asdict(trained), "\n".join(lines))
 
 
 def _hit_rates(pairs: Iterable[tuple[str, bool]]) -> dict[str, dict[str, int]]:

@@ -22,6 +22,7 @@ from sentinel.alerts import watch as alerts_watch
 from sentinel.alerts.watch import WatchError
 from sentinel.config import get_settings
 from sentinel.data import SourceError
+from sentinel.models import dataset, train
 from sentinel.portfolio import service
 from sentinel.portfolio.service import JournalError
 from sentinel.predict import journal, runner, scorer
@@ -338,6 +339,29 @@ def experiment_run(slot: str | None, fmt: str) -> None:
     """One run: a snapshot per coin, a call per arm (an OpenClaw automation runs this at
     00:05, 08:05 and 16:05 UTC, sending nothing)."""
     _emit(views.experiment_ran(runner.run(slot)), fmt)
+
+
+@cli.group()
+def nb() -> None:
+    """Naive Bayes: a second opinion from market history, never the source of truth."""
+
+
+@nb.command("build-dataset")
+@click.option("--days", type=click.IntRange(400, 1500), default=730)
+@FORMAT
+@_source_errors
+def nb_build_dataset(days: int, fmt: str) -> None:
+    """Daily features and next-day returns of the experiment coins, stored in S3."""
+    _emit(views.dataset_built(dataset.build(days)), fmt)
+
+
+@nb.command("train")
+@click.option("--dataset", "key", help="S3 key of a dataset (default: the newest).")
+@FORMAT
+@_source_errors
+def nb_train(key: str | None, fmt: str) -> None:
+    """Walk-forward report, then the model on the last 12 months, stored in S3."""
+    _emit(views.model_trained(train.train(key)), fmt)
 
 
 @cli.group()

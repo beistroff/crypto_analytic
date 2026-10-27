@@ -59,6 +59,25 @@ def test_falls_back_to_kraken_for_a_coin_okx_does_not_list(venues):
     assert result.candles[-1].volume == pytest.approx(559.95 * 812.3)
 
 
+def test_okx_pages_back_past_300_candles(venues):
+    day_ms = 86_400_000
+    newest = 1792195200000  # 17 Oct 2026
+
+    def page(first, count):  # newest first, as OKX sends them
+        days = range(first, first + count)
+        rows = [
+            [str(newest - d * day_ms), "1", "2", "0.5", "1.5", "0", "0", "9", "1"] for d in days
+        ]
+        return (200, {}, {"code": "0", "data": rows})
+
+    venues.okx.replies.extend([page(0, 300), page(300, 5)])  # older candles run out
+    result = exchange.candles("BTC", "1d", limit=310)
+    second = _query(venues.okx.seen[1])
+    assert (second["limit"], second["after"]) == (["10"], [str(newest - 299 * day_ms)])
+    assert len(result.candles) == 305
+    assert result.candles[0].ts < result.candles[-1].ts
+
+
 def test_cached_for_five_minutes(venues, monkeypatch):
     exchange.candles("BTC", "1h", limit=3)
     exchange.candles("BTC", "1h", limit=3)

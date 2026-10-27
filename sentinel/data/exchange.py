@@ -159,16 +159,26 @@ def _cached(exchange: Exchange, symbol: str, timeframe: Timeframe, limit: int) -
 
 
 def _okx(instrument: str, timeframe: Timeframe, limit: int) -> list[list[float]]:
-    params = {"instId": instrument, "bar": OKX_BARS[timeframe], "limit": min(limit, OKX_MAX_LIMIT)}
-    response = net.session("okx").get(OKX_URL, params=params)
-    body = _body(response)
-    code = body.get("code")
-    if code == OKX_NOT_LISTED:
-        raise NotListed(f"OKX has no {instrument}")
-    if response.status_code != 200 or code != "0":
-        raise SourceError(f"OKX candles: HTTP {response.status_code}, code {code}")
+    # More than 300 candles (the Naive Bayes dataset's years of days) come in pages, each
+    # older than the last one's oldest candle.
+    rows: list[list[Any]] = []
+    while len(rows) < limit:
+        params = {"instId": instrument, "bar": OKX_BARS[timeframe]}
+        params["limit"] = min(limit - len(rows), OKX_MAX_LIMIT)
+        if rows:
+            params["after"] = rows[-1][0]
+        response = net.session("okx").get(OKX_URL, params=params)
+        body = _body(response)
+        code = body.get("code")
+        if code == OKX_NOT_LISTED:
+            raise NotListed(f"OKX has no {instrument}")
+        if response.status_code != 200 or code != "0":
+            raise SourceError(f"OKX candles: HTTP {response.status_code}, code {code}")
+        rows.extend(body["data"])
+        if len(body["data"]) < params["limit"]:
+            break  # no older candles
     # [ts ms, open, high, low, close, vol, volCcy, volCcyQuote, confirm], newest first
-    return [[float(r[0]), *map(float, r[1:5]), float(r[7])] for r in reversed(body["data"])]
+    return [[float(r[0]), *map(float, r[1:5]), float(r[7])] for r in reversed(rows)]
 
 
 def _kraken(pair_name: str, timeframe: Timeframe, limit: int) -> list[list[float]]:
