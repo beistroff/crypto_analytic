@@ -107,3 +107,8 @@ Short notes per merged PR, newest last: what changed, why, and one number. Detai
 - The snapshot adds where money moves: the total crypto volume's change against yesterday and its share outside BTC (`market`), and the coin's spot taker buy share over 24 h and OKX's top traders' long/short next to all accounts' (`flow`). The market scan adds `v_mc` and `vol_z30` per coin; `AGENTS.md` says how to read them and to name the numbers behind any flow claim.
 - Why: the agent judged price and positioning but could not see money moving into stablecoins, out of BTC or into one coin; the old agent's whale talk was a story without such data.
 - Number: two extra OKX calls per snapshot (free, keyless), 0 extra CMC credits; snapshot JSON grows by about 100 characters, the scan by two columns. On 26 Oct SOL's top traders were at 0.88 (net short) against 2.1 for all accounts.
+
+## #31 Trade card (27 Oct)
+- `AGENTS.md`: every buy or buy-if comes as a short trade card (when to buy at which candle close, buy price, where and when to sell, what to do if it drops, the chance to reach the target first, why, how long it is valid, and the watch set for it), and a list of coins always ends with one pick. A neutral BTC gate caps the size instead of meaning "wait"; after a run of 5 % or more the agent prefers the dip to the pullback zone; a dropping trade gets a repair plan (hold, one add from cash at support, one break that ends the idea) instead of a bare stop.
+- Why: the agent gave conditional signals that read as information: no target, no time frame, no chance, and a stop that meant taking an 11 % loss with no plan.
+- Number: one reply format replaces the old trigger line and its example; about 6 lines more in `AGENTS.md`.
