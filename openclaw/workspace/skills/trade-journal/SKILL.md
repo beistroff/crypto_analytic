@@ -23,6 +23,8 @@ sentinel trade add --side buy --symbol XRP --qty 100 --price 1.20 --format teleg
 BUY 100 XRP at $1.20. Now 100 at avg $1.20.
 ```
 
+If the buy came from your trade card, also log the card as a test call (the `test-trade-scenario` skill: entry the buy price, the card's target and stop, 24 h unless the card says otherwise), so the trades your human makes get graded too.
+
 A sell also prints the profit it realised:
 
 ```text
@@ -35,13 +37,15 @@ SELL 40 XRP at $1.50. Realised +$12.00. Now 60 at avg $1.20.
 sentinel portfolio summary --format telegram
 ```
 
-Reply with it as it is. Cash and open positions come first. Example output:
+Reply with it as it is. Cash and open positions come first, each position with its live price and open result (left out when the price cannot be read). Example output:
 
 ```text
 Cash: $880.00
-Deployed: $120.00 in 1 position, realised +$0
-XRP 100 at avg $1.20
+Deployed: $120.00 in 1 position, realised +$0, open +$12.00
+XRP 100 at avg $1.20, now $1.32 (+10.0%)
 ```
+
+A position 5 % or more below its average gets the repair plan from `AGENTS.md` (Portfolio).
 
 If it says no starting cash is set, tell the user and offer to set it (below).
 
