@@ -113,7 +113,7 @@ Short notes per merged PR, newest last: what changed, why, and one number. Detai
 - Why: the agent gave conditional signals that read as information: no target, no time frame, no chance, and a stop that meant taking an 11 % loss with no plan.
 - Number: one reply format replaces the old trigger line and its example; about 6 lines more in `AGENTS.md`.
 
-## #32 Live result in the portfolio (28 Oct)
+## #33 Live result in the portfolio (28 Oct)
 - `sentinel portfolio summary` adds each position's live exchange price and open result (USDT and %), plus the total; a price that cannot be read leaves only that position without it. The `trade-journal` skill logs a buy that came from a trade card as a test call too, and points a position 5 % or more below its average to the repair plan.
 - Why: the summary showed the average cost but not how a trade was doing, so the repair-plan rule had no number to start from, and the trades actually made were never graded.
 - Number: one cached exchange call per open position; 155 tests pass.
