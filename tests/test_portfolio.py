@@ -1,11 +1,13 @@
 import json
 from dataclasses import replace
 from decimal import Decimal
+from types import SimpleNamespace
 
 import pytest
 from click.testing import CliRunner
 
 from sentinel.cli import cli
+from sentinel.data import SourceError, exchange
 from sentinel.portfolio import service
 from sentinel.portfolio.service import JournalError
 from sentinel.store.real import PositionRepo, TradeRepo, VersionConflict
@@ -96,7 +98,15 @@ def test_baseline_is_set_once_unless_replaced(tables):
     assert service.summary().baseline_usdt == D(500)
 
 
-def test_cli_journals_a_trade_and_summarises(tables):
+def test_cli_journals_a_trade_and_summarises(tables, monkeypatch):
+    prices = {"XRP": 1.32}
+
+    def candles(symbol, timeframe, limit):
+        if symbol not in prices:
+            raise SourceError(f"no candles for {symbol}")
+        return SimpleNamespace(price=prices[symbol])
+
+    monkeypatch.setattr(exchange, "candles", candles)
     run = CliRunner()
     empty = run.invoke(cli, ["portfolio", "summary", "--format", "telegram"])
     assert empty.output.splitlines() == [
@@ -111,10 +121,25 @@ def test_cli_journals_a_trade_and_summarises(tables):
 
     summary = json.loads(run.invoke(cli, ["portfolio", "summary"]).output)
     assert summary["cash_usdt"] == 880.0
-    assert summary["open_positions"][0]["symbol"] == "XRP"
+    xrp = summary["open_positions"][0]
+    # 100 XRP bought for 120 USDT, now worth 132: +12 USDT, +10 %.
+    assert (xrp["symbol"], xrp["price"], xrp["pnl_usdt"], xrp["pnl_pct"]) == (
+        "XRP",
+        1.32,
+        12.0,
+        10.0,
+    )
+    assert summary["unrealised_usdt"] == 12.0
     text = run.invoke(cli, ["portfolio", "summary", "--format", "telegram"]).output
     assert text.splitlines() == [
         "Cash: $880.00",
+        "Deployed: $120.00 in 1 position, realised +$0, open +$12.00",
+        "XRP 100 at avg $1.20, now $1.32 (+10.0%)",
+    ]
+    # A price that cannot be read leaves the position without its open result.
+    prices.clear()
+    text = run.invoke(cli, ["portfolio", "summary", "--format", "telegram"]).stdout
+    assert text.splitlines()[1:] == [  # the warning goes to stderr
         "Deployed: $120.00 in 1 position, realised +$0",
         "XRP 100 at avg $1.20",
     ]

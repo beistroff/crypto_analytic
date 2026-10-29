@@ -112,3 +112,8 @@ Short notes per merged PR, newest last: what changed, why, and one number. Detai
 - `AGENTS.md`: every buy or buy-if comes as a short trade card (when to buy at which candle close, buy price, where and when to sell, what to do if it drops, the chance to reach the target first, why, how long it is valid, and the watch set for it), and a list of coins always ends with one pick. A neutral BTC gate caps the size instead of meaning "wait"; after a run of 5 % or more the agent prefers the dip to the pullback zone; a dropping trade gets a repair plan (hold, one add from cash at support, one break that ends the idea) instead of a bare stop.
 - Why: the agent gave conditional signals that read as information: no target, no time frame, no chance, and a stop that meant taking an 11 % loss with no plan.
 - Number: one reply format replaces the old trigger line and its example; about 6 lines more in `AGENTS.md`.
+
+## #33 Live result in the portfolio (28 Oct)
+- `sentinel portfolio summary` adds each position's live exchange price and open result (USDT and %), plus the total; a price that cannot be read leaves only that position without it. The `trade-journal` skill logs a buy that came from a trade card as a test call too, and points a position 5 % or more below its average to the repair plan.
+- Why: the summary showed the average cost but not how a trade was doing, so the repair-plan rule had no number to start from, and the trades actually made were never graded.
+- Number: one cached exchange call per open position; 155 tests pass.
