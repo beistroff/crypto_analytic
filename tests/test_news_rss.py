@@ -1,9 +1,13 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
+from click.testing import CliRunner
 
 from sentinel import config
-from sentinel.data import news_rss
+from sentinel.alerts import news as alerts_news
+from sentinel.cli import cli
+from sentinel.data import SourceError, news_rss
+from sentinel.data.newsapi import Headline
 
 # The recorded feed's newest item is from 17 Oct 2026, 12:58 UTC.
 NOW = datetime(2026, 10, 17, 14, 0, tzinfo=UTC)
@@ -32,6 +36,55 @@ def test_no_feeds_configured(apis, monkeypatch):
     monkeypatch.setattr(config, "NEWS_FEEDS", {})
     config.get_settings.cache_clear()
     assert news_rss.recent(NOW) == news_rss.Feeds([], [])
+
+
+def test_news_alert_one_line_per_event_then_quiet(monkeypatch):
+    clock = {"now": NOW}
+
+    def item(title, minutes_ago, url):
+        published = clock["now"] - timedelta(minutes=minutes_ago)
+        return news_rss.Item(Headline(title=title, source="CoinDesk", url=url), published)
+
+    feeds = news_rss.Feeds(
+        [
+            item("Binance hacked: $2.5B drained from a hot wallet", 20, "https://a/hack"),
+            item("Tether freezes $1B linked to the hack", 25, "https://a/freeze"),
+            item("Bitcoin ETF inflows rise for a third day", 30, "https://a/etf"),
+            item("Exchange halts withdrawals after the breach", 40, "https://a/halt"),
+            item("Users report unauthorized withdrawals", 50, "https://a/users"),
+            item("Protocol exploit drains $40M", 180, "https://a/old"),  # before the lookback
+        ],
+        [],
+    )
+    monkeypatch.setattr(news_rss, "recent", lambda now: feeds)
+    monkeypatch.setattr(alerts_news, "_now", lambda: clock["now"])
+    run = CliRunner()
+
+    def alert():
+        return run.invoke(cli, ["news", "alert", "--format", "telegram"]).stdout
+
+    assert alert().splitlines() == [
+        "⚠️ Binance hacked: $2.5B drained from a hot wallet (CoinDesk)",
+        "⚠️ Tether freezes $1B linked to the hack (CoinDesk)",
+        "⚠️ Exchange halts withdrawals after the breach (CoinDesk)",
+        "+1 more on this",
+        "Ask your AI agent what it means for your coins.",
+    ]
+    assert alert() == "NO_REPLY\n"  # nothing new
+    # A follow-up an hour later falls in the quiet period: skipped, not saved for later.
+    clock["now"] = NOW + timedelta(hours=1)
+    feeds.items.insert(0, item("Hacker's haul tops a corporate treasury", 5, "https://a/haul"))
+    assert alert() == "NO_REPLY\n"
+    # After the quiet period a new event alerts again; the skipped one does not come back.
+    clock["now"] = NOW + timedelta(hours=4)
+    feeds.items.insert(0, item("Fed cuts rates by 50 bps", 5, "https://a/fed"))
+    assert alert().splitlines()[0] == "⚠️ Fed cuts rates by 50 bps (CoinDesk)"
+
+    def down(now):
+        raise SourceError("RSS: every feed failed")
+
+    monkeypatch.setattr(news_rss, "recent", down)
+    assert run.invoke(cli, ["news", "alert", "--format", "telegram"]).stdout == "NO_REPLY\n"
 
 
 @pytest.mark.live

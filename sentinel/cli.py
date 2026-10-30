@@ -18,6 +18,7 @@ import requests
 from botocore.exceptions import BotoCoreError, ClientError
 
 from sentinel import __version__, aws, health, log, views
+from sentinel.alerts import news as alerts_news
 from sentinel.alerts import watch as alerts_watch
 from sentinel.alerts.watch import WatchError
 from sentinel.config import get_settings
@@ -217,6 +218,14 @@ def news_long(symbol: str, limit: int, fmt: str) -> None:
 def news_world(limit: int, fmt: str) -> None:
     """World news of 3 days that moves markets (rates, policy, bans, war, AI), most read first."""
     _emit(views.world_news(limit), fmt)
+
+
+@news.command("alert")
+@FORMAT
+def news_alert(fmt: str) -> None:
+    """Major market-moving headlines from the crypto feeds, each once, or NO_REPLY (an
+    OpenClaw automation runs this every 30 minutes and delivers what it prints)."""
+    _emit(views.news_alerted(alerts_news.check()), fmt)
 
 
 @cli.group()

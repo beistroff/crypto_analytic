@@ -16,6 +16,7 @@ from typing import Any
 
 import requests
 
+from sentinel.alerts import news as alerts_news
 from sentinel.alerts import watch as alerts_watch
 from sentinel.data import SourceError, cmc, exchange, feargreed, newsapi
 from sentinel.eval.rules import is_scalp_candidate, rules_signal
@@ -313,6 +314,17 @@ def watch_checked(result: alerts_watch.CheckResult) -> View:
     return View(data, "\n".join([*lines, "Ask your AI agent for a fresh look before acting."]))
 
 
+def news_alerted(result: alerts_news.AlertResult) -> View:
+    """Like ``watch_checked``: a line per alerted headline, or ``NO_REPLY``."""
+    data = asdict(result)
+    if not result.headlines:
+        return View(data, NO_REPLY)
+    lines = [f"⚠️ {_short(h.title, 140)} ({h.source})" for h in result.headlines]
+    if result.more:
+        lines.append(f"+{result.more} more on this")
+    return View(data, "\n".join([*lines, "Ask your AI agent what it means for your coins."]))
+
+
 def _prediction(pred: Prediction) -> dict[str, Any]:
     data = asdict(pred)
     data["id"] = data.pop("pred_id")
@@ -566,21 +578,32 @@ def baseline_set(result: dict[str, Any]) -> View:
 
 
 def portfolio_summary() -> View:
-    """Cash and open positions first, so "nothing is deployed" is never in doubt."""
+    """Cash and open positions first, so "nothing is deployed" is never in doubt. Each
+    position gets its live exchange price and open result; a price that cannot be read is
+    null, and the rest of the summary still shows."""
     state = service.summary()
     cash = None if state.cash_usdt is None else _num(state.cash_usdt)
-    data: dict[str, Any] = {
-        "cash_usdt": cash,
-        "invested_usdt": _num(state.invested_usdt),
-        "open_positions": [
+    positions = []
+    for p in state.open_positions:
+        price, cost = _live_price(p.symbol), _num(p.cost_basis)
+        value = None if price is None else _num(p.qty) * price
+        positions.append(
             {
                 "symbol": p.symbol,
                 "qty": _num(p.qty),
                 "avg_price": _num(p.avg_price),
-                "cost_basis": _num(p.cost_basis),
+                "cost_basis": cost,
+                "price": price,
+                "pnl_usdt": None if value is None else round(value - cost, 2),
+                "pnl_pct": None if value is None else rounded((value / cost - 1) * 100),
             }
-            for p in state.open_positions
-        ],
+        )
+    known = [p["pnl_usdt"] for p in positions if p["pnl_usdt"] is not None]
+    data: dict[str, Any] = {
+        "cash_usdt": cash,
+        "invested_usdt": _num(state.invested_usdt),
+        "open_positions": positions,
+        "unrealised_usdt": round(sum(known), 2) if known else None,
         "realised_pnl": _num(state.realised_pnl),
         "baseline_usdt": None if state.baseline_usdt is None else _num(state.baseline_usdt),
         "since": state.since,
@@ -588,14 +611,18 @@ def portfolio_summary() -> View:
     lines = ["Cash: " + ("not known, no starting cash set" if cash is None else _usd(cash))]
     if state.open_positions:
         count = len(state.open_positions)
+        unrealised = data["unrealised_usdt"]
         lines.append(
             f"Deployed: {_usd(data['invested_usdt'])} in {count} "
             f"position{'s' if count > 1 else ''}, realised {_signed_usd(data['realised_pnl'])}"
+            + (f", open {_signed_usd(unrealised)}" if unrealised is not None else "")
         )
-        rows = [
-            f"{p.symbol} {service.plain(p.qty)} at avg {_usd(_num(p.avg_price))}"
-            for p in state.open_positions
-        ]
+        rows = []
+        for p, row in zip(state.open_positions, positions, strict=True):
+            line = f"{p.symbol} {service.plain(p.qty)} at avg {_usd(_num(p.avg_price))}"
+            if row["price"] is not None:
+                line += f", now {_usd(row['price'])} ({_pct(row['pnl_pct'])})"
+            rows.append(line)
         if len(rows) > 3:
             rows = [*rows[:2], f"+{len(rows) - 2} more"]
         lines += rows
@@ -638,6 +665,15 @@ def _fear_greed_value() -> int | None:
 def _skip(source: str, exc: Exception, missing: list[str]) -> None:
     log.warning("source unavailable", extra={"source": source, "error": type(exc).__name__})
     missing.append(source)
+
+
+def _live_price(symbol: str) -> float | None:
+    """The coin's latest exchange price (hourly candles, cached), or None if unreadable."""
+    try:
+        return exchange.candles(symbol, "1h", 2).price
+    except (SourceError, requests.RequestException) as exc:
+        log.warning("no live price", extra={"symbol": symbol, "error": type(exc).__name__})
+        return None
 
 
 def _quote(symbol: str) -> cmc.Coin:

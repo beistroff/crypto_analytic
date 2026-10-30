@@ -18,7 +18,7 @@ sentinel predict log --symbol XRP --model <your model> --format telegram --json 
 ```
 
 - `action` is BUY, SELL or HOLD; `direction` is UP, DOWN or FLAT; `confidence` is 0 to 1.
-- `entry` is the snapshot's price. BUY needs `target > entry > stop`, SELL the reverse; HOLD needs no target or stop.
+- `entry` is the snapshot's price. BUY needs `target > entry > stop`, SELL the reverse; HOLD needs no target or stop. The `stop` only grades the call (target or stop reached first): use the card's add level, the support under the entry. It is not advice to sell.
 - `btc_context` is one line on BTC from the snapshot; `reasons` are 2 or 3 short ones.
 
 4. Reply with your call in the usual short form, then the command's line as it is. Example output:
