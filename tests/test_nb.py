@@ -12,7 +12,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.naive_bayes import CategoricalNB
 
 from sentinel.cli import cli
-from sentinel.models import history, train
+from sentinel.models import check, history, train
 from sentinel.models import naive_bayes as nb
 from sentinel.predict import runner
 
@@ -104,6 +104,44 @@ def test_train_reports_walk_forward_and_stores_the_model():
         assert (model["train_rows"], model["label_pct"]) == (900, 0.0)  # every row
         assert model["features"]["vs_btc_7d"]["edges"] == [-3.0, 1.0]
         assert model["likelihoods"]["vs_btc_7d"]["weaker"][1] > 0.99  # P(weaker | up)
+
+
+def test_nb_check_reads_the_stored_model(trending):
+    _s3()
+    start = date(2025, 1, 1)
+    # Every training day looks like the trend's last one (a Saturday asked about, calm,
+    # even with BTC), and one in four went up.
+    rows = [
+        {
+            "date": f"{start + timedelta(days=i)}",
+            "symbol": symbol,
+            "dow": 5.0,
+            "atr_pct": 2.0,
+            "rel_btc_7d": 0.0,
+            "ret_next": 1.0 if i % 4 == 0 else -1.0,
+        }
+        for i in range(450)
+        for symbol in ("BTC", "SOL")
+    ]
+    history._put("datasets/nb/2026-03-26.csv.gz", rows)
+    train.train()
+    check.model.cache_clear()
+
+    result = CliRunner().invoke(cli, ["nb", "check", "sol"])
+
+    assert result.exit_code == 0, result.output
+    out = json.loads(result.output)
+    assert (out["symbol"], out["day"], out["model"]) == (
+        "SOL",
+        "2026-10-16",
+        "models/nb/2026-03-26.json",
+    )
+    assert out["p_up"] == pytest.approx(0.25, abs=0.01)
+    assert [(t["feature"], t["category"]) for t in out["top"]] == [
+        ("weekday", "sat"),
+        ("volatility", "calm"),
+        ("vs_btc_7d", "even"),
+    ]
 
 
 def _random_rows(n=400, seed=7):

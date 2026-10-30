@@ -19,6 +19,9 @@ arms:
   # without the BTC-first reading order (does the hierarchy help?).
   - {name: L0, provider: gemini, model: gemini-3.5-flash-lite, prompt: freeform, min_interval_s: 4.5}
   - {name: L1, provider: gemini, model: gemini-3.5-flash-lite, prompt: structured, min_interval_s: 4.5}
+  # L1 with the Naive Bayes gate (step 12): L1's answers, re-asked only when NB's P(up)
+  # contradicts a confident BUY or SELL (config.py `GateSettings`). Listed after L1.
+  - {name: L1G, provider: gemini, model: gemini-3.5-flash-lite, prompt: structured, gate: L1, min_interval_s: 4.5}
   # Gemini Flash, free: 5 requests a minute, 20 a day, so 4 coins per run, 12 calls a day.
   # 3.7, not the newest 3.8: on 25 Oct 3.8 timed out or was overloaded on every call, and
   # 3.8 is the agent's first chat fallback (each model has its own quota). Two attempts,

@@ -93,6 +93,19 @@ LLM_PRICES: dict[str, tuple[float, float]] = {
 }
 
 
+class GateSettings(BaseModel):
+    """When the Naive Bayes gate (plan 5.4) asks a model to re-check its call: a BUY or SELL
+    with at least ``confidence`` that NB's P(up tomorrow) contradicts. The plan's 0.35 and
+    0.65 never occur: the model's P(up) spans 0.41 to 0.58 (decided 30 Oct). Fixed at the
+    experiment freeze (9.1)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    confidence: float = 0.6
+    buy_max_p_up: float = 0.45
+    sell_min_p_up: float = 0.55
+
+
 class Settings(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -111,6 +124,7 @@ class Settings(BaseModel):
     cache_dir: Path = Path("~/.cache/sentinel").expanduser()
     fomc_decisions: tuple[date, ...] = FOMC_DECISIONS
     llm_prices: dict[str, tuple[float, float]] = Field(default_factory=lambda: dict(LLM_PRICES))
+    gate: GateSettings = Field(default_factory=GateSettings)
 
     @field_validator("log_level", mode="before")
     @classmethod

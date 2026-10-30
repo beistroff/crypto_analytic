@@ -27,7 +27,6 @@ from sentinel.config import get_settings
 from sentinel.data import SourceError, exchange
 from sentinel.data.exchange import Candle
 from sentinel.models import features
-from sentinel.predict import runner
 from sentinel.signals.indicators import pct
 
 PREFIX = "datasets/nb/"
@@ -43,15 +42,15 @@ class Built:
     missing: list[str]  # coins with no candles
 
 
-def build(days: int) -> Built:
+def build(days: int, coins: list[str]) -> Built:
     """Fetch the history, compute the rows and store them; the key is in the result."""
     limit = days + features.WINDOW + 1  # and the open candle, dropped
-    btc = _finished("BTC", limit)
+    btc = daily("BTC", limit)
     rows: list[dict[str, float | str]] = []
     missing = []
-    for symbol in runner.load().coins:
+    for symbol in coins:
         try:
-            coin = btc if symbol == "BTC" else _finished(symbol, limit)
+            coin = btc if symbol == "BTC" else daily(symbol, limit)
         except (SourceError, requests.RequestException):
             missing.append(symbol)
             continue
@@ -109,7 +108,8 @@ def load(key: str | None = None) -> tuple[str, list[dict[str, float | str]]]:
     return key, rows
 
 
-def _finished(symbol: str, limit: int) -> list[Candle]:
+def daily(symbol: str, limit: int) -> list[Candle]:
+    """Up to ``limit`` finished daily candles, oldest first, from the longest history."""
     best = exchange.history(symbol, "1d", limit).candles
     if len(best) < limit:
         paged = _okx_days(symbol, limit)

@@ -23,7 +23,7 @@ from sentinel.alerts import watch as alerts_watch
 from sentinel.alerts.watch import WatchError
 from sentinel.config import get_settings
 from sentinel.data import SourceError
-from sentinel.models import history, train
+from sentinel.models import check, history, train
 from sentinel.portfolio import service
 from sentinel.portfolio.service import JournalError
 from sentinel.predict import journal, runner, scorer
@@ -361,7 +361,7 @@ def nb() -> None:
 @_source_errors
 def nb_build_dataset(days: int, fmt: str) -> None:
     """Daily features and next-day returns of the experiment coins, stored in S3."""
-    _emit(views.dataset_built(history.build(days)), fmt)
+    _emit(views.dataset_built(history.build(days, runner.load().coins)), fmt)
 
 
 @nb.command("train")
@@ -371,6 +371,15 @@ def nb_build_dataset(days: int, fmt: str) -> None:
 def nb_train(key: str | None, fmt: str) -> None:
     """Walk-forward report, then the model on every day of the dataset, stored in S3."""
     _emit(views.model_trained(train.train(key)), fmt)
+
+
+@nb.command("check")
+@click.argument("symbol")
+@FORMAT
+@_source_errors
+def nb_check(symbol: str, fmt: str) -> None:
+    """P(next day up) for a coin from the stored model, and the features behind it."""
+    _emit(views.nb_checked(check.check(symbol)), fmt)
 
 
 @cli.group()
