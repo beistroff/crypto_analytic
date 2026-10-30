@@ -85,6 +85,11 @@ Done by hand over SSM once bootstrap has finished (`~/sentinel/.ready` exists). 
     openclaw automations add --name "Experiment run" --cron "5 0,8,16 * * *" --tz UTC --command-argv '["/home/ubuntu/sentinel/venv/bin/sentinel","experiment","run","--format","telegram"]' --command-env SENTINEL_LOG_LEVEL=ERROR --timeout-seconds 3600 --no-deliver
     openclaw automations run <id>
     ```
+17. Major-news alert (plan 2.4): an OpenClaw command automation runs `sentinel news alert` every 30 minutes with no model call. It reads the free crypto news feeds and sends a short Telegram alert only for a market-moving headline (an exchange hack or exploit, frozen or halted withdrawals, an insolvency, a delisting or ban, a rate decision, a stablecoin depeg): up to 3 of the newest headlines, each with its source (e.g. `⚠️ Binance hack sends bitcoin, ether lower (CoinDesk)`), and "+N more on this" when there are more. After an alert it stays quiet for 3 hours, skipping the follow-ups; a quiet run prints `NO_REPLY` and sends nothing.
+    ```bash
+    openclaw automations add --name "News alert" --every 30m --command-argv '["/home/ubuntu/sentinel/venv/bin/sentinel","news","alert","--format","telegram"]' --command-env SENTINEL_LOG_LEVEL=ERROR --timeout-seconds 120 --announce --channel telegram --to "$(aws ssm get-parameter --region us-east-1 --name /sentinel/telegram_user_id --with-decryption --query Parameter.Value --output text)"
+    openclaw automations run <id>
+    ```
 
 Things learned on the way:
 - Gemini free tier: the 3.x Flash models allow 5 requests a minute and 20 a day, the Lite models 15 and 500, Pro models none. OpenClaw retries a rate-limited call up to 10 times and Google counts each try, so the free Flash models cannot carry an agent on their own. Google Search grounding has no free quota for Gemini 3 and newer.

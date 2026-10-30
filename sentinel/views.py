@@ -16,6 +16,7 @@ from typing import Any
 
 import requests
 
+from sentinel.alerts import news as alerts_news
 from sentinel.alerts import watch as alerts_watch
 from sentinel.data import SourceError, cmc, exchange, feargreed, newsapi
 from sentinel.eval.rules import is_scalp_candidate, rules_signal
@@ -309,6 +310,17 @@ def watch_checked(result: alerts_watch.CheckResult) -> View:
         return View(data, NO_REPLY)
     lines = [alerts_watch.alert(w) for w in result.hits]
     return View(data, "\n".join([*lines, "Ask your AI agent for a fresh look before acting."]))
+
+
+def news_alerted(result: alerts_news.AlertResult) -> View:
+    """Like ``watch_checked``: a line per alerted headline, or ``NO_REPLY``."""
+    data = asdict(result)
+    if not result.headlines:
+        return View(data, NO_REPLY)
+    lines = [f"⚠️ {_short(h.title, 140)} ({h.source})" for h in result.headlines]
+    if result.more:
+        lines.append(f"+{result.more} more on this")
+    return View(data, "\n".join([*lines, "Ask your AI agent what it means for your coins."]))
 
 
 def _prediction(pred: Prediction) -> dict[str, Any]:

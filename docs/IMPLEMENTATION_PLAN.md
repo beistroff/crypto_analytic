@@ -68,7 +68,7 @@ The plan is split in three. **Core** makes the agent useful day to day: good mar
 | 11 | Research | 3.1 clients, 3.2 prompts, 3.5 runner (3 follow-the-sun runs a day, 20 fixed coins) | Done |
 | 12 | Research | Phase 5 Naive Bayes (5.1 to 5.5), graded by the same outcome scorer | Next |
 | 13 | Research | Phase 9 freeze, run and analysis | |
-| - | Later | revisit the chat model order once the agent is stable (free Gemini first, Haiku as the fallback; DeepSeek as a fallback if the experiment shows it is good), 1.6, 1.7 `lesson share`, 2.4 GDELT, 2.4 scheduled world-news watcher (Lambda or instance timer that flags major events), 2.5 whale proxy, 2.6 `--save`, 2.7 CMC pass-through, 5.6, Phases 4, 6, 7 and 8, `openclaw/configure.sh` (before the next rebuild) | |
+| - | Later | revisit the chat model order once the agent is stable (free Gemini first, Haiku as the fallback; DeepSeek as a fallback if the experiment shows it is good), 1.6, 1.7 `lesson share`, 2.4 GDELT, 2.5 whale proxy, 2.6 `--save`, 2.7 CMC pass-through, 5.6, Phases 4, 6, 7 and 8, `openclaw/configure.sh` (before the next rebuild) | |
 
 ---
 
@@ -310,6 +310,7 @@ Why (agent runs of 16 and 17 Oct): the agent fetched raw data and eyeballed it. 
 - [x] Coin names from CMC: headlines were matched by ticker and by the names in `config.COIN_NAMES` (20 coins), so other coins by ticker alone (19 Oct: two "Zcash" headlines were missed for ZEC). Names now come from CMC's top 100 listing, cached for a day (1 credit a day), with `COIN_NAMES` only for extra aliases.
 - [ ] GDELT market-wide tone (P1, can come later).
 - [x] Sentiment is judged by the LLM, not by code.
+- [x] Major-news alert (moved up from Later 30 Oct, after an exchange hack moved the market and the agent heard of it only when told): `sentinel news alert`, an OpenClaw command automation every 30 minutes with no model call, flags RSS headlines of the last 2 h that name a market-moving event (hack or exploit, frozen or halted withdrawals, insolvency, delisting or ban, rate decision, depeg), up to 3 headlines per alert with their sources (and "+N more"), then 3 quiet hours that skip the follow-ups; each headline once; a quiet run sends nothing.
 
 ### 2.5 Flow and whales (`sentinel/data/flow.py`, `whales.py`) [Core: funding and open interest; whale proxy Later]
 - [x] Funding rate, open interest and its 7-day change, long/short account ratio from OKX public endpoints (verified in the OKX API docs; access from `us-east-1` is checked with 2.1's live check).
