@@ -38,9 +38,11 @@ def test_no_feeds_configured(apis, monkeypatch):
     assert news_rss.recent(NOW) == news_rss.Feeds([], [])
 
 
-def test_news_alert_names_each_major_headline_once(monkeypatch):
+def test_news_alert_one_line_per_event_then_quiet(monkeypatch):
+    clock = {"now": NOW}
+
     def item(title, minutes_ago, url):
-        published = NOW - timedelta(minutes=minutes_ago)
+        published = clock["now"] - timedelta(minutes=minutes_ago)
         return news_rss.Item(Headline(title=title, source="CoinDesk", url=url), published)
 
     feeds = news_rss.Feeds(
@@ -53,16 +55,25 @@ def test_news_alert_names_each_major_headline_once(monkeypatch):
         [],
     )
     monkeypatch.setattr(news_rss, "recent", lambda now: feeds)
-    monkeypatch.setattr(alerts_news, "_now", lambda: NOW)
+    monkeypatch.setattr(alerts_news, "_now", lambda: clock["now"])
     run = CliRunner()
-    first = run.invoke(cli, ["news", "alert", "--format", "telegram"]).output
-    assert first.splitlines() == [
-        "⚠️ Binance hacked: $2.5B drained from a hot wallet (CoinDesk)",
-        "⚠️ Exchange halts withdrawals after the breach (CoinDesk)",
+
+    def alert():
+        return run.invoke(cli, ["news", "alert", "--format", "telegram"]).stdout
+
+    assert alert().splitlines() == [
+        "⚠️ Binance hacked: $2.5B drained from a hot wallet (CoinDesk) (+1 more on this)",
         "Ask your AI agent what it means for your coins.",
     ]
-    # The next run sends nothing new; a news outage stays silent too.
-    assert run.invoke(cli, ["news", "alert", "--format", "telegram"]).output == "NO_REPLY\n"
+    assert alert() == "NO_REPLY\n"  # nothing new
+    # A follow-up an hour later falls in the quiet period: skipped, not saved for later.
+    clock["now"] = NOW + timedelta(hours=1)
+    feeds.items.insert(0, item("Hacker's haul tops a corporate treasury", 5, "https://a/haul"))
+    assert alert() == "NO_REPLY\n"
+    # After the quiet period a new event alerts again; the skipped one does not come back.
+    clock["now"] = NOW + timedelta(hours=4)
+    feeds.items.insert(0, item("Fed cuts rates by 50 bps", 5, "https://a/fed"))
+    assert alert().splitlines()[0] == "⚠️ Fed cuts rates by 50 bps (CoinDesk)"
 
     def down(now):
         raise SourceError("RSS: every feed failed")
