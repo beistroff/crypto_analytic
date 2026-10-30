@@ -113,6 +113,11 @@ Short notes per merged PR, newest last: what changed, why, and one number. Detai
 - Why: the agent gave conditional signals that read as information: no target, no time frame, no chance, and a stop that meant taking an 11 % loss with no plan.
 - Number: one reply format replaces the old trigger line and its example; about 6 lines more in `AGENTS.md`.
 
+## #32 Naive Bayes model (27 Oct)
+- Step 12a (plan 5.1 to 5.3): `sentinel nb build-dataset` stores three years of daily features and next-day returns for the 20 experiment coins (OKX candles paged past 300, Kraken where its history is longer) as gzipped CSV in S3; `sentinel nb train` runs a monthly walk-forward (every earlier day to train, the next month to test) and stores the model on every day with its bucket edges and the report. The download lives in `sentinel/models/`; `sentinel/data/` is unchanged.
+- Why: Naive Bayes is the cheap second opinion for the gate (12b). Decided 27 Oct: label "next day up" (above 0 %, like the scorer's BUY hit), plain Python with no numpy or pyarrow on the 2 GB instance, scikit-learn only in the tests as the reference. Decided 30 Oct after tests of 19 features (local, not in the repo): weekday, ATR % and the 7-day return against BTC; BTC's trend, Fear & Greed, RSI, SMA50 and volume did not beat the base rate, and the first 7 features scored below it.
+- Number: 20,475 rows in 32 s; walk-forward over 25 months, 14,270 test rows, 48.5 % up days: accuracy 0.528 for NB against 0.495 for the base rate (the first 7 features: 0.508 against 0.508), Brier 0.2508 against 0.2502. A small edge in direction, none in calibrated probability, which bounds what the gate can add.
+
 ## #33 Live result in the portfolio (28 Oct)
 - `sentinel portfolio summary` adds each position's live exchange price and open result (USDT and %), plus the total; a price that cannot be read leaves only that position without it. The `trade-journal` skill logs a buy that came from a trade card as a test call too, and points a position 5 % or more below its average to the repair plan.
 - Why: the summary showed the average cost but not how a trade was doing, so the repair-plan rule had no number to start from, and the trades actually made were never graded.
