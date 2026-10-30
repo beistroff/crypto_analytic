@@ -48,8 +48,10 @@ def test_news_alert_one_line_per_event_then_quiet(monkeypatch):
     feeds = news_rss.Feeds(
         [
             item("Binance hacked: $2.5B drained from a hot wallet", 20, "https://a/hack"),
-            item("Exchange halts withdrawals after the breach", 40, "https://a/halt"),
+            item("Tether freezes $1B linked to the hack", 25, "https://a/freeze"),
             item("Bitcoin ETF inflows rise for a third day", 30, "https://a/etf"),
+            item("Exchange halts withdrawals after the breach", 40, "https://a/halt"),
+            item("Users report unauthorized withdrawals", 50, "https://a/users"),
             item("Protocol exploit drains $40M", 180, "https://a/old"),  # before the lookback
         ],
         [],
@@ -62,7 +64,10 @@ def test_news_alert_one_line_per_event_then_quiet(monkeypatch):
         return run.invoke(cli, ["news", "alert", "--format", "telegram"]).stdout
 
     assert alert().splitlines() == [
-        "⚠️ Binance hacked: $2.5B drained from a hot wallet (CoinDesk) (+1 more on this)",
+        "⚠️ Binance hacked: $2.5B drained from a hot wallet (CoinDesk)",
+        "⚠️ Tether freezes $1B linked to the hack (CoinDesk)",
+        "⚠️ Exchange halts withdrawals after the breach (CoinDesk)",
+        "+1 more on this",
         "Ask your AI agent what it means for your coins.",
     ]
     assert alert() == "NO_REPLY\n"  # nothing new

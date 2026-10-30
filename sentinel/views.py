@@ -313,15 +313,14 @@ def watch_checked(result: alerts_watch.CheckResult) -> View:
 
 
 def news_alerted(result: alerts_news.AlertResult) -> View:
-    """Like ``watch_checked``: one line for the newest major headline, or ``NO_REPLY``."""
+    """Like ``watch_checked``: a line per alerted headline, or ``NO_REPLY``."""
     data = asdict(result)
-    h = result.headline
-    if h is None:
+    if not result.headlines:
         return View(data, NO_REPLY)
-    line = f"⚠️ {_short(h.title, 140)} ({h.source})"
+    lines = [f"⚠️ {_short(h.title, 140)} ({h.source})" for h in result.headlines]
     if result.more:
-        line += f" (+{result.more} more on this)"
-    return View(data, f"{line}\nAsk your AI agent what it means for your coins.")
+        lines.append(f"+{result.more} more on this")
+    return View(data, "\n".join([*lines, "Ask your AI agent what it means for your coins."]))
 
 
 def _prediction(pred: Prediction) -> dict[str, Any]:

@@ -6,12 +6,12 @@ old) and keeps the new headlines of the last ``LOOKBACK`` that name a market-mov
 (an exchange hack or exploit, frozen or halted withdrawals, an insolvency, a delisting or
 a ban, a rate decision, a stablecoin losing its peg).
 
-One alert is one line: the newest such headline with its source, and how many more there
-are. After an alert, ``QUIET`` passes before the next one: outlets keep posting follow-ups
-on a big event, and those are skipped, not saved for later. Every headline found is
-remembered for two days in ``news_alerts.json`` in the cache folder, so none is alerted
-twice. A quiet run, and a run where every feed fails (a news outage is not news), prints
-``NO_REPLY`` and delivers nothing.
+One alert shows up to ``SHOWN`` of the newest such headlines, each with its source, and
+how many more there are. After an alert, ``QUIET`` passes before the next one: outlets
+keep posting follow-ups on a big event, and those are skipped, not saved for later.
+Every headline found is remembered for two days in ``news_alerts.json`` in the cache
+folder, so none is alerted twice. A quiet run, and a run where every feed fails (a news
+outage is not news), prints ``NO_REPLY`` and delivers nothing.
 """
 
 from __future__ import annotations
@@ -30,6 +30,7 @@ from sentinel.data.newsapi import Headline
 LOOKBACK = timedelta(hours=2)  # a few missed runs, and feeds that post late
 QUIET = timedelta(hours=3)
 KEEP = timedelta(days=2)
+SHOWN = 3
 EVENT = re.compile(
     r"\b(hack(s|ed|er|ers)?|exploit(s|ed)?|drain(s|ed)?|breach(es|ed)?|stolen"
     r"|insolven\w*|bankrupt\w*|delist\w*|bans?|banned|unauthori[sz]ed|freez\w*|froze|frozen"
@@ -44,8 +45,8 @@ log = logging.getLogger(__name__)
 
 @dataclass
 class AlertResult:
-    headline: Headline | None = None  # the one alerted, newest first
-    more: int = 0  # further new major headlines in the same run
+    headlines: list[Headline] = field(default_factory=list)  # alerted, newest first
+    more: int = 0  # further new major headlines in the same run, not shown
     skipped: int = 0  # new major headlines inside the quiet period
     missing: list[str] = field(default_factory=list)  # feeds that could not be read
 
@@ -80,7 +81,8 @@ def check() -> AlertResult:
     if last_alert is not None and now - last_alert < QUIET:
         result.skipped = len(found)
     else:
-        result.headline, result.more, last_alert = found[0], len(found) - 1, now
+        result.headlines, result.more = found[:SHOWN], max(len(found) - SHOWN, 0)
+        last_alert = now
     _save(last_alert, seen)
     return result
 
