@@ -117,3 +117,8 @@ Short notes per merged PR, newest last: what changed, why, and one number. Detai
 - `sentinel portfolio summary` adds each position's live exchange price and open result (USDT and %), plus the total; a price that cannot be read leaves only that position without it. The `trade-journal` skill logs a buy that came from a trade card as a test call too, and points a position 5 % or more below its average to the repair plan.
 - Why: the summary showed the average cost but not how a trade was doing, so the repair-plan rule had no number to start from, and the trades actually made were never graded.
 - Number: one cached exchange call per open position; 155 tests pass.
+
+## #35 Major-news alert (30 Oct)
+- `sentinel news alert` (an OpenClaw command automation every 30 minutes, no model call) reads the free crypto news feeds and sends a short Telegram alert for a market-moving headline of the last 2 h: an exchange hack or exploit, frozen or halted withdrawals, an insolvency, a delisting or ban, a rate decision, a depeg. Each link once (kept two days in the cache folder), at most 3 per run; quiet runs and feed outages send nothing.
+- Why: a major exchange hack moved the market overnight and the agent only learned of it when told; it acts only when written to and had no news watch.
+- Number: 0 model tokens; 4 feed reads per run; 156 tests pass.
