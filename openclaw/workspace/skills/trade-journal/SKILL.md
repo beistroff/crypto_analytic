@@ -23,7 +23,7 @@ sentinel trade add --side buy --symbol XRP --qty 100 --price 1.20 --format teleg
 BUY 100 XRP at $1.20. Now 100 at avg $1.20.
 ```
 
-If the buy came from your trade card, also log the card as a test call (the `test-trade-scenario` skill: entry the buy price, the card's target and stop, 24 h unless the card says otherwise), so the trades your human makes get graded too.
+If the buy came from your trade card, also log the card as a test call (the `test-trade-scenario` skill: entry the buy price, the card's target, its add level as the grading stop, 24 h unless the card says otherwise), so the trades your human makes get graded too.
 
 A sell also prints the profit it realised:
 
