@@ -347,7 +347,7 @@ def nb() -> None:
 
 
 @nb.command("build-dataset")
-@click.option("--days", type=click.IntRange(400, 1500), default=730)
+@click.option("--days", type=click.IntRange(400, 1500), default=1095)
 @FORMAT
 @_source_errors
 def nb_build_dataset(days: int, fmt: str) -> None:
@@ -360,7 +360,7 @@ def nb_build_dataset(days: int, fmt: str) -> None:
 @FORMAT
 @_source_errors
 def nb_train(key: str | None, fmt: str) -> None:
-    """Walk-forward report, then the model on the last 12 months, stored in S3."""
+    """Walk-forward report, then the model on every day of the dataset, stored in S3."""
     _emit(views.model_trained(train.train(key)), fmt)
 
 

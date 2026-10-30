@@ -1,8 +1,10 @@
 """Training and walk-forward validation (plan 5.3): ``sentinel nb train``.
 
-Walk-forward: train on the ``TRAIN_DAYS`` before a test month of ``TEST_DAYS``, predict
-that month, move on by a month; the scores pool every test month's rows. Three
-predictions of P(up) are compared:
+Walk-forward: train on every day before a test month of ``TEST_DAYS``, predict that
+month, move on by a month; the first test month comes after ``MIN_TRAIN_DAYS``. Every
+past day, not only the last year, so the model has seen rallies, dumps and quiet months
+(decided 30 Oct: better than a 365-day window in the tests). The scores pool every test
+month's rows. Three predictions of P(up) are compared:
 
 - ``nb``: Naive Bayes on the bucketed features;
 - ``logreg``: logistic regression on the same buckets (one-hot, L2 penalty 1, Newton
@@ -10,8 +12,8 @@ predictions of P(up) are compared:
 - ``base``: the training window's share of up days, the same for every row.
 
 Scores: accuracy (up when P(up) > 0.5), Brier score and log-loss (lower is better).
-The exported model is Naive Bayes on the last ``TRAIN_DAYS`` of the dataset, as in every
-walk-forward fold. It is stored with its bucket edges and the report in the backup bucket
+The exported model is Naive Bayes on the whole dataset, as the walk-forward's last fold
+would be. It is stored with its bucket edges and the report in the backup bucket
 as ``models/nb/<last day>.json``, and ``models/nb/latest.json`` names it.
 """
 
@@ -31,7 +33,7 @@ from sentinel.models import features, history
 from sentinel.models import naive_bayes as nb
 from sentinel.models.naive_bayes import Row
 
-TRAIN_DAYS = 365
+MIN_TRAIN_DAYS = 365
 TEST_DAYS = 30
 PREFIX = "models/nb/"
 LATEST = f"{PREFIX}latest.json"
@@ -51,7 +53,7 @@ class Trained:
 
 
 def train(dataset_key: str | None = None) -> Trained:
-    """Validate, fit on the last ``TRAIN_DAYS`` and store the model; returns its key."""
+    """Validate, fit on every row and store the model; returns its key."""
     dataset_key, rows = history.load(dataset_key)
     examples = sorted(
         (
@@ -63,13 +65,12 @@ def train(dataset_key: str | None = None) -> Trained:
     )
     report = walk_forward(examples)
     last = examples[-1][0]
-    recent = [e for e in examples if e[0] > last - timedelta(days=TRAIN_DAYS)]
-    model = nb.fit([e[1] for e in recent], [e[2] for e in recent], CATEGORIES)
+    model = nb.fit([e[1] for e in examples], [e[2] for e in examples], CATEGORIES)
     trained = Trained(
         key=f"{PREFIX}{last}.json",
         dataset=dataset_key,
         trained_until=f"{last}",
-        train_rows=len(recent),
+        train_rows=len(examples),
         report=report,
     )
     document = {
@@ -97,10 +98,10 @@ def walk_forward(examples: Sequence[Example]) -> dict[str, object]:
     predicted: dict[str, list[float]] = {"nb": [], "logreg": [], "base": []}
     actual: list[int] = []
     folds = 0
-    start = examples[0][0] + timedelta(days=TRAIN_DAYS)
+    start = examples[0][0] + timedelta(days=MIN_TRAIN_DAYS)
     while start <= examples[-1][0]:
         end = start + timedelta(days=TEST_DAYS)
-        train = [e for e in examples if start - timedelta(days=TRAIN_DAYS) <= e[0] < start]
+        train = [e for e in examples if e[0] < start]
         test = [e for e in examples if start <= e[0] < end]
         start = end
         if not train or not test:
@@ -117,7 +118,7 @@ def walk_forward(examples: Sequence[Example]) -> dict[str, object]:
         actual.extend(e[2] for e in test)
         folds += 1
     if not folds:
-        raise SourceError(f"the dataset spans less than {TRAIN_DAYS + 1} days")
+        raise SourceError(f"the dataset spans less than {MIN_TRAIN_DAYS + 1} days")
     return {
         "folds": folds,
         "test_rows": len(actual),

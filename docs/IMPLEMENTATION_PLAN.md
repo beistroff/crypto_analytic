@@ -453,16 +453,16 @@ Reply "details a3f" for the full analysis
 ## Phase 5: Naive Bayes model and gate [Research; 5.6 Later]
 
 ### 5.1 Historical dataset
-- [x] `sentinel nb build-dataset --days 730`: daily candles for the experiment coins (BTC among them) from the exchange, full Fear & Greed history (alternative.me supports `?limit=0`). BTC dominance history is dropped (CMC history needs a paid plan) unless a free source turns up. Save gzipped CSV to S3 `datasets/` (decided 27 Oct: no Parquet, pyarrow is heavy on the instance).
+- [x] `sentinel nb build-dataset --days 1095`: daily candles for the experiment coins (BTC among them) from the exchange. Save gzipped CSV to S3 `datasets/` (decided 27 Oct: no Parquet, pyarrow is heavy on the instance).
 
 ### 5.2 Features and label (`sentinel/models/features.py`)
 - [x] Label: 1 if the next 24 h return is above 0 % (decided 27 Oct, like the scorer's BUY hit), else 0.
-- [x] Bucketed features: BTC 24 h direction (down below -1%, flat, up above +1%), BTC above or below SMA50, coin RSI band (below 30, 30 to 70, above 70), coin above or below SMA50, Fear & Greed band (0-24, 25-44, 45-55, 56-75, 76-100), weekend flag, volume z-score band.
+- [x] Bucketed features (decided 30 Oct after tests on 3 years of data): weekday of the day asked about, coin ATR in % of price (below 5, 5 to 7, above 7), coin 7-day return minus BTC's (below -3, -3 to +1, above +1 points). BTC's trend, Fear & Greed, RSI, SMA50 and volume did not beat the base rate.
 - [x] Only features that exist in history (no news), so training and live use match.
 
 ### 5.3 Training (`sentinel/models/naive_bayes.py`, `train.py`)
 - [x] Categorical Naive Bayes in plain Python (no numpy, decided 27 Oct) with Laplace smoothing (about 80 lines; easy to explain and audit). A test checks parity with scikit-learn's `CategoricalNB`.
-- [x] Walk-forward validation: train on 12 months, test on the next month, roll forward. Report accuracy, Brier score and log-loss against the base rate and a logistic regression.
+- [x] Walk-forward validation: train on every earlier day (at least 12 months; decided 30 Oct, so every market phase is seen), test on the next month, roll forward. Report accuracy, Brier score and log-loss against the base rate and a logistic regression.
 - [x] Export `models/nb/<version>.json` (priors, likelihood tables, bucket edges, `trained_until`) to S3 and keep a `latest.json` pointer.
 
 ### 5.4 Inference and gate (`sentinel/predict/gate.py`)

@@ -2,10 +2,9 @@
 
 One row per experiment coin (``experiment.yaml``) and finished UTC day over the last
 ``days`` days: the raw features of ``features.raw`` and the next day's return in percent.
-Market data only (candles and Fear & Greed), no trades or journal items. Daily candles come
-from the live ``exchange.history`` (OKX 300 or Kraken 720 days), paged back on OKX here
-when that is too short; Fear & Greed's full history from alternative.me. BTC dominance is
-left out: its history needs a paid CMC plan.
+Market data only (daily candles), no trades or journal items. Candles come from the live
+``exchange.history`` (OKX 300 or Kraken 720 days), paged back on OKX here when that is
+too short.
 
 Rows hold raw numbers, not buckets, so the edges can change without a rebuild. They are
 stored as gzipped CSV in the backup bucket under ``datasets/nb/<last day>.csv.gz``.
@@ -18,14 +17,14 @@ import gzip
 import io
 from collections import Counter
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import requests
 
 from sentinel import aws, net
 from sentinel.config import get_settings
-from sentinel.data import SourceError, exchange, feargreed
+from sentinel.data import SourceError, exchange
 from sentinel.data.exchange import Candle
 from sentinel.models import features
 from sentinel.predict import runner
@@ -48,7 +47,6 @@ def build(days: int) -> Built:
     """Fetch the history, compute the rows and store them; the key is in the result."""
     limit = days + features.WINDOW + 1  # and the open candle, dropped
     btc = _finished("BTC", limit)
-    fng = _fear_greed()
     rows: list[dict[str, float | str]] = []
     missing = []
     for symbol in runner.load().coins:
@@ -57,7 +55,7 @@ def build(days: int) -> Built:
         except (SourceError, requests.RequestException):
             missing.append(symbol)
             continue
-        rows.extend(coin_rows(symbol, coin, btc, fng, days))
+        rows.extend(coin_rows(symbol, coin, btc, days))
     if not rows:
         raise SourceError("no dataset rows")
     dates = [str(r["date"]) for r in rows]
@@ -73,7 +71,7 @@ def build(days: int) -> Built:
 
 
 def coin_rows(
-    symbol: str, coin: list[Candle], btc: list[Candle], fng: dict[date, int], days: int
+    symbol: str, coin: list[Candle], btc: list[Candle], days: int
 ) -> list[dict[str, float | str]]:
     """One row per day of the last ``days`` that has a full window and a next day."""
     btc_at = {c.ts: i for i, c in enumerate(btc)}
@@ -85,7 +83,7 @@ def coin_rows(
         if day.ts < first or j is None or after.ts - day.ts != timedelta(days=1):
             continue
         window = coin[i - features.WINDOW + 1 : i + 1]
-        values = features.raw(window, btc[: j + 1], fng.get(day.ts.date()))
+        values = features.raw(window, btc[: j + 1])
         if values is not None:
             ret_next = pct(after.close, day.close)
             rows.append(
@@ -145,17 +143,6 @@ def _okx_days(symbol: str, limit: int) -> list[Candle]:
         o, h, low, c = map(float, r[1:5])
         candles.append(Candle(ts, o, h, low, c, float(r[7]), closed=ts + timedelta(days=1) <= now))
     return candles
-
-
-def _fear_greed() -> dict[date, int]:
-    """Every day's value since February 2018, by UTC day."""
-    response = net.session("feargreed").get(feargreed.URL, params={"limit": 0})  # 0: all
-    if response.status_code != 200:
-        raise SourceError(f"Fear & Greed: HTTP {response.status_code}")
-    return {
-        datetime.fromtimestamp(int(e["timestamp"]), UTC).date(): int(e["value"])
-        for e in response.json()["data"]
-    }
 
 
 def _put(key: str, rows: list[dict[str, float | str]]) -> None:
