@@ -1,13 +1,16 @@
 import json
 from datetime import UTC, datetime
+from decimal import Decimal
 from types import SimpleNamespace
 
 import httpx
 import pytest
 
 from sentinel import views
+from sentinel.data import SourceError
 from sentinel.llm import LLMError, Usage, anthropic_, gemini
-from sentinel.predict import runner
+from sentinel.models.check import Check
+from sentinel.predict import gate, runner
 from sentinel.predict.validator import PredictionOut
 from sentinel.store.sim import PredictionRepo
 
@@ -96,6 +99,69 @@ def test_run_calls_every_arm_once_per_slot(trending, tables, tmp_path, monkeypat
     assert calls == [] and views.experiment_ran(ended).text == (
         "Run 2026-10-17 08: experiment ended 2026-10-17"
     )
+
+
+def test_gate_fires_only_when_nb_contradicts_a_confident_call():
+    buy = PredictionOut(**CALL)  # confidence 0.6
+    sell = PredictionOut(
+        **{**CALL, "action": "SELL", "direction": "DOWN", "target": 97, "stop": 102}
+    )
+    assert gate.triggered(buy, 0.45) and not gate.triggered(buy, 0.46)
+    assert gate.triggered(sell, 0.55) and not gate.triggered(sell, 0.54)
+    assert not gate.triggered(PredictionOut(**{**CALL, "confidence": 0.59}), 0.3)
+    assert not gate.triggered(PredictionOut(**{**CALL, "action": "HOLD"}), 0.3)
+
+
+GATED = """
+horizon_h: 24
+coins: [XRP, SOL]
+arms:
+  - {name: A, provider: gemini, model: flash-lite, prompt: structured}
+  - {name: AG, provider: gemini, model: flash-lite, prompt: structured, gate: A}
+"""
+
+
+def test_gated_arm_rechecks_only_when_nb_disagrees(trending, tables, tmp_path, monkeypatch):
+    path = tmp_path / "experiment.yaml"
+    path.write_text(GATED, encoding="utf-8")
+    users = []
+
+    def fake(model, system, user, schema, tries):
+        users.append(user)
+        held = {"action": "HOLD", "direction": "FLAT", "target": None, "stop": None}
+        answer = {**CALL, **(held if "second opinion" in user else {})}
+        return schema(**answer), Usage(model, 1000, 200, 900, 0.0)
+
+    p_up = {"XRP": 0.40}  # no model answer for SOL in the first run
+
+    def nb(symbol):
+        if symbol not in p_up:
+            raise SourceError("no model yet")
+        return Check(symbol, "2026-10-16", p_up[symbol], [("weekday", "sat", 1.1)], "models/nb/x")
+
+    monkeypatch.setattr(runner, "CALLERS", {"gemini": fake})
+    monkeypatch.setattr(runner, "_now", lambda: NOW)
+    monkeypatch.setattr(runner.nb_check, "check", nb)
+
+    result = runner.run(path=path)
+    assert (result.stored, result.failed) == ({"A": 2, "AG": 1}, {"AG": ["SOL"]})
+    assert len(users) == 3  # A on XRP, XRP's re-check, A on SOL
+    assert "0.40" in users[1] and "weekday sat (x1.10)" in users[1]
+
+    p_up["SOL"] = 0.50
+    again = runner.run(path=path)  # SOL's A answer comes from the table: no new call
+    assert (again.stored, len(users)) == ({"AG": 1}, 3)
+
+    preds = {(p.symbol, p.arm): p for p in PredictionRepo().logged(["2026-10-17"])}
+    xrp, sol = preds["XRP", "AG"], preds["SOL", "AG"]
+    assert (xrp.action, xrp.gate_triggered, xrp.original_action, xrp.revised) == (
+        "HOLD",
+        True,
+        "BUY",
+        True,
+    )
+    assert xrp.nb_p_up == Decimal("0.4") and xrp.prompt_hash != preds["XRP", "A"].prompt_hash
+    assert (sol.action, sol.gate_triggered, sol.revised, sol.tokens_in) == ("BUY", False, False, 0)
 
 
 def test_clients_return_the_answer_with_tokens_and_cost(monkeypatch):

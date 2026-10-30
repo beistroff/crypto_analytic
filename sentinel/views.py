@@ -20,6 +20,7 @@ from sentinel.alerts import news as alerts_news
 from sentinel.alerts import watch as alerts_watch
 from sentinel.data import SourceError, cmc, exchange, feargreed, newsapi
 from sentinel.eval.rules import is_scalp_candidate, rules_signal
+from sentinel.models.check import Check
 from sentinel.models.history import Built
 from sentinel.models.train import Trained
 from sentinel.portfolio import service
@@ -520,6 +521,18 @@ def model_trained(trained: Trained) -> View:
             f"{name}: accuracy {s['accuracy']}, Brier {s['brier']}, log-loss {s['log_loss']}"
         )
     return View(asdict(trained), "\n".join(lines))
+
+
+def nb_checked(check: Check) -> View:
+    """NB's chance that the next day closes up, with the features behind it."""
+    data = {**asdict(check), "p_up": round(check.p_up, 4)}
+    data["top"] = [{"feature": f, "category": c, "ratio": round(r, 3)} for f, c, r in check.top]
+    because = ", ".join(f"{f} {c} x{r:.2f}" for f, c, r in check.top)
+    line = (
+        f"{check.symbol}: P(up the day after {check.day}) {check.p_up:.2f} "
+        f"(Naive Bayes, about 53 % right on direction); {because}"
+    )
+    return View(data, line)
 
 
 def _hit_rates(pairs: Iterable[tuple[str, bool]]) -> dict[str, dict[str, int]]:

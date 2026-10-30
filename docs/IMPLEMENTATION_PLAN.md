@@ -126,7 +126,7 @@ crypto_analytic/
       validator.py              # deterministic sanity checks
       gate.py                   # Naive Bayes gate
     models/
-      features.py  naive_bayes.py  history.py  train.py
+      features.py  naive_bayes.py  history.py  train.py  check.py
     store/
       base.py                   # shared DynamoDB helpers
       real.py  sim.py           # repositories for sentinel-real and sentinel-sim
@@ -467,14 +467,14 @@ Reply "details a3f" for the full analysis
 - [x] Export `models/nb/<version>.json` (priors, likelihood tables, bucket edges, `trained_until`) to S3 and keep a `latest.json` pointer.
 
 ### 5.4 Inference and gate (`sentinel/predict/gate.py`)
-- [ ] `sentinel nb check SYM` returns `p_up` and the top 3 features by likelihood ratio, in under 1 s, on EC2 (no Lambda call per prediction).
-- [ ] Gate rule (thresholds in config, frozen before the experiment): if the model says BUY with confidence 0.6 or more and `p_up <= 0.35`, or SELL with confidence 0.6 or more and `p_up >= 0.65`, send `gate_recheck.md` with the NB result. The model may keep or revise its answer and must say why.
-- [ ] Log `nb_p_up`, `gate_triggered`, `original_action`, `revised`.
-- [ ] The gate never overrides the model by itself.
+- [x] `sentinel nb check SYM` returns `p_up` and the top 3 features by likelihood ratio, in under 1 s, on EC2 (no Lambda call per prediction).
+- [x] Gate rule (thresholds in config, frozen before the experiment): if the model says BUY with confidence 0.6 or more and `p_up <= 0.45`, or SELL with confidence 0.6 or more and `p_up >= 0.55`, send `gate_recheck.md` with the NB result (decided 30 Oct: the model's `p_up` spans 0.41 to 0.58, so 0.35 and 0.65 never occur). The model may keep or revise its answer and must say why. Arm L1G re-checks L1's answers.
+- [x] Log `nb_p_up`, `gate_triggered`, `original_action`, `revised`.
+- [x] The gate never overrides the model by itself.
 - [ ] Optional skill `skills/nb-check/SKILL.md` for "how confident should I be?".
 
 ### 5.5 RQ3 analysis (`analysis/rq3_btc_leads.py`)
-- [ ] P(altcoin down over 24 h | BTC down more than 2%) against the base rate, chi-square test of independence, likelihood-ratio table per feature.
+- [x] P(altcoin down over 24 h | BTC down more than 2%) against the base rate, chi-square test of independence, likelihood-ratio table per feature. First result (30 Oct, 3 years): 90 % the same day against 50 %, 49 % the next day (p 0.15): BTC moves with the altcoins, it does not lead them by a day.
 
 ### 5.6 Weekly retrain Lambda (optional)
 - [ ] `nb_train_handler`, weekly via EventBridge Scheduler. Disabled during the December experiment so the model version stays fixed.
