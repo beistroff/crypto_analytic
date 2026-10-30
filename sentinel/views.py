@@ -19,7 +19,7 @@ import requests
 from sentinel.alerts import watch as alerts_watch
 from sentinel.data import SourceError, cmc, exchange, feargreed, newsapi
 from sentinel.eval.rules import is_scalp_candidate, rules_signal
-from sentinel.models.dataset import Built
+from sentinel.models.history import Built
 from sentinel.models.train import Trained
 from sentinel.portfolio import service
 from sentinel.predict.runner import RunResult

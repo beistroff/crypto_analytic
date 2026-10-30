@@ -2,6 +2,7 @@ import json
 import random
 from datetime import UTC, date, datetime, timedelta
 from types import SimpleNamespace
+from urllib.parse import parse_qs, urlsplit
 
 import boto3
 import pytest
@@ -11,7 +12,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.naive_bayes import CategoricalNB
 
 from sentinel.cli import cli
-from sentinel.models import dataset, train
+from sentinel.models import history, train
 from sentinel.models import naive_bayes as nb
 from sentinel.predict import runner
 
@@ -27,8 +28,8 @@ def _s3():
 def test_build_dataset_stores_a_row_per_coin_and_day(trending, monkeypatch):
     monkeypatch.setattr(runner, "load", lambda: SimpleNamespace(coins=["BTC", "SOL", "NOPE"]))
     midnights = [datetime(2024, 1, 1, tzinfo=UTC) + timedelta(days=i) for i in range(1100)]
-    history = [{"value": "50", "timestamp": f"{t.timestamp():.0f}"} for t in midnights]
-    trending.fng.routes["/fng/"] = (200, {}, {"data": history})
+    entries = [{"value": "50", "timestamp": f"{t.timestamp():.0f}"} for t in midnights]
+    trending.fng.routes["/fng/"] = (200, {}, {"data": entries})
     _s3()
 
     result = CliRunner().invoke(cli, ["nb", "build-dataset", "--days", "400"])
@@ -38,13 +39,32 @@ def test_build_dataset_stores_a_row_per_coin_and_day(trending, monkeypatch):
     # The trend's last candle (17 Oct) is open, so the 15th is the last day with a known next.
     assert out["key"] == "datasets/nb/2026-10-15.csv.gz"
     assert (out["rows"], out["missing"]) == ({"BTC": 400, "SOL": 400}, ["NOPE"])
-    key, rows = dataset.load()
+    key, rows = history.load()
     row = rows[-1]
     assert (key, row["date"], row["symbol"]) == (out["key"], "2026-10-15", "SOL")
     assert row["btc_ret"] == pytest.approx(0.1)
     assert row["rsi14"] == 100.0  # only gains
     assert (row["fng"], row["weekend"]) == (50.0, 0.0)  # 16 Oct 2026 is a Friday
     assert row["ret_next"] == pytest.approx(0.1)
+
+
+def test_okx_days_page_back_past_300(apis):
+    day_ms = 86_400_000
+    newest = 1792195200000  # 17 Oct 2026
+
+    def page(first, count):  # newest first, as OKX sends them
+        days = range(first, first + count)
+        rows = [
+            [str(newest - d * day_ms), "1", "2", "0.5", "1.5", "0", "0", "9", "1"] for d in days
+        ]
+        return (200, {}, {"code": "0", "data": rows})
+
+    apis.okx.replies.extend([page(0, 300), page(300, 5)])  # older candles run out
+    candles = history._okx_days("BTC", 310)
+    second = parse_qs(urlsplit(apis.okx.seen[1].path).query)
+    assert (second["limit"], second["after"]) == (["10"], [str(newest - 299 * day_ms)])
+    assert len(candles) == 305
+    assert candles[0].ts < candles[-1].ts
 
 
 def _row(day, symbol, oversold):
@@ -72,7 +92,7 @@ def test_train_reports_walk_forward_and_stores_the_model():
     ]
     with mock_aws():
         s3 = _s3()
-        dataset._put("datasets/nb/2026-03-26.csv.gz", rows)
+        history._put("datasets/nb/2026-03-26.csv.gz", rows)
 
         result = CliRunner().invoke(cli, ["nb", "train"])
 

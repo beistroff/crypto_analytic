@@ -27,7 +27,7 @@ from datetime import UTC, date, datetime, timedelta
 from sentinel import aws
 from sentinel.config import get_settings
 from sentinel.data import SourceError
-from sentinel.models import dataset, features
+from sentinel.models import features, history
 from sentinel.models import naive_bayes as nb
 from sentinel.models.naive_bayes import Row
 
@@ -52,7 +52,7 @@ class Trained:
 
 def train(dataset_key: str | None = None) -> Trained:
     """Validate, fit on the last ``TRAIN_DAYS`` and store the model; returns its key."""
-    dataset_key, rows = dataset.load(dataset_key)
+    dataset_key, rows = history.load(dataset_key)
     examples = sorted(
         (
             date.fromisoformat(str(r["date"])),

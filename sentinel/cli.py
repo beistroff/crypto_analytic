@@ -22,7 +22,7 @@ from sentinel.alerts import watch as alerts_watch
 from sentinel.alerts.watch import WatchError
 from sentinel.config import get_settings
 from sentinel.data import SourceError
-from sentinel.models import dataset, train
+from sentinel.models import history, train
 from sentinel.portfolio import service
 from sentinel.portfolio.service import JournalError
 from sentinel.predict import journal, runner, scorer
@@ -352,7 +352,7 @@ def nb() -> None:
 @_source_errors
 def nb_build_dataset(days: int, fmt: str) -> None:
     """Daily features and next-day returns of the experiment coins, stored in S3."""
-    _emit(views.dataset_built(dataset.build(days)), fmt)
+    _emit(views.dataset_built(history.build(days)), fmt)
 
 
 @nb.command("train")

@@ -126,7 +126,7 @@ crypto_analytic/
       validator.py              # deterministic sanity checks
       gate.py                   # Naive Bayes gate
     models/
-      features.py  naive_bayes.py  dataset.py  train.py
+      features.py  naive_bayes.py  history.py  train.py
     store/
       base.py                   # shared DynamoDB helpers
       real.py  sim.py           # repositories for sentinel-real and sentinel-sim
