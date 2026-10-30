@@ -117,3 +117,8 @@ Short notes per merged PR, newest last: what changed, why, and one number. Detai
 - `sentinel portfolio summary` adds each position's live exchange price and open result (USDT and %), plus the total; a price that cannot be read leaves only that position without it. The `trade-journal` skill logs a buy that came from a trade card as a test call too, and points a position 5 % or more below its average to the repair plan.
 - Why: the summary showed the average cost but not how a trade was doing, so the repair-plan rule had no number to start from, and the trades actually made were never graded.
 - Number: one cached exchange call per open position; 155 tests pass.
+
+## #34 Agent rules without stops (30 Oct)
+- `AGENTS.md`: the trading rules lose the stop machinery (setup stop, "stop in noise", stop watches, "the break ends the idea"). A trade card now gives the add level and how likely the good path is against the bad one; a held coin that is down gets a recovery plan (hold, add from cash at support, sell part on a bounce), and taking a loss is the human's call, raised only for an outside reason. News is checked before a buy call and whenever BTC or a held coin falls 3 % or more, a cause is given only when it is in the data, and a major event is reported at once. The skills keep a `stop` only to grade test calls.
+- Why: competing rules (a tight 4h setup stop, a daily "break", a repair plan) led the agent to advise selling three small positions at a loss, against the patient spot approach; it also explained a market drop with a cause that was not in its data and missed an exchange hack until told.
+- Number: 4 contradicting stop rules removed; `AGENTS.md` from 156 to 152 lines with the same tools.
