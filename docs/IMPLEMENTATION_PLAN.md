@@ -468,7 +468,7 @@ Reply "details a3f" for the full analysis
 
 ### 5.4 Inference and gate (`sentinel/predict/gate.py`)
 - [x] `sentinel nb check SYM` returns `p_up` and the top 3 features by likelihood ratio, in under 1 s, on EC2 (no Lambda call per prediction).
-- [x] Gate rule (thresholds in config, frozen before the experiment): if the model says BUY with confidence 0.6 or more and `p_up <= 0.45`, or SELL with confidence 0.6 or more and `p_up >= 0.55`, send `gate_recheck.md` with the NB result (decided 30 Oct: the model's `p_up` spans 0.41 to 0.58, so 0.35 and 0.65 never occur). The model may keep or revise its answer and must say why. Arm L1G re-checks L1's answers.
+- [x] Gate rule (thresholds in `gate.py`, frozen before the experiment): if the model says BUY with confidence 0.6 or more and `p_up <= 0.45`, or SELL with confidence 0.6 or more and `p_up >= 0.55`, send `gate_recheck.md` with the NB result (decided 30 Oct: the model's `p_up` spans 0.41 to 0.58, so 0.35 and 0.65 never occur). The model may keep or revise its answer and must say why. Arm L1G re-checks L1's answers.
 - [x] Log `nb_p_up`, `gate_triggered`, `original_action`, `revised`.
 - [x] The gate never overrides the model by itself.
 - [ ] Optional skill `skills/nb-check/SKILL.md` for "how confident should I be?".

@@ -49,11 +49,8 @@ def model() -> tuple[str, nb.Model]:
     }
     if stored != features.FEATURES:
         raise SourceError(f"{pointer['key']} has other features: run sentinel nb train")
-    likelihoods = {
-        feature: {category: tuple(p) for category, p in by_category.items()}
-        for feature, by_category in doc["likelihoods"].items()
-    }
-    return pointer["key"], nb.Model(priors=tuple(doc["priors"]), likelihoods=likelihoods)
+    # JSON lists, not tuples: the model only indexes and unpacks them.
+    return pointer["key"], nb.Model(priors=doc["priors"], likelihoods=doc["likelihoods"])
 
 
 def check(symbol: str) -> Check:
@@ -63,14 +60,10 @@ def check(symbol: str) -> Check:
     if values is None:
         raise SourceError(f"not {features.WINDOW} finished days for {symbol.upper()} and BTC")
     x = features.bucket(values)
-    ratios = [
-        (
-            feature,
-            category,
-            m.likelihoods[feature][category][1] / m.likelihoods[feature][category][0],
-        )
-        for feature, category in zip(m.likelihoods, x, strict=True)
-    ]
+    ratios = []
+    for feature, category in zip(m.likelihoods, x, strict=True):
+        down, up = m.likelihoods[feature][category]
+        ratios.append((feature, category, up / down))
     top = sorted(ratios, key=lambda r: abs(math.log(r[2])), reverse=True)[:3]
     return Check(symbol.upper(), f"{coin[-1].ts:%Y-%m-%d}", m.p_up(x), top, key)
 

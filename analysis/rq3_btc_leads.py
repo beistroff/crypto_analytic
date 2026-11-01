@@ -17,7 +17,6 @@ from datetime import timedelta
 
 from scipy.stats import chi2_contingency
 
-from sentinel.data import SourceError
 from sentinel.models import check, history
 from sentinel.predict import runner
 from sentinel.signals.indicators import pct
@@ -59,7 +58,4 @@ def likelihood_ratios() -> None:
 
 if __name__ == "__main__":
     btc_leads(int(sys.argv[1]) if len(sys.argv) > 1 else 1095)
-    try:
-        likelihood_ratios()
-    except SourceError as exc:
-        print(f"No likelihood ratios: {exc}")
+    likelihood_ratios()

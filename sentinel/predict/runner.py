@@ -133,25 +133,19 @@ def run(slot: str | None = None, path: Path = EXPERIMENT) -> RunResult:
             "btc_regime": snap.btc.regime if snap.btc else None,
             "btc_chg_24h": snap.btc.chg_24h if snap.btc else None,
         }
-        answers: dict[str, PredictionOut] = {}  # this coin's answers in this run, by arm
         for arm in todo:
             template = templates["gate_recheck" if arm.gate else arm.prompt]
+            user = (
+                template.replace("{symbol}", symbol)
+                .replace("{horizon_h}", str(experiment.horizon_h))
+                .replace("{snapshot}", data)
+            )
             gated: dict[str, Any] = {}
             try:
                 if arm.gate:
-                    stored = done.get((result.slot, symbol, arm.gate))
-                    source = answers.get(arm.gate) or (stored and _answer(stored))
-                    if source is None:
-                        raise SourceError(f"no {arm.gate} answer to re-check")
-                    out, usage, gated = _gated(
-                        arm, system, template, symbol, experiment.horizon_h, source, data, last_call
-                    )
+                    source = done.get((result.slot, symbol, arm.gate))
+                    out, usage, gated = _gated(arm, system, user, symbol, source, last_call)
                 else:
-                    user = (
-                        template.replace("{symbol}", symbol)
-                        .replace("{horizon_h}", str(experiment.horizon_h))
-                        .replace("{snapshot}", data)
-                    )
                     out, usage = _ask(arm, system, user, last_call)
                 if out.horizon_h != experiment.horizon_h:  # refused like bad JSON (plan 3.3)
                     raise LLMError(f"horizon {out.horizon_h} h, not {experiment.horizon_h} h")
@@ -161,7 +155,6 @@ def run(slot: str | None = None, path: Path = EXPERIMENT) -> RunResult:
                 )
                 result.failed.setdefault(arm.name, []).append(symbol)
                 continue
-            answers[arm.name] = out
             pred = journal.new(
                 symbol,
                 out,
@@ -182,6 +175,7 @@ def run(slot: str | None = None, path: Path = EXPERIMENT) -> RunResult:
                 **gated,
             )
             repo.add(pred)
+            done[result.slot, symbol, arm.name] = pred  # for a gated arm later in the list
             result.stored[arm.name] = result.stored.get(arm.name, 0) + 1
             result.invalid[arm.name] = result.invalid.get(arm.name, 0) + (not pred.valid)
             result.cost_usd += usage.cost_usd
@@ -201,33 +195,35 @@ def _ask(
 def _gated(
     arm: Arm,
     system: str,
-    template: str,
+    user: str,
     symbol: str,
-    horizon_h: int,
-    source: PredictionOut,
-    data: str,
+    source: Prediction | None,
     last_call: dict[str, float],
 ) -> tuple[PredictionOut, Usage, dict[str, Any]]:
-    """The source arm's call, re-asked when the gate fires, and the gate's fields. A call
-    the gate lets through costs nothing."""
+    """The source arm's stored call, re-asked when the gate fires, and the gate's fields. A
+    call the gate lets through costs nothing."""
+    if source is None:
+        raise SourceError(f"no {arm.gate} answer to re-check")
+    call = PredictionOut.model_validate(
+        {name: getattr(source, name) for name in PredictionOut.model_fields}
+    )
     nb = nb_check.check(symbol)
     fields: dict[str, Any] = {
         "nb_p_up": Decimal(f"{nb.p_up:.4f}"),
-        "original_action": source.action,
-        "gate_triggered": gate.triggered(source, nb.p_up),
+        "original_action": call.action,
+        "gate_triggered": gate.triggered(call, nb.p_up),
+        "revised": False,
     }
     if not fields["gate_triggered"]:
-        return source, Usage(arm.model, 0, 0, 0, 0.0), {**fields, "revised": False}
-    user = gate.recheck_prompt(template, symbol, horizon_h, source, nb, data)
-    out, usage = _ask(arm, system, user, last_call)
-    return out, usage, {**fields, "revised": out.action != source.action}
-
-
-def _answer(pred: Prediction) -> PredictionOut:
-    """A stored call as the model wrote it (for a gated arm on a re-run)."""
-    return PredictionOut.model_validate(
-        {name: getattr(pred, name) for name in PredictionOut.model_fields}
+        return call, Usage(arm.model, 0, 0, 0, 0.0), fields
+    because = ", ".join(f"{f} {c} (x{r:.2f})" for f, c, r in nb.top)
+    user = (
+        user.replace("{call}", call.model_dump_json())
+        .replace("{p_up}", f"{nb.p_up:.2f}")
+        .replace("{because}", because)
     )
+    out, usage = _ask(arm, system, user, last_call)
+    return out, usage, {**fields, "revised": out.action != call.action}
 
 
 def _coins(experiment: Experiment, arm: Arm, result: RunResult) -> set[str]:
