@@ -137,3 +137,8 @@ Short notes per merged PR, newest last: what changed, why, and one number. Detai
 - Step 12b (plan 5.4, 5.5): `sentinel nb check SYM` gives the stored model's P(next day up) with the three features behind it. Experiment arm L1G takes L1's answer and stores it again with that P(up); only a BUY or SELL with confidence 0.6 or more that NB contradicts (P(up) at most 0.45 for a BUY, at least 0.55 for a SELL) goes back to the model once with `gate_recheck.md`, which keeps or revises it and says why. Each L1G item logs `nb_p_up`, `gate_triggered`, `original_action` and `revised`. `analysis/rq3_btc_leads.py` answers RQ3.
 - Why: the gate is the research track's test of whether a cheap statistical second opinion improves a model's calls; the plan's 0.35 and 0.65 never occur with the slim model, whose P(up) spans 0.41 to 0.58 (decided 30 Oct).
 - Number: on the walk-forward rows the gate's band covers about 41 % of days, where NB is right about 52 %; RQ3: altcoins fall 90 % of the days BTC drops more than 2 % (50 % on all days), but only 49 % the day after (p 0.15).
+- Checked again 2 Nov: 19 candidate features one at a time, and every coin left out in turn. It used the same walk-forward, with the last 6 months held back for the final check. On those 6 months:
+  - no feature set beats today's three: weekday plus distance from the 30-day low scored 0.517, today's set 0.516, the base rate 0.512;
+  - no coin hurts the model.
+
+  Today's features and all 20 coins stay. Daily direction tops out near 52 %.
