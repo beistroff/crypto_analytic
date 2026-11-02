@@ -29,9 +29,9 @@ from datetime import UTC, date, datetime, timedelta
 from sentinel import aws
 from sentinel.config import get_settings
 from sentinel.data import SourceError
-from sentinel.models import features, history
-from sentinel.models import naive_bayes as nb
-from sentinel.models.naive_bayes import Row
+from sentinel.nb import features, history
+from sentinel.nb import naive_bayes as nb
+from sentinel.nb.naive_bayes import Row
 
 MIN_TRAIN_DAYS = 365
 TEST_DAYS = 30

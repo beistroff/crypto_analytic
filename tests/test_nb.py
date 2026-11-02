@@ -12,8 +12,8 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.naive_bayes import CategoricalNB
 
 from sentinel.cli import cli
-from sentinel.models import history, train
-from sentinel.models import naive_bayes as nb
+from sentinel.nb import history, train
+from sentinel.nb import naive_bayes as nb
 from sentinel.predict import runner
 
 BUCKET = "openclaw-files"

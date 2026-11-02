@@ -23,7 +23,7 @@ from sentinel.alerts import watch as alerts_watch
 from sentinel.alerts.watch import WatchError
 from sentinel.config import get_settings
 from sentinel.data import SourceError
-from sentinel.models import history, train
+from sentinel.nb import history, train
 from sentinel.portfolio import service
 from sentinel.portfolio.service import JournalError
 from sentinel.predict import journal, runner, scorer

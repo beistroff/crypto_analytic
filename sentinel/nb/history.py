@@ -26,7 +26,7 @@ from sentinel import aws, net
 from sentinel.config import get_settings
 from sentinel.data import SourceError, exchange
 from sentinel.data.exchange import Candle
-from sentinel.models import features
+from sentinel.nb import features
 from sentinel.predict import runner
 from sentinel.signals.indicators import pct
 
