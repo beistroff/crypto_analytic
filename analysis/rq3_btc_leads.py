@@ -17,7 +17,7 @@ from datetime import timedelta
 
 from scipy.stats import chi2_contingency
 
-from sentinel.models import check, history
+from sentinel.nb import check, history
 from sentinel.predict import runner
 from sentinel.signals.indicators import pct
 

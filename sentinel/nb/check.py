@@ -1,10 +1,10 @@
-"""Live Naive Bayes check (plan 5.4): ``sentinel nb check SYM`` and the gate's input.
+"""Ask the trained Naive Bayes model about one coin today (plan 5.4).
 
-The model is the one ``models/nb/latest.json`` names, read from the backup bucket once per
-process. Its stored features must be the code's (``features.FEATURES``): a model trained
-with other features or edges is refused until ``sentinel nb train`` runs again. The
-features come from the coin's and BTC's last ``WINDOW`` finished daily candles, exactly
-as in training, so ``p_up`` is the chance that tomorrow's close is above today's.
+Loads the model from S3 (``models/nb/latest.json``, once per process), computes the coin's
+three features from its last ``WINDOW`` finished days as in training, and returns
+P(tomorrow closes up) with the features that pushed it most. Used by ``sentinel nb check
+SYM`` and by the gate of arm L1G. A model trained with other features is refused until
+``sentinel nb train`` runs again.
 """
 
 from __future__ import annotations
@@ -18,9 +18,9 @@ from sentinel import aws
 from sentinel.config import get_settings
 from sentinel.data import SourceError, exchange
 from sentinel.data.exchange import Candle
-from sentinel.models import features
-from sentinel.models import naive_bayes as nb
-from sentinel.models.train import LATEST
+from sentinel.nb import features
+from sentinel.nb import naive_bayes as nb
+from sentinel.nb.train import LATEST
 
 
 @dataclass(frozen=True)

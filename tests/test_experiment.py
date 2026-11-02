@@ -9,7 +9,7 @@ import pytest
 from sentinel import views
 from sentinel.data import SourceError
 from sentinel.llm import LLMError, Usage, anthropic_, gemini
-from sentinel.models.check import Check
+from sentinel.nb.check import Check
 from sentinel.predict import gate, runner
 from sentinel.predict.validator import PredictionOut
 from sentinel.store.sim import PredictionRepo

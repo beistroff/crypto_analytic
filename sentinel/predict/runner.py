@@ -38,7 +38,7 @@ from pydantic import BaseModel
 
 from sentinel.data import SourceError
 from sentinel.llm import LLMError, Usage, anthropic_, gemini
-from sentinel.models import check as nb_check
+from sentinel.nb import check as nb_check
 from sentinel.predict import gate, journal
 from sentinel.predict.validator import Horizon, PredictionOut
 from sentinel.signals import snapshot
