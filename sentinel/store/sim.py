@@ -213,6 +213,12 @@ class Prediction:
     tokens_out: int | None = None
     cost_usd: Decimal | None = None
     latency_ms: int | None = None
+    # The Naive Bayes gate (gated arms only): NB's P(up), whether it asked for a re-check,
+    # the call before it and whether the action changed.
+    nb_p_up: Decimal | None = None
+    gate_triggered: bool | None = None
+    original_action: str | None = None
+    revised: bool | None = None
     status: str = "OPEN"  # OPEN or DONE
     checks: dict[str, Any] = field(default_factory=dict)
     target_hit_first: str | None = None  # target, stop or neither (BUY and SELL)

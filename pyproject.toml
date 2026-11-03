@@ -38,6 +38,8 @@ dev = [
     "ruff>=0.8",
     # Reference for the plain-Python Naive Bayes and logistic regression (tests/test_nb.py).
     "scikit-learn>=1.5",
+    # Statistical tests of the research scripts (analysis/).
+    "scipy>=1.13",
 ]
 
 [project.scripts]

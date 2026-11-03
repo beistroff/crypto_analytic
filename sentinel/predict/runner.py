@@ -13,6 +13,11 @@ and slot, so a re-run picks the same ones, and arms with the same ``sample`` sha
 (Gemini Flash and Sonnet are compared on the same coins). A re-run skips the calls already
 stored for the date, slot, coin and arm, so it only retries the calls that failed (each is
 logged and named in the result, and a later slot does not make it up).
+
+An arm with ``gate`` (L1G) makes no call of its own: it takes the named arm's answer for
+the coin and stores it again with Naive Bayes' P(up). Only when the gate fires does it ask
+its model to re-check the call (``gate_recheck.md``), and stores the answer it gets. It is
+listed after the arm it gates.
 """
 
 from __future__ import annotations
@@ -26,16 +31,18 @@ from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 import yaml
 from pydantic import BaseModel
 
+from sentinel.data import SourceError
 from sentinel.llm import LLMError, Usage, anthropic_, gemini
-from sentinel.predict import journal
+from sentinel.nb import check as nb_check
+from sentinel.predict import gate, journal
 from sentinel.predict.validator import Horizon, PredictionOut
 from sentinel.signals import snapshot
-from sentinel.store.sim import PredictionRepo, SnapshotRepo
+from sentinel.store.sim import Prediction, PredictionRepo, SnapshotRepo
 
 EXPERIMENT = Path(__file__).resolve().parents[2] / "experiment.yaml"
 PROMPTS = Path(__file__).resolve().parents[1] / "llm" / "prompts"
@@ -55,6 +62,7 @@ class Arm(BaseModel):
     sample: int | None = None  # coins per run; all of them when not set
     min_interval_s: float = 0.0  # between two calls to the same model
     attempts: int = 3  # tries per call; each counts against a free daily quota
+    gate: str | None = None  # the arm whose answer this one re-checks with Naive Bayes
 
 
 class Experiment(BaseModel):
@@ -101,10 +109,10 @@ def run(slot: str | None = None, path: Path = EXPERIMENT) -> RunResult:
     system = (PROMPTS / "system.md").read_text(encoding="utf-8")
     templates = {
         name: (PROMPTS / f"{name}.md").read_text(encoding="utf-8")
-        for name in ("freeform", "structured")
+        for name in ("freeform", "structured", "gate_recheck")
     }
     repo = PredictionRepo()
-    done = {(p.slot, p.symbol, p.arm) for p in repo.logged([result.date])}
+    done = {(p.slot, p.symbol, p.arm): p for p in repo.logged([result.date])}
     picks = {arm.name: _coins(experiment, arm, result) for arm in experiment.arms}
     last_call: dict[str, float] = {}  # by model
     for symbol in experiment.coins:
@@ -126,27 +134,27 @@ def run(slot: str | None = None, path: Path = EXPERIMENT) -> RunResult:
             "btc_chg_24h": snap.btc.chg_24h if snap.btc else None,
         }
         for arm in todo:
-            template = templates[arm.prompt]
+            template = templates["gate_recheck" if arm.gate else arm.prompt]
             user = (
                 template.replace("{symbol}", symbol)
                 .replace("{horizon_h}", str(experiment.horizon_h))
                 .replace("{snapshot}", data)
             )
-            _pace(arm, last_call)
+            gated: dict[str, Any] = {}
             try:
-                out, usage = CALLERS[arm.provider](
-                    arm.model, system, user, PredictionOut, arm.attempts
-                )
+                if arm.gate:
+                    source = done.get((result.slot, symbol, arm.gate))
+                    out, usage, gated = _gated(arm, system, user, symbol, source, last_call)
+                else:
+                    out, usage = _ask(arm, system, user, last_call)
                 if out.horizon_h != experiment.horizon_h:  # refused like bad JSON (plan 3.3)
                     raise LLMError(f"horizon {out.horizon_h} h, not {experiment.horizon_h} h")
-            except LLMError as exc:
+            except (LLMError, SourceError) as exc:
                 log.warning(
                     "no answer", extra={"arm": arm.name, "symbol": symbol, "error": str(exc)}
                 )
                 result.failed.setdefault(arm.name, []).append(symbol)
                 continue
-            finally:
-                last_call[arm.model] = time.monotonic()
             pred = journal.new(
                 symbol,
                 out,
@@ -164,12 +172,58 @@ def run(slot: str | None = None, path: Path = EXPERIMENT) -> RunResult:
                 tokens_out=usage.tokens_out,
                 cost_usd=Decimal(f"{usage.cost_usd:.6f}"),
                 latency_ms=usage.latency_ms,
+                **gated,
             )
             repo.add(pred)
+            done[result.slot, symbol, arm.name] = pred  # for a gated arm later in the list
             result.stored[arm.name] = result.stored.get(arm.name, 0) + 1
             result.invalid[arm.name] = result.invalid.get(arm.name, 0) + (not pred.valid)
             result.cost_usd += usage.cost_usd
     return result
+
+
+def _ask(
+    arm: Arm, system: str, user: str, last_call: dict[str, float]
+) -> tuple[PredictionOut, Usage]:
+    _pace(arm, last_call)
+    try:
+        return CALLERS[arm.provider](arm.model, system, user, PredictionOut, arm.attempts)
+    finally:
+        last_call[arm.model] = time.monotonic()
+
+
+def _gated(
+    arm: Arm,
+    system: str,
+    user: str,
+    symbol: str,
+    source: Prediction | None,
+    last_call: dict[str, float],
+) -> tuple[PredictionOut, Usage, dict[str, Any]]:
+    """The source arm's stored call, re-asked when the gate fires, and the gate's fields. A
+    call the gate lets through costs nothing."""
+    if source is None:
+        raise SourceError(f"no {arm.gate} answer to re-check")
+    call = PredictionOut.model_validate(
+        {name: getattr(source, name) for name in PredictionOut.model_fields}
+    )
+    nb = nb_check.check(symbol)
+    fields: dict[str, Any] = {
+        "nb_p_up": Decimal(f"{nb.p_up:.4f}"),
+        "original_action": call.action,
+        "gate_triggered": gate.triggered(call, nb.p_up),
+        "revised": False,
+    }
+    if not fields["gate_triggered"]:
+        return call, Usage(arm.model, 0, 0, 0, 0.0), fields
+    because = ", ".join(f"{f} {c} (x{r:.2f})" for f, c, r in nb.top)
+    user = (
+        user.replace("{call}", call.model_dump_json())
+        .replace("{p_up}", f"{nb.p_up:.2f}")
+        .replace("{because}", because)
+    )
+    out, usage = _ask(arm, system, user, last_call)
+    return out, usage, {**fields, "revised": out.action != call.action}
 
 
 def _coins(experiment: Experiment, arm: Arm, result: RunResult) -> set[str]:
