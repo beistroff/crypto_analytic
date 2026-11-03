@@ -66,8 +66,8 @@ The plan is split in three. **Core** makes the agent useful day to day: good mar
 | 9 | Core | 2.11 scan watchlist | Done |
 | 10 | Core | Minimal prediction journal, in two PRs (decided 24 Oct): 10a 3.3 validator and 3.4 log; 10b 3.6 outcome scorer, 3.7 export and review skill | Done |
 | 11 | Research | 3.1 clients, 3.2 prompts, 3.5 runner (3 follow-the-sun runs a day, 20 fixed coins) | Done |
-| 12 | Research | Phase 5 Naive Bayes (5.1 to 5.5), graded by the same outcome scorer | Next |
-| 13 | Research | Phase 9 freeze, run and analysis | |
+| 12 | Research | Phase 5 Naive Bayes (5.1 to 5.5), graded by the same outcome scorer | Done |
+| 13 | Research | Phase 9 freeze, run and analysis | Next |
 | - | Later | revisit the chat model order once the agent is stable (free Gemini first, Haiku as the fallback; DeepSeek as a fallback if the experiment shows it is good), 1.6, 1.7 `lesson share`, 2.4 GDELT, 2.5 whale proxy, 2.6 `--save`, 2.7 CMC pass-through, 5.6, Phases 4, 6, 7 and 8, `openclaw/configure.sh` (before the next rebuild) | |
 
 ---
