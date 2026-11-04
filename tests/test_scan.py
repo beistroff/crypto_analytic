@@ -96,6 +96,43 @@ def test_scan_one_row_per_coin_within_budget(top50):
     assert len(lines) == 5
 
 
+def test_brief_ranks_movers_and_puts_major_news_first(trending):
+    coins = [_listing("BTC", 2.5), _listing("USDT", 0.0), _listing("SOL", -4.0)]
+    coins += [_listing("WBTC", 2.5), _listing("ZEC", 12.6), _listing("XRP", -0.5)]
+    trending.cmc.routes[LISTINGS] = (200, {}, {"status": {"error_code": 0}, "data": coins})
+    items = "".join(
+        f"<item><title>{title}</title><link>https://example.com/{i}</link>"
+        "<pubDate>Sat, 17 Oct 2026 12:00:00 +0000</pubDate></item>"
+        for i, title in enumerate(["ETF inflows rise", "Exchange hacked for $40M"])
+    )
+    feed = f'<rss version="2.0"><channel><title>t</title>{items}</channel></rss>'
+    trending.rss.routes["/rss"] = (200, {}, feed.encode())
+
+    result = CliRunner().invoke(cli, ["market", "brief"])
+
+    assert result.exit_code == 0, result.output
+    data = json.loads(result.stdout)
+    assert trending.news.seen == []  # NewsAPI's quota is for chat
+    assert data["btc"]["btc"]["regime"] == "risk_on" and "levels" not in data["btc"]
+    assert [row[0] for row in data["coins"]] == ["ZEC", "BTC", "XRP", "SOL"]
+    assert data["coins"][0] == ["ZEC", "ZEC coin", 12.6, -3.4, 0.1]
+    assert data["headlines"][0] == {
+        "title": "Exchange hacked for $40M",
+        "source": "Cointelegraph",
+        "major": True,
+    }
+    levels = data["levels"]
+    assert [lv["price"] for lv in levels] == sorted(lv["price"] for lv in levels)
+    assert levels[0]["level"] == "SMA200" and levels[-1]["pct"] == 1.0  # the wick high
+    lines = CliRunner().invoke(cli, ["market", "brief", "--format", "telegram"]).stdout
+    assert lines.splitlines() == [
+        "BTC $80,000 risk_on (+2.5% 24h, +18.4% 7d)",
+        "Up: ZEC +12.6%, BTC +2.5%",
+        "Down: SOL -4.0%, XRP -0.5%",
+        "Major: Exchange hacked for $40M (Cointelegraph)",
+    ]
+
+
 def test_symbol_adds_coins_outside_the_listing(top50):
     body = {"status": {"error_code": 0}, "data": {"DOT": _listing("DOT")}}
     top50.cmc.routes[QUOTES] = (200, {}, body)

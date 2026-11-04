@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 from collections.abc import Iterable
 from dataclasses import asdict, dataclass
+from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
@@ -18,8 +19,8 @@ import requests
 
 from sentinel.alerts import news as alerts_news
 from sentinel.alerts import watch as alerts_watch
-from sentinel.data import SourceError, cmc, exchange, feargreed, newsapi
-from sentinel.eval.rules import is_scalp_candidate, rules_signal
+from sentinel.data import SourceError, cmc, exchange, feargreed, news_rss, newsapi
+from sentinel.eval.rules import STABLECOINS, is_scalp_candidate, rules_signal
 from sentinel.nb.check import Check
 from sentinel.nb.history import Built
 from sentinel.nb.train import Trained
@@ -27,13 +28,16 @@ from sentinel.portfolio import service
 from sentinel.predict.runner import RunResult
 from sentinel.predict.scorer import MIN_GAIN_PCT, ScoreResult
 from sentinel.signals import scan as signals_scan
+from sentinel.signals import schema
 from sentinel.signals import snapshot as signals_snapshot
+from sentinel.signals.indicators import pct
 from sentinel.signals.snapshot import rounded, sig
 from sentinel.store.sim import Prediction, Watch
 
 # Legacy whale_monitor.py: a 1 h pump above this many percent is worth an alert.
 WHALE_PUMP_1H_PCT = 1.5
 TELEGRAM_MAX_LINES = 5
+BRIEF_HEADLINES = 10
 NO_NEWS = "no relevant headlines"
 NO_REPLY = "NO_REPLY"  # OpenClaw's silent token: an automation run that prints it sends nothing
 
@@ -155,6 +159,82 @@ def scan(limit: int, wanted: list[str]) -> View:
         f"RSI over 70: {_some(hot)}; under 30: {_some(cold)}",
     ]
     return View(result.data(), _lines(lines))
+
+
+def brief(limit: int) -> View:
+    """The daily brief's facts in one call, for the agent to read and judge: BTC's snapshot,
+    the top coins by 24 h change, the crypto feeds' newest headlines (major events first,
+    flagged like the news alert's) and BTC's levels with their distance from the price."""
+    snap = signals_snapshot.build("BTC", popular_news=False)
+    data: dict[str, Any] = {
+        "btc": snap.model_dump(
+            mode="json",
+            exclude={"schema_version", "coin_news", "news_delayed_24h", "levels", "setup"},
+        ),
+        "levels": _brief_levels(snap),
+    }
+    coins = [
+        c
+        for c in cmc.listings(limit)
+        if not (c.is_stablecoin or c.symbol in STABLECOINS | signals_scan.WRAPPED)
+    ]
+    coins.sort(key=lambda c: c.change_24h, reverse=True)
+    # v_mc: 24 h volume over market cap; high with a flat price is where money is moving.
+    data["columns"] = ["sym", "name", "chg_24h", "chg_7d", "v_mc"]
+    data["coins"] = [
+        [c.symbol, c.name, rounded(c.change_24h), rounded(c.change_7d), round(c.vol_mc, 3)]
+        for c in coins
+    ]
+    major: list[newsapi.Headline] = []
+    try:
+        feeds = news_rss.recent(datetime.fromisoformat(snap.as_of))
+        items = [i.headline for i in feeds.items]  # newest first
+        major = [h for h in items if alerts_news.EVENT.search(h.title)]
+        shown = (major + [h for h in items if h not in major])[:BRIEF_HEADLINES]
+        data["headlines"] = [
+            {"title": h.title, "source": h.source, "major": h in major} for h in shown
+        ]
+    except SourceError:
+        data["headlines"] = None
+        data["btc"]["missing"].append("rss")
+    btc = snap.btc
+    up = [f"{c.symbol} {_pct(c.change_24h)}" for c in coins if c.change_24h > 0][:3]
+    down = [f"{c.symbol} {_pct(c.change_24h)}" for c in coins[::-1] if c.change_24h < 0][:3]
+    lines = [
+        f"BTC {_usd(btc.price)} {btc.regime} ({_pct_or(btc.chg_24h)} 24h, {_pct_or(btc.chg_7d)} 7d)"
+        if btc
+        else "BTC: no data",
+        "Up: " + (", ".join(up) or "none"),
+        "Down: " + (", ".join(down) or "none"),
+        f"Major: {_short(major[0].title)} ({major[0].source})" if major else "Major: none",
+    ]
+    return View(data, _lines(lines))
+
+
+def _brief_levels(snap: schema.Snapshot) -> list[dict[str, Any]]:
+    """BTC's range edges, averages and 4h trigger, lowest first, with the distance from the
+    price in %, so the agent can name a level that is not already the price."""
+    named: dict[str, float | None] = {}
+    for span, edges in (("7d", snap.levels.d7), ("30d", snap.levels.d30)) if snap.levels else ():
+        if edges:
+            named |= {
+                f"{span} wick low": edges.wick_low,
+                f"{span} close low": edges.close_low,
+                f"{span} close high": edges.close_high,
+                f"{span} wick high": edges.wick_high,
+            }
+    if snap.technicals:
+        tech = snap.technicals
+        named |= {"SMA20": tech.sma20, "SMA50": tech.sma50, "SMA200": tech.sma200}
+    if snap.setup:
+        named["4h trigger"] = snap.setup.trigger
+    if snap.price is None:
+        return []
+    found = sorted((value, name) for name, value in named.items() if value is not None)
+    return [
+        {"level": name, "price": sig(value), "pct": rounded(pct(value, snap.price))}
+        for value, name in found
+    ]
 
 
 TIMEFRAME_WORDS = {

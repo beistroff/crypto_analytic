@@ -165,6 +165,16 @@ def market_scan(limit: int, symbols: str, fmt: str) -> None:
     _emit(views.scan(limit, [s.strip().upper() for s in symbols.split(",") if s.strip()]), fmt)
 
 
+@market.command("brief")
+@click.option("--limit", type=click.IntRange(1, 100), default=30)
+@FORMAT
+@_source_errors
+def market_brief(limit: int, fmt: str) -> None:
+    """The daily brief's facts: BTC's snapshot, the top coins by 24 h change, the newest
+    crypto headlines (major events first) and BTC's levels with their distance in %."""
+    _emit(views.brief(limit), fmt)
+
+
 @market.command("candles")
 @click.argument("symbol")
 @click.option("--tf", "timeframe", type=click.Choice(["1w", "1d", "4h", "1h", "15m"]), default="1w")
