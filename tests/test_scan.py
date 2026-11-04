@@ -115,6 +115,7 @@ def test_brief_ranks_movers_and_puts_major_news_first(trending):
     assert trending.news.seen == []  # NewsAPI's quota is for chat
     assert data["btc"]["btc"]["regime"] == "risk_on" and "levels" not in data["btc"]
     assert [row[0] for row in data["coins"]] == ["ZEC", "BTC", "XRP", "SOL"]
+    assert data["coins"][0] == ["ZEC", "ZEC coin", 12.6, -3.4, 0.1]
     assert data["headlines"][0] == {
         "title": "Exchange hacked for $40M",
         "source": "Cointelegraph",

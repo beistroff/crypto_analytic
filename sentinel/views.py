@@ -179,8 +179,12 @@ def brief(limit: int) -> View:
         if not (c.is_stablecoin or c.symbol in STABLECOINS | signals_scan.WRAPPED)
     ]
     coins.sort(key=lambda c: c.change_24h, reverse=True)
-    data["columns"] = ["sym", "name", "chg_24h", "chg_7d"]
-    data["coins"] = [[c.symbol, c.name, rounded(c.change_24h), rounded(c.change_7d)] for c in coins]
+    # v_mc: 24 h volume over market cap; high with a flat price is where money is moving.
+    data["columns"] = ["sym", "name", "chg_24h", "chg_7d", "v_mc"]
+    data["coins"] = [
+        [c.symbol, c.name, rounded(c.change_24h), rounded(c.change_7d), round(c.vol_mc, 3)]
+        for c in coins
+    ]
     major: list[newsapi.Headline] = []
     try:
         feeds = news_rss.recent(datetime.fromisoformat(snap.as_of))
