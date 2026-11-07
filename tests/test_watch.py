@@ -108,6 +108,9 @@ def test_two_watches_in_one_second_keep_apart(clock):
         "2026-10-20T09:30:00.005Z",
     )
     assert len(watch.pending()) == 2
+    # Within 1 % of the first one: a candle would alert twice.
+    with pytest.raises(watch.WatchError, match="already has a close_below watch at 92 "):
+        watch.add("SOL", "close_below", D("92.5"))
     with pytest.raises(watch.WatchError, match="same moment"):
         watch.add("SOL", "close_below", D(80))
 
