@@ -63,7 +63,8 @@ resource "aws_dynamodb_table" "sim" {
   hash_key       = "PK"
   range_key      = "SK"
 
-  deletion_protection_enabled = false
+  # Every experiment call lives here; deleting the table needs this switched off first.
+  deletion_protection_enabled = true
 
   attribute {
     name = "PK"

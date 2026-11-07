@@ -95,4 +95,10 @@ resource "aws_instance" "sentinel_agent" {
   tags = {
     Name = var.instance_name
   }
+
+  # Temporary (G-29): a new Ubuntu image or a bootstrap edit would replace the instance and
+  # lose the hand-made OpenClaw setup. Remove once openclaw/configure.sh rebuilds it (plan 8.3).
+  lifecycle {
+    ignore_changes = [ami, user_data]
+  }
 }
