@@ -34,6 +34,7 @@ class MinIntervals(BaseModel):
     okx: float = 0.05  # OKX public market data: 40 candle requests per 2 s per IP
     kraken: float = 1.0  # Kraken public API: about 1 request per second
     rss: float = 0.0  # news feeds on different sites, each read once per call
+    deepseek: float = 0.0  # paid API, no per-minute limit for one caller
 
 
 class HttpSettings(BaseModel):
@@ -86,10 +87,12 @@ FOMC_DECISIONS: tuple[date, ...] = (
 
 
 # USD per million tokens in and out for the paid models (Anthropic list prices, checked
-# 2026-10-25). Gemini runs on the free tier and costs nothing.
+# 2026-10-25; DeepSeek off-peak, checked 2026-11-04). Gemini runs on the free tier and
+# costs nothing.
 LLM_PRICES: dict[str, tuple[float, float]] = {
     "claude-haiku-5-5": (0.10, 0.50),
     "claude-sonnet-5-5": (2.00, 10.00),
+    "deepseek-flash": (0.15, 0.60),
 }
 
 

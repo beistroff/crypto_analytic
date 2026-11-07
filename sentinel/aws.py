@@ -36,6 +36,7 @@ NAMES = frozenset(
         "newsapi_key",
         "gemini_api_key",
         "anthropic_api_key",
+        "deepseek_api_key",
     }
 )
 

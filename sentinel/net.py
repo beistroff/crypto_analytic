@@ -33,7 +33,7 @@ from sentinel.config import HttpSettings, MinIntervals, get_settings
 
 USER_AGENT = f"crypto-sentinel/{__version__}"
 RETRY_STATUSES = frozenset({429, 500, 502, 503, 504})
-KEY_HEADERS = ("X-CMC_PRO_API_KEY", "x-goog-api-key", "X-Api-Key")
+KEY_HEADERS = ("X-CMC_PRO_API_KEY", "x-goog-api-key", "X-Api-Key", "Authorization")
 
 log = logging.getLogger(__name__)
 

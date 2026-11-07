@@ -108,7 +108,7 @@ Task numbers stay as they are, because code and docs refer to them.
 ## 4. Next: Phase 9, the experiment
 
 ### 9.0 New arms (one PR each, before the freeze)
-- [ ] DeepSeek: a client for `deepseek-flash` (V4.1 Flash) with thinking off, key `/sentinel/deepseek_api_key`, all 20 coins.
+- [x] DeepSeek: a client for `deepseek-flash` (V4.1 Flash) with thinking off, key `/sentinel/deepseek_api_key`, all 20 coins (arm D1).
 - [ ] GPT: GPT-6 Luna through the ChatGPT subscription (`codex exec`), all 20 coins. Its monthly allowance is shared with other Codex use, so the freeze notes carry a fallback rule (e.g. under 40 % left on day 3: a 4-coin sample).
 - [ ] Measure a few calls per arm (cost, quota) before the freeze.
 
