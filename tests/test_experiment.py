@@ -8,7 +8,7 @@ import pytest
 
 from sentinel import views
 from sentinel.data import SourceError
-from sentinel.llm import LLMError, Usage, anthropic_, deepseek, gemini
+from sentinel.llm import LLMError, Usage, anthropic_, deepseek, gemini, openai_
 from sentinel.nb.check import Check
 from sentinel.predict import gate, runner
 from sentinel.predict.validator import PredictionOut
@@ -264,3 +264,23 @@ def test_deepseek_answers_in_the_schema_and_retries_an_overload(monkeypatch):
     assert (usage.tokens_in, usage.tokens_out, round(usage.cost_usd, 8)) == (3000, 200, 0.000276)
     with pytest.raises(LLMError, match="deepseek 402: Insufficient Balance"):
         deepseek.call("deepseek-flash", "system", "user", PredictionOut, attempts=1)
+
+
+def test_gpt_reads_the_answer_from_openclaw(monkeypatch):
+    envelope = {"ok": True, "model": "gpt-6-luna", "outputs": [{"text": json.dumps(CALL)}]}
+    stdout = "13:51:14 [model-fetch] response status=200\n" + json.dumps(envelope)
+    runs = []
+
+    def run(command, **_):
+        runs.append(command)
+        return SimpleNamespace(stdout=stdout, stderr="", returncode=0)
+
+    monkeypatch.setattr(openai_.subprocess, "run", run)
+    out, usage = openai_.call("gpt-6-luna", "system", "user", PredictionOut)
+    assert out.action == "BUY" and usage == Usage("gpt-6-luna", 0, 0, usage.latency_ms, 0.0)
+    command = runs[0]
+    assert command[-3:] == ["--thinking", "off", "--json"] and "openai/gpt-6-luna" in command
+    assert "JSON schema" in command[command.index("--prompt") + 1]
+    stdout = json.dumps({"ok": False, "error": {"message": "usage limit reached"}})
+    with pytest.raises(LLMError, match="openai: usage limit reached"):
+        openai_.call("gpt-6-luna", "system", "user", PredictionOut)

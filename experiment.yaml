@@ -39,3 +39,7 @@ arms:
   # for V4.1-Flash-1017 (DeepSeek's pricing page, 7 Nov); the API names only the alias, so
   # the page is checked again at the end of the run.
   - {name: D1, provider: deepseek, model: deepseek-flash, prompt: structured}
+  # GPT-6 Luna through the ChatGPT subscription (OpenClaw's login, instance only), thinking
+  # off, $0 a call. Its monthly allowance is shared with other Codex use: if under 40 % is
+  # left on day 3, this arm drops to a 4-coin sample (decided before the freeze, 7 Nov).
+  - {name: G1, provider: openai, model: gpt-6-luna, prompt: structured}
