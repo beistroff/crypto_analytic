@@ -108,12 +108,13 @@ Task numbers stay as they are, because code and docs refer to them.
 ## 4. Next: Phase 9, the experiment
 
 ### 9.0 New arms (one PR each, before the freeze)
-- [ ] DeepSeek: a client for `deepseek-flash` (V4.1 Flash) with thinking off, key `/sentinel/deepseek_api_key`, all 20 coins.
+- [x] DeepSeek: a client for `deepseek-flash` (V4.1 Flash) with thinking off, key `/sentinel/deepseek_api_key`, all 20 coins (arm D1).
 - [ ] GPT: GPT-6 Luna through the ChatGPT subscription (`codex exec`), all 20 coins. Its monthly allowance is shared with other Codex use, so the freeze notes carry a fallback rule (e.g. under 40 % left on day 3: a 4-coin sample).
 - [ ] Measure a few calls per arm (cost, quota) before the freeze.
 
 ### 9.1 Freeze
 - [ ] `experiment.yaml` with arms, coins, horizon, exact model ids, validator and gate thresholds, NB model version, prompt hashes and `end_date` 14 days after the first run. Git tag `experiment-v1`. Only then add the runner automation (`openclaw/README.md` step 16); before that, runs are by hand.
+- [ ] Model versions noted where the API gives only an alias (`deepseek-flash`: DeepSeek's pricing page), and checked again at the end of the run.
 - [ ] Each coin checked with `sentinel snapshot`: `missing` empty, 300 daily candles (XMR has no OKX swap, which is known).
 - [ ] No NB retraining and no prompt changes during the run.
 

@@ -8,7 +8,7 @@ import pytest
 
 from sentinel import views
 from sentinel.data import SourceError
-from sentinel.llm import LLMError, Usage, anthropic_, gemini
+from sentinel.llm import LLMError, Usage, anthropic_, deepseek, gemini
 from sentinel.nb.check import Check
 from sentinel.predict import gate, runner
 from sentinel.predict.validator import PredictionOut
@@ -235,3 +235,32 @@ def test_clients_return_the_answer_with_tokens_and_cost(monkeypatch):
     models.generate_content = lost
     with pytest.raises(LLMError, match="ConnectError"):
         gemini.call("gemini-3.5-flash-lite", "system", "user", PredictionOut)
+
+
+def test_deepseek_answers_in_the_schema_and_retries_an_overload(monkeypatch):
+    monkeypatch.setattr(deepseek.aws, "get_secret", lambda name: "test")
+    monkeypatch.setattr(deepseek, "RETRY_DELAY_S", 0)
+    monkeypatch.setattr(deepseek, "PEAK_HOURS", ())  # off-peak prices
+    answer = {
+        "model": "deepseek-v4.1-flash-1017",
+        "choices": [{"finish_reason": "stop", "message": {"content": json.dumps(CALL)}}],
+        "usage": {"prompt_tokens": 3000, "completion_tokens": 200, "prompt_cache_hit_tokens": 2000},
+    }
+    replies = [(503, {"error": {"message": "Server busy"}}), (200, answer)]
+    replies.append((402, {"error": {"message": "Insufficient Balance"}}))
+    sent = []
+
+    def post(url, **kwargs):
+        sent.append(kwargs["json"])
+        status, body = replies.pop(0)
+        return SimpleNamespace(status_code=status, json=lambda: body, text="")
+
+    monkeypatch.setattr(deepseek.net, "session", lambda source: SimpleNamespace(post=post))
+    out, usage = deepseek.call("deepseek-flash", "system", "user", PredictionOut)
+    assert out.action == "BUY" and len(sent) == 2  # the 503 was retried
+    assert sent[0]["thinking"] == {"type": "disabled"}
+    assert "JSON schema" in sent[0]["messages"][0]["content"]
+    # (1000 + 2000 cached at a fiftieth) x $0.15 + 200 x $0.60, per million tokens
+    assert (usage.tokens_in, usage.tokens_out, round(usage.cost_usd, 8)) == (3000, 200, 0.000276)
+    with pytest.raises(LLMError, match="deepseek 402: Insufficient Balance"):
+        deepseek.call("deepseek-flash", "system", "user", PredictionOut, attempts=1)

@@ -37,7 +37,7 @@ import yaml
 from pydantic import BaseModel
 
 from sentinel.data import SourceError
-from sentinel.llm import LLMError, Usage, anthropic_, gemini
+from sentinel.llm import LLMError, Usage, anthropic_, deepseek, gemini
 from sentinel.nb import check as nb_check
 from sentinel.predict import gate, journal
 from sentinel.predict.validator import Horizon, PredictionOut
@@ -49,14 +49,18 @@ PROMPTS = Path(__file__).resolve().parents[1] / "llm" / "prompts"
 SLOTS = ("00", "08", "16")
 
 Caller = Callable[[str, str, str, type[PredictionOut], int], tuple[PredictionOut, Usage]]
-CALLERS: dict[str, Caller] = {"gemini": gemini.call, "anthropic": anthropic_.call}
+CALLERS: dict[str, Caller] = {
+    "gemini": gemini.call,
+    "anthropic": anthropic_.call,
+    "deepseek": deepseek.call,
+}
 
 log = logging.getLogger(__name__)
 
 
 class Arm(BaseModel):
     name: str
-    provider: Literal["gemini", "anthropic"]
+    provider: Literal["gemini", "anthropic", "deepseek"]
     model: str
     prompt: Literal["freeform", "structured"]
     sample: int | None = None  # coins per run; all of them when not set
