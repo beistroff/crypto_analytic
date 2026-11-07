@@ -113,7 +113,7 @@ Task numbers stay as they are, because code and docs refer to them.
 - [x] Measure a few calls per arm (cost, quota) before the freeze.
 
 ### 9.1 Freeze
-- [x] `experiment.yaml` with arms, coins, horizon, exact model ids, validator and gate thresholds, NB model version, prompt hashes and `end_date` 2026-11-19: a 10-day run from 9 Nov, with an interim report on day 7. Git tag `experiment-v1`. Only then add the runner automation (`openclaw/README.md` step 16); before that, runs are by hand.
+- [x] `experiment.yaml` with arms, coins, horizon, exact model ids, validator and gate thresholds, NB model version, prompt hashes and `end_date` 2026-11-19: a 10-day run from 9 Nov, with an interim report on day 7. The automation's runs on 7 and 8 Nov are a warm-up, left out of the analysis. Git tag `experiment-v1`. Only then add the runner automation (`openclaw/README.md` step 16); before that, runs are by hand.
 - [x] Model versions noted where the API gives only an alias (`deepseek-flash` is V4.1-Flash-1017 on DeepSeek's pricing page, 7 Nov), and checked again at the end of the run.
 - [x] Each coin checked with `sentinel snapshot`: `missing` empty (7 Nov).
 - [ ] No NB retraining and no prompt changes during the run.
