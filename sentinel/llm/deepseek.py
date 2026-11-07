@@ -1,12 +1,8 @@
-"""DeepSeek through its OpenAI-compatible chat API, with thinking off (paid, prepaid balance).
+"""DeepSeek through its OpenAI-compatible chat API, thinking off, plain HTTP (no SDK).
 
-Plain HTTP through ``sentinel.net``, so no extra SDK. JSON
-Output mode returns one JSON object but enforces no schema, so the schema goes into the
-system prompt and the answer is validated like every other arm's.
-
-Prices are DeepSeek's off-peak list prices (``config.LLM_PRICES``); weekdays from 01:00 to
-04:00 and 06:00 to 10:00 UTC are peak and cost double (Chinese public holidays, off-peak
-in full, are not tracked, so those runs are counted at the peak price).
+JSON Output mode enforces no schema, so the schema goes into the system prompt and the
+answer is validated like every other arm's. ``deepseek-flash`` is DeepSeek's alias for
+its current Flash model; the version that answered is stored with each call.
 """
 
 from __future__ import annotations
@@ -24,9 +20,9 @@ from sentinel.llm import LLMError, Usage, reason
 
 URL = "https://api.deepseek.com/chat/completions"
 TIMEOUT_S = 120.0
-MAX_TOKENS = 2000  # a short JSON answer; thinking is off
 RETRY_DELAY_S = 2.0
 CACHE_HIT = 0.02  # of the input price
+# Peak prices are double. shortcut: Chinese public holidays (off-peak) count as peak.
 PEAK_HOURS = ((1, 4), (6, 10))  # UTC, Monday to Friday
 
 
@@ -34,16 +30,19 @@ def call[T: BaseModel](
     model: str, system: str, user: str, schema: type[T], attempts: int = 3
 ) -> tuple[T, Usage]:
     """``attempts`` tries on 429 and 5xx, 2 s apart doubling (``sentinel.net`` retries GET
-    only, as urllib3 does)."""
+    only)."""
+    note = "Answer with one JSON object that follows this JSON schema:\n"
     body = {
         "model": model,
         "messages": [
-            {"role": "system", "content": f"{system}\n\n{_schema_note(schema)}"},
+            {
+                "role": "system",
+                "content": system + "\n\n" + note + json.dumps(schema.model_json_schema()),
+            },
             {"role": "user", "content": user},
         ],
         "thinking": {"type": "disabled"},
         "response_format": {"type": "json_object"},
-        "max_tokens": MAX_TOKENS,
     }
     headers = {"Authorization": f"Bearer {aws.get_secret('deepseek_api_key')}"}
     start = time.monotonic()
@@ -61,30 +60,24 @@ def call[T: BaseModel](
     if response.status_code != 200:
         raise LLMError(f"deepseek {response.status_code}: {reason(_error(response))}")
     data = response.json()
-    choice = data["choices"][0]
-    if choice.get("finish_reason") != "stop":
-        raise LLMError(f"deepseek gave no answer ({choice.get('finish_reason')})")
     try:
-        parsed = schema.model_validate_json(choice["message"]["content"] or "")
+        parsed = schema.model_validate_json(data["choices"][0]["message"]["content"] or "")
     except ValidationError as exc:
         raise LLMError(f"deepseek answer not in the schema: {exc.errors()[0]['msg']}") from exc
     u = data["usage"]
     hit = u.get("prompt_cache_hit_tokens", 0)
     price_in, price_out = get_settings().llm_prices[model]
-    billed_in = u["prompt_tokens"] - hit + hit * CACHE_HIT
-    cost = (billed_in * price_in + u["completion_tokens"] * price_out) / 1e6
+    cost = (
+        (u["prompt_tokens"] - hit * (1 - CACHE_HIT)) * price_in + u["completion_tokens"] * price_out
+    ) / 1e6
+    now = datetime.now(UTC)
+    peak = now.weekday() < 5 and any(a <= now.hour < b for a, b in PEAK_HOURS)
     return parsed, Usage(
         model_version=data.get("model") or model,
         tokens_in=u["prompt_tokens"],
         tokens_out=u["completion_tokens"],
         latency_ms=latency_ms,
-        cost_usd=cost * (2 if _peak(datetime.now(UTC)) else 1),
-    )
-
-
-def _schema_note(schema: type[BaseModel]) -> str:
-    return "Answer with one JSON object that follows this JSON schema:\n" + json.dumps(
-        schema.model_json_schema()
+        cost_usd=cost * (2 if peak else 1),
     )
 
 
@@ -94,7 +87,3 @@ def _error(response: requests.Response) -> str | None:
         return response.json()["error"]["message"]
     except (ValueError, KeyError, TypeError):
         return response.text or None
-
-
-def _peak(now: datetime) -> bool:
-    return now.weekday() < 5 and any(start <= now.hour < end for start, end in PEAK_HOURS)

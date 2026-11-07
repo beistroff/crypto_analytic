@@ -34,6 +34,7 @@ arms:
   # Claude Sonnet 5.5, paid: about $0.01 to $0.03 a call (its thinking is billed as
   # output), so only F1's 4 coins per run, 12 calls a day (decided 25 Oct).
   - {name: S1, provider: anthropic, model: claude-sonnet-5-5, prompt: structured, sample: 4}
-  # DeepSeek V4.1 Flash, paid (a small prepaid balance), thinking off: about $0.0006 a
-  # call off-peak, double in the 08 slot on weekdays (peak hours).
+  # DeepSeek Flash, paid (prepaid balance), thinking off: about $0.0004 a call (TC-218,
+  # 7 Nov), double in the 08 slot on weekdays (peak hours). `deepseek-flash` is an alias
+  # (V4.1 Flash today); each call stores the version that answered.
   - {name: D1, provider: deepseek, model: deepseek-flash, prompt: structured}

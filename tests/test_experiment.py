@@ -240,7 +240,7 @@ def test_clients_return_the_answer_with_tokens_and_cost(monkeypatch):
 def test_deepseek_answers_in_the_schema_and_retries_an_overload(monkeypatch):
     monkeypatch.setattr(deepseek.aws, "get_secret", lambda name: "test")
     monkeypatch.setattr(deepseek, "RETRY_DELAY_S", 0)
-    monkeypatch.setattr(deepseek, "_peak", lambda now: False)
+    monkeypatch.setattr(deepseek, "PEAK_HOURS", ())  # off-peak prices
     answer = {
         "model": "deepseek-v4.1-flash-1017",
         "choices": [{"finish_reason": "stop", "message": {"content": json.dumps(CALL)}}],

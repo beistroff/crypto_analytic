@@ -92,7 +92,7 @@ FOMC_DECISIONS: tuple[date, ...] = (
 LLM_PRICES: dict[str, tuple[float, float]] = {
     "claude-haiku-5-5": (0.10, 0.50),
     "claude-sonnet-5-5": (2.00, 10.00),
-    "deepseek-flash": (0.15, 0.60),
+    "deepseek-flash": (0.15, 0.60),  # the API's alias for V4.1 Flash
 }
 
 
