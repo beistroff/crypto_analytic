@@ -3,8 +3,9 @@ import json
 import pytest
 from click.testing import CliRunner
 
+from sentinel import config
 from sentinel.cli import cli
-from sentinel.data import flow
+from sentinel.data import flow, stocks
 
 LISTINGS = "/v1/cryptocurrency/listings/latest"
 QUOTES = "/v1/cryptocurrency/quotes/latest"
@@ -96,7 +97,7 @@ def test_scan_one_row_per_coin_within_budget(top50):
     assert len(lines) == 5
 
 
-def test_brief_ranks_movers_and_puts_major_news_first(trending):
+def test_brief_ranks_movers_and_puts_major_news_first(trending, monkeypatch):
     coins = [_listing("BTC", 2.5), _listing("USDT", 0.0), _listing("SOL", -4.0)]
     coins += [_listing("WBTC", 2.5), _listing("ZEC", 12.6), _listing("XRP", -0.5)]
     trending.cmc.routes[LISTINGS] = (200, {}, {"status": {"error_code": 0}, "data": coins})
@@ -107,6 +108,11 @@ def test_brief_ranks_movers_and_puts_major_news_first(trending):
     )
     feed = f'<rss version="2.0"><channel><title>t</title>{items}</channel></rss>'
     trending.rss.routes["/rss"] = (200, {}, feed.encode())
+    monkeypatch.setattr(config, "MACRO_FEEDS", {"CNBC": f"{trending.rss.base}/rss"})
+    monkeypatch.setattr(stocks, "URL", f"{trending.rss.base}/chart/")
+    chart = {"chart": {"result": [{"indicators": {"quote": [{"close": [100, None, 98.5]}]}}]}}
+    trending.rss.routes["/chart/%5EGSPC"] = (200, {}, chart)
+    trending.rss.routes["/chart/%5EIXIC"] = (200, {}, chart)
 
     result = CliRunner().invoke(cli, ["market", "brief"])
 
@@ -121,6 +127,8 @@ def test_brief_ranks_movers_and_puts_major_news_first(trending):
         "source": "Cointelegraph",
         "major": True,
     }
+    assert data["stocks"] == {"S&P 500": -1.5, "Nasdaq": -1.5}  # gaps in the closes skipped
+    assert data["world_headlines"][0] == "ETF inflows rise"
     levels = data["levels"]
     prices = [lv["price"] for lv in levels]
     assert prices == sorted(set(prices))  # lowest first, each price once
@@ -133,6 +141,7 @@ def test_brief_ranks_movers_and_puts_major_news_first(trending):
         "Up: ZEC +12.6%, BTC +2.5%",
         "Down: SOL -4.0%, XRP -0.5%",
         "Major: Exchange hacked for $40M (Cointelegraph)",
+        "Stocks: S&P 500 -1.5%, Nasdaq -1.5%",
     ]
 
 
