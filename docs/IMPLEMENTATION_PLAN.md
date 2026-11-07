@@ -40,7 +40,7 @@ Each step is one PR. A PR that touches DynamoDB or the instance merges only afte
 | 10 | Core | Prediction journal: 3.3, 3.4, 3.6, 3.7 | Done |
 | 11 | Experiment | 3.1 clients, 3.2 prompts, 3.5 runner | Done |
 | 12 | Experiment | Phase 5 Naive Bayes, graded by the same scorer | Done |
-| 13 | Experiment | Phase 9: new arms (DeepSeek, GPT), freeze, 14-day run, analysis | Next |
+| 13 | Experiment | Phase 9: new arms (DeepSeek, GPT), freeze, 10-day run, analysis | Next |
 | - | Later | Section 5 | |
 
 ## 1. Repository layout
@@ -110,12 +110,12 @@ Task numbers stay as they are, because code and docs refer to them.
 ### 9.0 New arms (one PR each, before the freeze)
 - [x] DeepSeek: a client for `deepseek-flash` (V4.1 Flash) with thinking off, key `/sentinel/deepseek_api_key`, all 20 coins (arm D1).
 - [x] GPT: GPT-6 Luna through the ChatGPT subscription (OpenClaw's one-shot `infer model run`, instance only), all 20 coins (arm G1). Its monthly allowance is shared with other Codex use, so the freeze notes carry a fallback rule (e.g. under 40 % left on day 3: a 4-coin sample).
-- [ ] Measure a few calls per arm (cost, quota) before the freeze.
+- [x] Measure a few calls per arm (cost, quota) before the freeze.
 
 ### 9.1 Freeze
-- [ ] `experiment.yaml` with arms, coins, horizon, exact model ids, validator and gate thresholds, NB model version, prompt hashes and `end_date` 14 days after the first run. Git tag `experiment-v1`. Only then add the runner automation (`openclaw/README.md` step 16); before that, runs are by hand.
-- [ ] Model versions noted where the API gives only an alias (`deepseek-flash`: DeepSeek's pricing page), and checked again at the end of the run.
-- [ ] Each coin checked with `sentinel snapshot`: `missing` empty, 300 daily candles (XMR has no OKX swap, which is known).
+- [x] `experiment.yaml` with arms, coins, horizon, exact model ids, validator and gate thresholds, NB model version, prompt hashes and `end_date` 2026-11-19: a 10-day run from 9 Nov, with an interim report on day 7. Git tag `experiment-v1`. Only then add the runner automation (`openclaw/README.md` step 16); before that, runs are by hand.
+- [x] Model versions noted where the API gives only an alias (`deepseek-flash` is V4.1-Flash-1017 on DeepSeek's pricing page, 7 Nov), and checked again at the end of the run.
+- [x] Each coin checked with `sentinel snapshot`: `missing` empty (7 Nov).
 - [ ] No NB retraining and no prompt changes during the run.
 
 | Arm | Model | Prompt | Note |
@@ -134,7 +134,7 @@ Task numbers stay as they are, because code and docs refer to them.
 20 coins × 3 runs = 60 calls a day per full arm. Final arms are chosen at the freeze to fit the $5 Anthropic limit and the free quotas.
 
 ### 9.2 Run
-- [ ] A daily look at the run results, missing data and 429 errors. The frozen config never changes mid-run: incidents go to `project_notes.md`.
+- [ ] A daily look at the run results (each run's line in Telegram), missing data and 429 errors; an interim report on day 7 (15 Nov). The frozen config never changes mid-run: incidents go to `project_notes.md`.
 
 ### 9.3 Analysis (`analysis/`)
 - [ ] Wilson intervals and a binomial test against 50 %; McNemar for paired arms (L1 vs H1, L1 vs L1G, L0 vs L1; F1 vs S1, L1 and H1 on F1's coins); Cochran's Q across L0, L1, L1G with Holm correction; Brier score with a reliability diagram; Wilcoxon and a day-block bootstrap on simulated returns; a cost table per arm (tokens, USD, latency).

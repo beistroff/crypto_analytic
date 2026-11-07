@@ -562,7 +562,7 @@ def _who(pred: Prediction) -> str:
 
 
 def experiment_ran(result: RunResult) -> View:
-    """One line for the automation's run history; nothing is sent to Telegram."""
+    """One line, sent to Telegram after each run."""
     data = asdict(result)
     data["cost_usd"] = round(result.cost_usd, 4)
     if result.ended:
