@@ -55,10 +55,11 @@ class Feeds:
         return found[:limit]
 
 
-def recent(now: datetime | None = None) -> Feeds:
-    """Every configured feed's items from the 24 h before ``now``."""
+def recent(now: datetime | None = None, feeds: dict[str, str] | None = None) -> Feeds:
+    """The items of ``feeds`` (default: the configured crypto feeds) from the 24 h before
+    ``now``."""
     now = now or datetime.now(UTC)
-    feeds = get_settings().news_feeds
+    feeds = get_settings().news_feeds if feeds is None else feeds
     if not feeds:
         return Feeds([], [])
     with ThreadPoolExecutor(max_workers=len(feeds)) as pool:

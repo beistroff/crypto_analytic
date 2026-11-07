@@ -17,9 +17,10 @@ from typing import Any
 
 import requests
 
+from sentinel import config
 from sentinel.alerts import news as alerts_news
 from sentinel.alerts import watch as alerts_watch
-from sentinel.data import SourceError, cmc, exchange, feargreed, news_rss, newsapi
+from sentinel.data import SourceError, cmc, exchange, feargreed, news_rss, newsapi, stocks
 from sentinel.eval.rules import STABLECOINS, is_scalp_candidate, rules_signal
 from sentinel.nb.check import Check
 from sentinel.nb.history import Built
@@ -38,6 +39,7 @@ from sentinel.store.sim import Prediction, Watch
 WHALE_PUMP_1H_PCT = 1.5
 TELEGRAM_MAX_LINES = 5
 BRIEF_HEADLINES = 10
+BRIEF_WORLD = 5  # world headlines in the brief
 NO_NEWS = "no relevant headlines"
 NO_REPLY = "NO_REPLY"  # OpenClaw's silent token: an automation run that prints it sends nothing
 
@@ -164,7 +166,8 @@ def scan(limit: int, wanted: list[str]) -> View:
 def brief(limit: int) -> View:
     """The daily brief's facts in one call, for the agent to read and judge: BTC's snapshot,
     the top coins by 24 h change, the crypto feeds' newest headlines (major events first,
-    flagged like the news alert's) and BTC's levels with their distance from the price."""
+    flagged like the news alert's), the US stock indexes' move and the newest world
+    headlines, and BTC's levels with their distance from the price."""
     snap = signals_snapshot.build("BTC", popular_news=False)
     data: dict[str, Any] = {
         "btc": snap.model_dump(
@@ -197,6 +200,17 @@ def brief(limit: int) -> View:
     except SourceError:
         data["headlines"] = None
         data["btc"]["missing"].append("rss")
+    try:
+        data["stocks"] = stocks.moves()
+    except (SourceError, requests.RequestException):
+        data["stocks"] = None
+        data["btc"]["missing"].append("stocks")
+    try:
+        world = news_rss.recent(datetime.fromisoformat(snap.as_of), config.MACRO_FEEDS)
+        data["world_headlines"] = [i.headline.title for i in world.items[:BRIEF_WORLD]]
+    except SourceError:
+        data["world_headlines"] = None
+        data["btc"]["missing"].append("world_rss")
     btc = snap.btc
     up = [f"{c.symbol} {_pct(c.change_24h)}" for c in coins if c.change_24h > 0][:3]
     down = [f"{c.symbol} {_pct(c.change_24h)}" for c in coins[::-1] if c.change_24h < 0][:3]
@@ -207,6 +221,9 @@ def brief(limit: int) -> View:
         "Up: " + (", ".join(up) or "none"),
         "Down: " + (", ".join(down) or "none"),
         f"Major: {_short(major[0].title)} ({major[0].source})" if major else "Major: none",
+        "Stocks: " + ", ".join(f"{k} {_pct(v)}" for k, v in data["stocks"].items())
+        if data["stocks"]
+        else "Stocks: no data",
     ]
     return View(data, _lines(lines))
 

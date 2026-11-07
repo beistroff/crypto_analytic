@@ -35,6 +35,7 @@ class MinIntervals(BaseModel):
     kraken: float = 1.0  # Kraken public API: about 1 request per second
     rss: float = 0.0  # news feeds on different sites, each read once per call
     deepseek: float = 0.0  # paid API, no per-minute limit for one caller
+    yahoo: float = 1.0  # Yahoo Finance's public chart API: unpublished limit, 2 calls a brief
 
 
 class HttpSettings(BaseModel):
@@ -67,6 +68,10 @@ NEWS_FEEDS: dict[str, str] = {
     "The Block": "https://www.theblock.co/rss.xml",
     "Decrypt": "https://decrypt.co/feed",
 }
+
+# World and markets news for the daily brief only (the experiment's snapshot stays on the
+# crypto feeds): stock sell-offs and AI or rate scares reach crypto. Valid RSS on 7 Nov.
+MACRO_FEEDS: dict[str, str] = {"CNBC": "https://www.cnbc.com/id/10000664/device/rss/rss.html"}
 
 
 # FOMC rate decisions (the second day of each meeting), from the Federal Reserve's
