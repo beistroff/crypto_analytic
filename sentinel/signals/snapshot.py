@@ -1,4 +1,4 @@
-"""One coin's snapshot in the signal hierarchy (plan, Appendix C).
+"""One coin's snapshot in the signal hierarchy (plan 2.6).
 
 BTC first (its regime outweighs the coin's own signal), then market mood and BTC's latest
 headlines, macro, the coin's news (fresh from RSS, then NewsAPI's most read of 14 days), derivatives

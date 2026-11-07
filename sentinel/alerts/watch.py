@@ -36,6 +36,7 @@ from sentinel.store.sim import Watch, WatchRepo
 TRIGGERS = ("touch_below", "close_below", "close_above")
 CLOSE_TIMEFRAMES = ("1d", "4h")
 LOOKBACK: dict[Timeframe, int] = {"1h": 48, "1d": 10, "4h": 12}
+NEAR = Decimal("0.01")  # a same-kind watch within 1 % repeats an existing one
 SYMBOL = re.compile(r"[A-Z0-9]{1,15}")
 
 log = logging.getLogger(__name__)
@@ -84,7 +85,8 @@ def add(
     """Store a new watch; returns it with the coin's latest price.
 
     The price comes from the same candles ``check`` reads, so a ticker no exchange lists
-    is refused here instead of never firing.
+    is refused here instead of never firing. A watch with the same coin, trigger and
+    timeframe within 1 % of an active one is refused too: one candle would alert twice.
     """
     symbol = symbol.upper()
     if not SYMBOL.fullmatch(symbol):
@@ -98,6 +100,13 @@ def add(
         timeframe = timeframe or "1d"
         if timeframe not in CLOSE_TIMEFRAMES:
             raise WatchError(f"bad timeframe {timeframe!r}, expected 1d or 4h")
+    for other in WatchRepo().pending():
+        same = (other.symbol, other.trigger, other.timeframe) == (symbol, trigger, timeframe)
+        if same and abs(other.level - level) <= other.level * NEAR:
+            raise WatchError(
+                f"{symbol} already has a {trigger} watch at {plain(other.level)} "
+                f"({other.pred_id}): keep it, or remove it first"
+            )
     price = exchange.candles(symbol, "1h", LOOKBACK["1h"]).price
     watch = Watch(
         pred_id=str(ULID()),

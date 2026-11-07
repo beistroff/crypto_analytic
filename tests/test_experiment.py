@@ -196,6 +196,15 @@ def test_clients_return_the_answer_with_tokens_and_cost(monkeypatch):
     with pytest.raises(LLMError, match="refusal"):
         anthropic_.call("claude-haiku-5-5", "system", "user", PredictionOut)
 
+    def broke(**_):
+        reply = httpx.Response(400, request=httpx.Request("POST", "https://api.anthropic.com"))
+        body = {"error": {"type": "invalid_request_error", "message": "Credit balance too low"}}
+        raise anthropic_.anthropic.APIStatusError("Error code: 400", response=reply, body=body)
+
+    fake_messages.parse = broke
+    with pytest.raises(LLMError, match="anthropic 400: Credit balance too low"):
+        anthropic_.call("claude-haiku-5-5", "system", "user", PredictionOut)
+
     answer = SimpleNamespace(
         text=json.dumps(CALL),
         model_version="gemini-3.5-flash-lite-001",
@@ -210,6 +219,14 @@ def test_clients_return_the_answer_with_tokens_and_cost(monkeypatch):
     assert usage == Usage("gemini-3.5-flash-lite-001", 900, 200, usage.latency_ms, 0.0)
     answer.text = '{"action": "BUY"}'
     with pytest.raises(LLMError, match="not in the schema"):
+        gemini.call("gemini-3.5-flash-lite", "system", "user", PredictionOut)
+
+    def quota(**_):
+        error = {"code": 429, "message": "Quota exceeded", "status": "RESOURCE_EXHAUSTED"}
+        raise gemini.errors.ClientError(429, {"error": error})
+
+    models.generate_content = quota
+    with pytest.raises(LLMError, match="gemini 429 RESOURCE_EXHAUSTED: Quota exceeded"):
         gemini.call("gemini-3.5-flash-lite", "system", "user", PredictionOut)
 
     def lost(**_):

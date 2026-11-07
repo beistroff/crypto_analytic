@@ -230,10 +230,14 @@ def _brief_levels(snap: schema.Snapshot) -> list[dict[str, Any]]:
         named["4h trigger"] = snap.setup.trigger
     if snap.price is None:
         return []
-    found = sorted((value, name) for name, value in named.items() if value is not None)
+    # Levels at the same price ("7d wick low" and "30d wick low") share one entry.
+    merged: dict[float, list[str]] = {}
+    for name, value in named.items():
+        if value is not None:
+            merged.setdefault(sig(value), []).append(name)
     return [
-        {"level": name, "price": sig(value), "pct": rounded(pct(value, snap.price))}
-        for value, name in found
+        {"level": " / ".join(names), "price": price, "pct": rounded(pct(price, snap.price))}
+        for price, names in sorted(merged.items())
     ]
 
 

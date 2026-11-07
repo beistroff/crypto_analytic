@@ -122,8 +122,11 @@ def test_brief_ranks_movers_and_puts_major_news_first(trending):
         "major": True,
     }
     levels = data["levels"]
-    assert [lv["price"] for lv in levels] == sorted(lv["price"] for lv in levels)
-    assert levels[0]["level"] == "SMA200" and levels[-1]["pct"] == 1.0  # the wick high
+    prices = [lv["price"] for lv in levels]
+    assert prices == sorted(set(prices))  # lowest first, each price once
+    assert levels[0]["level"] == "SMA200"
+    # In a steady uptrend both wick highs are the latest candle's.
+    assert levels[-1] == {"level": "7d wick high / 30d wick high", "price": 80800.0, "pct": 1.0}
     lines = CliRunner().invoke(cli, ["market", "brief", "--format", "telegram"]).stdout
     assert lines.splitlines() == [
         "BTC $80,000 risk_on (+2.5% 24h, +18.4% 7d)",

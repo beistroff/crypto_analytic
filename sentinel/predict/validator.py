@@ -17,7 +17,7 @@ ENTRY_TOLERANCE_PCT = 1.0
 
 
 class PredictionOut(BaseModel):
-    """A call as the agent writes it (plan Appendix D)."""
+    """A call as the agent writes it (plan 3.2)."""
 
     btc_context: str
     action: Literal["BUY", "SELL", "HOLD"]
