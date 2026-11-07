@@ -37,7 +37,7 @@ import yaml
 from pydantic import BaseModel
 
 from sentinel.data import SourceError
-from sentinel.llm import LLMError, Usage, anthropic_, deepseek, gemini
+from sentinel.llm import LLMError, Usage, anthropic_, deepseek, gemini, openai_
 from sentinel.nb import check as nb_check
 from sentinel.predict import gate, journal
 from sentinel.predict.validator import Horizon, PredictionOut
@@ -53,6 +53,7 @@ CALLERS: dict[str, Caller] = {
     "gemini": gemini.call,
     "anthropic": anthropic_.call,
     "deepseek": deepseek.call,
+    "openai": openai_.call,
 }
 
 log = logging.getLogger(__name__)
@@ -60,7 +61,7 @@ log = logging.getLogger(__name__)
 
 class Arm(BaseModel):
     name: str
-    provider: Literal["gemini", "anthropic", "deepseek"]
+    provider: Literal["gemini", "anthropic", "deepseek", "openai"]
     model: str
     prompt: Literal["freeform", "structured"]
     sample: int | None = None  # coins per run; all of them when not set
