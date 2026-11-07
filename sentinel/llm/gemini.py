@@ -12,7 +12,7 @@ from google.genai import errors, types
 from pydantic import BaseModel, ValidationError
 
 from sentinel import aws
-from sentinel.llm import LLMError, Usage
+from sentinel.llm import LLMError, Usage, reason
 
 # The SDK sends the timeout to Google as the request's deadline, and free-tier requests can
 # wait in a queue: at 2 minutes Gemini 3.8 Flash answered 504 DEADLINE_EXCEEDED every time.
@@ -46,7 +46,7 @@ def call[T: BaseModel](
             ),
         )
     except errors.APIError as exc:
-        raise LLMError(f"gemini {exc.code} {exc.status}") from exc
+        raise LLMError(f"gemini {exc.code} {exc.status}: {reason(exc.message)}") from exc
     # The SDK retries timeouts and lost connections, then raises its HTTP library's error.
     except (httpx.HTTPError, httpx2.HTTPError) as exc:
         raise LLMError(f"gemini {type(exc).__name__}") from exc

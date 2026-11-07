@@ -11,7 +11,7 @@ from pydantic import BaseModel, ValidationError
 
 from sentinel import aws
 from sentinel.config import get_settings
-from sentinel.llm import LLMError, Usage
+from sentinel.llm import LLMError, Usage, reason
 
 MAX_TOKENS = 8000  # room for thinking plus a short JSON answer
 TIMEOUT_S = 120.0
@@ -36,7 +36,9 @@ def call[T: BaseModel](
             output_format=schema,
         )
     except anthropic.APIStatusError as exc:
-        raise LLMError(f"anthropic {exc.status_code}") from exc
+        error = exc.body.get("error") if isinstance(exc.body, dict) else None
+        message = error.get("message") if isinstance(error, dict) else exc.message
+        raise LLMError(f"anthropic {exc.status_code}: {reason(message)}") from exc
     except anthropic.APIConnectionError as exc:
         raise LLMError("anthropic connection error") from exc
     except ValidationError as exc:

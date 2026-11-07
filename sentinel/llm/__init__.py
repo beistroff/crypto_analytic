@@ -10,9 +10,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+REASON_CHARS = 200
+
 
 class LLMError(RuntimeError):
-    """A call that failed or gave no answer in the schema (status codes only, no keys)."""
+    """A call that failed or gave no answer in the schema: the status code and the API's
+    own reason, never a key."""
+
+
+def reason(message: str | None) -> str:
+    """The API's error message, cut short ("Your credit balance is too low ...")."""
+    return (message or "no message")[:REASON_CHARS]
 
 
 @dataclass(frozen=True)
