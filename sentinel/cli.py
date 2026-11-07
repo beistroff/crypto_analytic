@@ -356,7 +356,7 @@ def experiment() -> None:
 @_source_errors
 def experiment_run(slot: str | None, fmt: str) -> None:
     """One run: a snapshot per coin, a call per arm (an OpenClaw automation runs this at
-    00:05, 08:05 and 16:05 UTC, sending nothing)."""
+    00:05, 08:05 and 16:05 UTC and sends this line to Telegram)."""
     _emit(views.experiment_ran(runner.run(slot)), fmt)
 
 
