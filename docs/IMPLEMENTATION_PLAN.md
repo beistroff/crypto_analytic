@@ -114,6 +114,7 @@ Task numbers stay as they are, because code and docs refer to them.
 
 ### 9.1 Freeze
 - [ ] `experiment.yaml` with arms, coins, horizon, exact model ids, validator and gate thresholds, NB model version, prompt hashes and `end_date` 14 days after the first run. Git tag `experiment-v1`. Only then add the runner automation (`openclaw/README.md` step 16); before that, runs are by hand.
+- [ ] Model versions noted where the API gives only an alias (`deepseek-flash`: DeepSeek's pricing page), and checked again at the end of the run.
 - [ ] Each coin checked with `sentinel snapshot`: `missing` empty, 300 daily candles (XMR has no OKX swap, which is known).
 - [ ] No NB retraining and no prompt changes during the run.
 

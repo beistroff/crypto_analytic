@@ -2,7 +2,8 @@
 
 JSON Output mode enforces no schema, so the schema goes into the system prompt and the
 answer is validated like every other arm's. ``deepseek-flash`` is DeepSeek's alias for
-its current Flash model; the version that answered is stored with each call.
+its current Flash model, and the API names only the alias, so the version behind it is
+taken from DeepSeek's pricing page at the freeze and checked again at the end.
 """
 
 from __future__ import annotations

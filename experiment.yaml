@@ -36,5 +36,6 @@ arms:
   - {name: S1, provider: anthropic, model: claude-sonnet-5-5, prompt: structured, sample: 4}
   # DeepSeek Flash, paid (prepaid balance), thinking off: about $0.0004 a call (TC-218,
   # 7 Nov), double in the 08 slot on weekdays (peak hours). `deepseek-flash` is an alias
-  # (V4.1 Flash today); each call stores the version that answered.
+  # for V4.1-Flash-1017 (DeepSeek's pricing page, 7 Nov); the API names only the alias, so
+  # the page is checked again at the end of the run.
   - {name: D1, provider: deepseek, model: deepseek-flash, prompt: structured}
