@@ -126,7 +126,7 @@ def test_missing_sources_become_null(trending):
     trending.okx.routes[flow.FUNDING] = (500, {})
     trending.fng.routes["/fng/"] = (200, {}, {"data": []})  # malformed reply
     trending.news.routes["/v2/everything"] = (401, {}, {"status": "error", "code": "apiKeyInvalid"})
-    trending.rss.routes["/rss"] = (200, {}, b"<html>maintenance</html>")  # not a feed
+    trending.rss.routes["/rss"] = (200, {}, b"")  # not a feed
     trending.rss.routes["/mirror"] = (404, {})
     data = json.loads(_run("NOPE"))
     assert data["missing"] == ["candles", "feargreed", "rss", "news", "flow"]

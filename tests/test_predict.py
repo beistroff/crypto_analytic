@@ -140,7 +140,7 @@ def test_score_checks_each_horizon_up_to_the_calls_own(tables, monkeypatch):
     assert buy.checks == {"h1": {"price": D("101.5"), "return_pct": D("1.5"), "hit": True}}
     assert (buy.status, buy.due_at) == ("OPEN", "2026-10-17T16:20:00Z")
     assert hold.checks["h1"]["hit"] is True  # +0.3%: buying would not have paid
-    assert (hold.status, hold.target_hit_first, hold.max_adverse_pct) == ("DONE", None, D("-1.2"))
+    assert (hold.status, hold.target_hit_first, hold.max_adverse_pct) == ("DONE", None, D("-0.8"))
 
     clock["now"] = NOW + timedelta(minutes=255)
     scorer.score()

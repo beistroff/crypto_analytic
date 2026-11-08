@@ -15,8 +15,9 @@ after a long outage) is never graded with a later price: the coin is reported in
   not more than 1 % above the entry; a drop counts as a hit, since waiting was better.
 - After its own horizon the call is DONE, with ``target_hit_first`` (target, stop or
   neither; both touched in one candle counts as stop) and ``max_adverse_pct``, the worst
-  move against the call in percent of the entry (0 or less). Both read the candles that
-  open after the call, so a wick from before it never counts.
+  move against the call (for HOLD, a rise) in percent of the entry (0 or less). Both read
+  the candles that open after the call and close by its horizon, so a wick from outside
+  it never counts.
 """
 
 from __future__ import annotations
@@ -92,7 +93,8 @@ def score() -> ScoreResult:
         if pending:
             repo.record(pred, checks, iso(created + timedelta(hours=pending[0])))
             continue
-        window = [c for c in candles if created <= c.ts < created + timedelta(hours=pred.horizon_h)]
+        end = created + timedelta(hours=pred.horizon_h)
+        window = [c for c in candles if created <= c.ts and c.ts + period <= end]
         if repo.record(pred, checks, None, _first(pred, window), _adverse(pred, window)):
             result.done += 1
     return result
@@ -136,10 +138,6 @@ def _adverse(pred: Prediction, window: list[Candle]) -> Decimal | None:
     entry = float(pred.entry)
     low = (min(c.low for c in window) / entry - 1) * 100
     high = (max(c.high for c in window) / entry - 1) * 100
-    if pred.action == "BUY":
-        worst = min(low, 0.0)
-    elif pred.action == "SELL":
-        worst = -max(high, 0.0)
-    else:
-        worst = -max(abs(low), abs(high))
+    # HOLD is "do not buy": like a SELL, only a rise goes against it.
+    worst = min(low, 0.0) if pred.action == "BUY" else -max(high, 0.0)
     return Decimal(str(round(worst, 2)))

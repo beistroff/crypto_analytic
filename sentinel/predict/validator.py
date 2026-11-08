@@ -1,15 +1,16 @@
 """Deterministic checks on a call before it is stored (plan 3.3).
 
 A call that fails is still stored, with ``valid = false`` and its errors, so the results
-count it. Reward-to-risk under 1 is only a warning. A horizon outside ``HORIZONS`` is
-refused with the JSON errors instead, since the scorer could never grade it.
+count it. Reward-to-risk under 1 is only a warning. A horizon outside ``HORIZONS``, an
+entry of 0 or less and NaN are refused with the JSON errors instead, since the scorer
+could never grade them.
 """
 
 from __future__ import annotations
 
 from typing import Literal, get_args
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict, field_validator
 
 Horizon = Literal[1, 4, 12, 24, 72, 168]  # scalps 1 to 12 h, trades 1 to 7 days
 HORIZONS: tuple[int, ...] = get_args(Horizon)
@@ -18,6 +19,8 @@ ENTRY_TOLERANCE_PCT = 1.0
 
 class PredictionOut(BaseModel):
     """A call as the agent writes it (plan 3.2)."""
+
+    model_config = ConfigDict(allow_inf_nan=False)
 
     btc_context: str
     action: Literal["BUY", "SELL", "HOLD"]
@@ -29,6 +32,13 @@ class PredictionOut(BaseModel):
     stop: float | None = None
     reasons: list[str] = []
     risk_note: str | None = None
+
+    @field_validator("entry")
+    @classmethod
+    def _entry_above_zero(cls, value: float) -> float:
+        if value <= 0:  # the scorer divides by it
+            raise ValueError("must be above 0")
+        return value
 
 
 def check(pred: PredictionOut, price: float) -> tuple[list[str], list[str]]:
