@@ -34,9 +34,9 @@ SHOWN = 3
 EVENT = re.compile(
     r"\b(hack(s|ed|er|ers)?|exploit(s|ed)?|drain(s|ed)?|breach(es|ed)?|stolen"
     r"|insolven\w*|bankrupt\w*|delist\w*|bans?|banned|unauthori[sz]ed|freez\w*|froze|frozen"
-    r"|(halts?|pauses?|suspends?)\b.{0,20}\bwithdrawals?"
+    r"|(halt|pause|suspend)(s|d|ed)?\b.{0,20}\bwithdrawals?"
     r"|withdrawals?\b.{0,20}\b(halted|paused|suspended)"
-    r"|rate (cut|hike)s?|(cuts|raises|hikes) rates|depeg\w*)\b",
+    r"|rate (cut|hike)s?|(cuts?|raises?|hikes?) (\w+ )?rates|depeg\w*)\b",
     re.IGNORECASE,
 )
 

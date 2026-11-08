@@ -88,7 +88,7 @@ def _read(name: str, url: str) -> list[Item]:
         raise SourceError(f"RSS {name}: HTTP {response.status_code}")
     parsed = feedparser.parse(response.content)
     # No version: no RSS or Atom found (e.g. a maintenance page).
-    if not parsed.version:
+    if not parsed.get("version"):  # an empty body has no such key
         raise SourceError(f"RSS {name}: not a feed")
     items = []
     for entry in parsed.entries:

@@ -126,11 +126,15 @@ def run(slot: str | None = None, path: Path = EXPERIMENT) -> RunResult:
         result.skipped += len(arms) - len(todo)
         if not todo:
             continue
-        snap = snapshot.build(symbol, popular_news=False)
-        if snap.price is None:
+        try:
+            snap = snapshot.build(symbol, popular_news=False)
+            if not snap.price:
+                raise SourceError("no price")
+            SnapshotRepo().add(snap)
+        except Exception as exc:  # one coin's trouble must not end the slot
+            log.warning("no snapshot", extra={"symbol": symbol, "error": str(exc)})
             result.missing.append(symbol)
             continue
-        SnapshotRepo().add(snap)
         data = snap.model_dump_json()
         compact = {
             "price": snap.price,
@@ -154,32 +158,32 @@ def run(slot: str | None = None, path: Path = EXPERIMENT) -> RunResult:
                     out, usage = _ask(arm, system, user, last_call)
                 if out.horizon_h != experiment.horizon_h:  # refused like bad JSON (plan 3.3)
                     raise LLMError(f"horizon {out.horizon_h} h, not {experiment.horizon_h} h")
-            except (LLMError, SourceError) as exc:
+                pred = journal.new(
+                    symbol,
+                    out,
+                    arm.model,
+                    snap.price,
+                    compact,
+                    _now(),
+                    source="scheduled",
+                    arm=arm.name,
+                    slot=result.slot,
+                    model_version=usage.model_version,
+                    prompt_hash=prompt_hash(template),
+                    snapshot_ref=snap.as_of,
+                    tokens_in=usage.tokens_in,
+                    tokens_out=usage.tokens_out,
+                    cost_usd=Decimal(f"{usage.cost_usd:.6f}"),
+                    latency_ms=usage.latency_ms,
+                    **gated,
+                )
+                repo.add(pred)
+            except Exception as exc:  # any bad reply costs one call, not the slot
                 log.warning(
                     "no answer", extra={"arm": arm.name, "symbol": symbol, "error": str(exc)}
                 )
                 result.failed.setdefault(arm.name, []).append(symbol)
                 continue
-            pred = journal.new(
-                symbol,
-                out,
-                arm.model,
-                snap.price,
-                compact,
-                _now(),
-                source="scheduled",
-                arm=arm.name,
-                slot=result.slot,
-                model_version=usage.model_version,
-                prompt_hash=prompt_hash(template),
-                snapshot_ref=snap.as_of,
-                tokens_in=usage.tokens_in,
-                tokens_out=usage.tokens_out,
-                cost_usd=Decimal(f"{usage.cost_usd:.6f}"),
-                latency_ms=usage.latency_ms,
-                **gated,
-            )
-            repo.add(pred)
             done[result.slot, symbol, arm.name] = pred  # for a gated arm later in the list
             result.stored[arm.name] = result.stored.get(arm.name, 0) + 1
             result.invalid[arm.name] = result.invalid.get(arm.name, 0) + (not pred.valid)

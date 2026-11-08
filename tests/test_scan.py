@@ -143,6 +143,9 @@ def test_brief_ranks_movers_and_puts_major_news_first(trending, monkeypatch):
         "Major: Exchange hacked for $40M (Cointelegraph)",
         "Stocks: S&P 500 -1.5%, Nasdaq -1.5%",
     ]
+    trending.cmc.routes[LISTINGS] = (401, {})
+    down = json.loads(CliRunner().invoke(cli, ["market", "brief"]).stdout)
+    assert down["coins"] == [] and "cmc" in down["btc"]["missing"]
 
 
 def test_symbol_adds_coins_outside_the_listing(top50):

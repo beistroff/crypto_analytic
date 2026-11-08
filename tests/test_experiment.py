@@ -47,7 +47,7 @@ def test_run_calls_every_arm_once_per_slot(trending, tables, tmp_path, monkeypat
         calls.append((model, user))
         attempts[model] = tries
         if model == "claude-haiku-5-5" and "SOL" in user:
-            raise LLMError("anthropic 529")
+            raise KeyError("choices")  # a reply no client turned into an LLMError
         entry = 90.0 if model == "claude-haiku-5-5" else 100.0  # B's entry is off: invalid
         return schema(**{**CALL, "entry": entry}), Usage(model, 1000, 200, 900, 0.0002)
 
@@ -99,6 +99,12 @@ def test_run_calls_every_arm_once_per_slot(trending, tables, tmp_path, monkeypat
     assert calls == [] and views.experiment_ran(ended).text == (
         "Run 2026-10-17 08: experiment ended 2026-10-17"
     )
+
+
+def test_an_entry_the_scorer_cannot_grade_is_refused():
+    for entry in (0, float("nan")):
+        with pytest.raises(ValueError, match="entry"):
+            PredictionOut(**{**CALL, "entry": entry})
 
 
 def test_gate_fires_only_when_nb_contradicts_a_confident_call():
@@ -161,6 +167,7 @@ def test_gated_arm_rechecks_only_when_nb_disagrees(trending, tables, tmp_path, m
         True,
     )
     assert xrp.nb_p_up == Decimal("0.4") and xrp.prompt_hash != preds["XRP", "A"].prompt_hash
+    assert json.loads(json.dumps(views.prediction(xrp).data))["nb_p_up"] == 0.4
     assert (sol.action, sol.gate_triggered, sol.revised, sol.tokens_in) == ("BUY", False, False, 0)
 
 

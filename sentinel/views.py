@@ -176,10 +176,13 @@ def brief(limit: int) -> View:
         ),
         "levels": _brief_levels(snap),
     }
+    try:
+        listed = cmc.listings(limit)
+    except (SourceError, requests.RequestException):
+        listed = []
+        data["btc"]["missing"].append("cmc")
     coins = [
-        c
-        for c in cmc.listings(limit)
-        if not (c.is_stablecoin or c.symbol in STABLECOINS | signals_scan.WRAPPED)
+        c for c in listed if not (c.is_stablecoin or c.symbol in STABLECOINS | signals_scan.WRAPPED)
     ]
     coins.sort(key=lambda c: c.change_24h, reverse=True)
     # v_mc: 24 h volume over market cap; high with a flat price is where money is moving.
@@ -214,12 +217,13 @@ def brief(limit: int) -> View:
     btc = snap.btc
     up = [f"{c.symbol} {_pct(c.change_24h)}" for c in coins if c.change_24h > 0][:3]
     down = [f"{c.symbol} {_pct(c.change_24h)}" for c in coins[::-1] if c.change_24h < 0][:3]
+    nothing = "none" if coins else "no data"
     lines = [
         f"BTC {_usd(btc.price)} {btc.regime} ({_pct_or(btc.chg_24h)} 24h, {_pct_or(btc.chg_7d)} 7d)"
         if btc
         else "BTC: no data",
-        "Up: " + (", ".join(up) or "none"),
-        "Down: " + (", ".join(down) or "none"),
+        "Up: " + (", ".join(up) or nothing),
+        "Down: " + (", ".join(down) or nothing),
         f"Major: {_short(major[0].title)} ({major[0].source})" if major else "Major: none",
         "Stocks: " + ", ".join(f"{k} {_pct(v)}" for k, v in data["stocks"].items())
         if data["stocks"]
@@ -430,7 +434,8 @@ def news_alerted(result: alerts_news.AlertResult) -> View:
 def _prediction(pred: Prediction) -> dict[str, Any]:
     data = asdict(pred)
     data["id"] = data.pop("pred_id")
-    for name in ("confidence", "entry", "target", "stop", "max_adverse_pct", "cost_usd"):
+    decimals = ("confidence", "entry", "target", "stop", "max_adverse_pct", "cost_usd", "nb_p_up")
+    for name in decimals:
         data[name] = None if data[name] is None else _num(data[name])
     data["snapshot"] = _floats(pred.snapshot)
     data["checks"] = {name: _floats(check) for name, check in pred.checks.items()}
@@ -827,7 +832,7 @@ def _usd(value: float | None) -> str:
         return f"${value:,.0f}"
     if value >= 1:
         return f"${value:,.2f}"
-    return f"${value:.4g}"
+    return f"${service.plain(Decimal(f'{value:.4g}'))}"  # .4g alone gives 1.234e-05
 
 
 def _num(value: Decimal) -> float:

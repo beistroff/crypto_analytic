@@ -73,4 +73,4 @@ def setup(level: str | None = None, stream: TextIO | None = None) -> None:
     root.addHandler(_handler)
     root.setLevel((level or get_settings().log_level).upper())
     for name in _QUIET_LOGGERS:
-        logging.getLogger(name).setLevel(logging.WARNING)
+        logging.getLogger(name).setLevel(max(logging.WARNING, root.level))
