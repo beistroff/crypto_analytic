@@ -132,7 +132,7 @@ def run(slot: str | None = None, path: Path = EXPERIMENT) -> RunResult:
                 raise SourceError("no price")
             SnapshotRepo().add(snap)
         except Exception as exc:  # one coin's trouble must not end the slot
-            log.warning("no snapshot", extra={"symbol": symbol, "error": str(exc)})
+            log.error("no snapshot", extra={"symbol": symbol, "error": str(exc)})
             result.missing.append(symbol)
             continue
         data = snap.model_dump_json()
@@ -179,9 +179,8 @@ def run(slot: str | None = None, path: Path = EXPERIMENT) -> RunResult:
                 )
                 repo.add(pred)
             except Exception as exc:  # any bad reply costs one call, not the slot
-                log.warning(
-                    "no answer", extra={"arm": arm.name, "symbol": symbol, "error": str(exc)}
-                )
+                # ERROR, so the reason reaches Telegram under the automation's ERROR level.
+                log.error("no answer", extra={"arm": arm.name, "symbol": symbol, "error": str(exc)})
                 result.failed.setdefault(arm.name, []).append(symbol)
                 continue
             done[result.slot, symbol, arm.name] = pred  # for a gated arm later in the list
