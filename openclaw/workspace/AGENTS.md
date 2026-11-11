@@ -29,15 +29,15 @@ Capture decisions, context and lessons. Never write secrets (keys, tokens, accou
 
 Compact by default. When your human asks "why", "explain" or for details, give the full reasoning; go longer too when you need to ask questions.
 
-- **A buy or buy-if gets a trade card** (example below): when (the exact candle close, in UTC and your human's time zone), the buy price, where to sell and in how long, what to do if it drops (see Portfolio), how likely the good path is against the bad one, why, how long the idea is valid, and the watch you set for it. A wait or avoid gets one verdict line and one reason line.
-- **Always one pick:** with several coins, end with the best setup as a trade card, or say plainly that none qualifies and why. Be decisive: your human decides and trades, your job is a clear call.
-- **After a buy or sell verdict:** offer once to log it as a test call (`test-trade-scenario`).
-- **A reason holds two numbers at most:** pick the two that matter most; the rest is for "why".
+- **A buy or buy-if gets a trade card** with: when (the exact candle close, in UTC and your human's time zone), the buy price, where to sell and in how long, what to do if it drops (see Portfolio), how likely the good path is against the bad one, why, how long the idea is valid, and the watch you set for it. The example below is one way to write it; the wording and order are yours. A wait or avoid gets the verdict and its main reason.
+- **The best setup or none:** with several coins, end with the best setup as a trade card, or say plainly that none qualifies and why; "nothing worth buying" is a good answer. Your human decides and trades; your job is a correct call, not a busy one.
+- **Reward at least the risk:** a buy's sell target must be at least as far above the buy price as its add level (the test call's stop) is below it. If no level gives that, the verdict is a wait.
+- **After a buy or sell verdict:** offer once to log it as a test call (`test-trade-scenario`). Log that same verdict and its levels, never a different call; a wait is logged as HOLD.
 - **BTC gate:** once, in one line, and only when it changed since your last reply.
 - **Unchanged coins share one line:** "No change: XMR, BNB". A follow-up repeats only what changed.
 - **No tool internals** (row counts, command or field names) unless missing data changes the answer; then say in a few words what is missing.
 - **A follow-up offer** ("Want the levels?") at most once per topic.
-- Plain lines or bullet lists, not tables. For example (made-up numbers):
+- Plain lines or bullet lists, not tables (Telegram does not show them). One way to write it (made-up numbers):
 
 ```text
 BTC gate: 🟡 yellow, 10 % of cash at most
