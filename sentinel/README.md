@@ -25,7 +25,6 @@ funding +0.0041%/8h, OI +3.2% 7d, L/S 2.1; FOMC 09 Dec (in 30 d)
 - **Two outputs for every command.** Compact JSON by default (for an agent to reason on), or `--format telegram`: 5 short lines or fewer, ready to send to a person.
 - **A failed source is named, not fatal.** If one data source is down or has no key, the command still answers and lists that source under `missing`.
 - **Free data.** Candles from OKX and Kraken (no key), news from RSS feeds (no key), CoinMarketCap and NewsAPI on their free plans.
-- **Secrets stay out.** API keys are read from AWS SSM Parameter Store at run time. They are never arguments, never in files, and are removed from every log line.
 - **Predictions are graded by code.** A logged call is checked against real candles at its horizon. The model that made a call never grades it.
 
 ## Install
@@ -40,7 +39,7 @@ python -m pip install -c constraints.txt -e ".[ec2]"
 sentinel --version
 ```
 
-The `ec2` extra holds everything the CLI needs. Add `dev` (`".[ec2,dev]"`) for the tests.
+The `ec2` extra is the full CLI install and works on any machine; the name comes from the first server it ran on. The package's own dependencies are only the light core. Add `dev` (`".[ec2,dev]"`) for the tests.
 
 ## What it needs
 
@@ -56,7 +55,9 @@ Nothing is required for a first look: the commands in "Try it" below run with no
 | Naive Bayes (`nb`) | AWS credentials and an S3 bucket |
 | The model comparison (`experiment run`) | The above, plus a key for each model provider in [`experiment.yaml`](../experiment.yaml): `/sentinel/gemini_api_key`, `/sentinel/anthropic_api_key`, `/sentinel/deepseek_api_key` (the GPT arm runs through a logged-in `openclaw` binary instead of a key) |
 
-Keys are SSM `SecureString` parameters; the [main README](../README.md) shows how to store them, and [`terraform/`](../terraform) creates the tables, the bucket and the instance role. AWS credentials come from the usual places (an instance role, or `aws-vault exec <profile> -- sentinel ...` on a laptop).
+For now, everything the CLI stores lives in AWS: keys in SSM Parameter Store (`SecureString`), the journals in DynamoDB, the Naive Bayes files in S3. There is no local option yet (keys from environment variables, files on disk); that is future work. The commands on public data run anywhere.
+
+The [main README](../README.md) shows how to store the keys, and [`terraform/`](../terraform) creates the tables, the bucket and the instance role. AWS credentials come from the usual places (an instance role, or `aws-vault exec <profile> -- sentinel ...` on a laptop).
 
 `sentinel health` checks the lot (DynamoDB, S3, CoinMarketCap, Gemini) and exits 1 if something is not ready.
 
