@@ -3,10 +3,9 @@
 ## Principles & Strategies
 - **Default Exit:** All sales are into **USDT**.
 - **Market data:** prices and signals come from `sentinel`.
-- **Risk Management:** ROI > 10% triggers a "Take Initial Out" recommendation.
 - **Baseline:** Performance is measured against the **configured** baseline (Updated 2026-04-09).
 - **DCA Strategy:** Layer entries. Tier 1 = Small test, Tier 2 = Major support buy.
-- **Weekend Risk Management:** Avoid building large positions (>20%) on Friday/Saturday due to "thin" weekend liquidity. Priority is to enter on Monday/Tuesday when institutional volume returns.
+- **Weekend Risk Management:** Avoid building large positions on Friday/Saturday due to "thin" weekend liquidity. Priority is to enter on Monday/Tuesday when institutional volume returns.
 
 ## Success Cases ✅
 - **NEAR Vertical Breakout Scalp (May 6, 2026):** Bought at $1.265, sold at $1.447 for a massive **+14.4%** profit.
@@ -15,5 +14,5 @@
 
 ## Mistakes & Lessons ⚠️
 - **The SUI Over-Allocation (May 2026):** Entered a high-beta altcoin (SUI) while BTC was at local highs ($81k+). Ignored the macro "King Signal" (BTC exhaustion) and over-allocated (45%) to a single position. **Lesson:** Never ignore BTC dominance and local peaks when scalping alts.
-- **Weekend Liquidity Trap:** Built large position on a Friday; caught in Sunday flush. **Action:** Capped active weekend exposure to max 15-20%.
+- **Weekend Liquidity Trap:** Built large position on a Friday; caught in Sunday flush.
 - **Key Figure Impact:** Macro news (Trump/Geopolitics) instantly overrides technicals.
