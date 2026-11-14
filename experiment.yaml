@@ -4,9 +4,9 @@
 
 horizon_h: 24
 
-# Runs make no model calls from this UTC date on: a 10-day run, 9 to 18 Nov (decided at
-# the freeze, 7 Nov).
-end_date: 2026-11-19
+# Runs make no model calls from this UTC date on: an 11-day run, 9 to 19 Nov (planned as
+# 9 to 18 Nov at the freeze, 7 Nov; extended on 14 Nov, see docs/project_notes.md).
+end_date: 2026-11-20
 
 # The same 20 coins for every arm (decided 25 Oct).
 coins: [BTC, ETH, SOL, BNB, ADA, XRP, LINK, XMR, ZEC, LTC, AAVE, UNI, NEAR, AVAX, SUI, TON, DOT, XLM, TRX, DOGE]

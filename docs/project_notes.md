@@ -142,3 +142,8 @@ Short notes per merged PR, newest last: what changed, why, and one number. Detai
   - no coin hurts the model.
 
   Today's features and all 20 coins stay. Daily direction tops out near 52 %.
+
+## #48 Experiment extended by one day (14 Nov)
+- `end_date` in `experiment.yaml` moves from 2026-11-19 to 2026-11-20: the last run is 16:05 UTC on 19 Nov, so the run covers 9 to 19 Nov (11 days instead of 10). Nothing else in the frozen config changes: arms, coins, prompts, horizon, NB model and gate stay as at the freeze.
+- Why: more days for the comparison, and the final report is ready on the evening of 20 Nov, when the last 24 h horizon has closed. The decision came after the 12 Nov interim report, and the interim analysis on day 7 (15 Nov) stays interim; the analysis plan is unchanged.
+- Number: +3 runs, +60 calls for each full arm (G1 is 60 calls a day on the ChatGPT subscription).
