@@ -4,6 +4,12 @@ This directory holds the agent's OpenClaw side: its workspace (persona, rules, m
 
 **Note:** This directory does not contain the agent's full memory or context. Those dynamic files are generated during operation within the `/workspace` and are backed up separately to S3 (`ops/s3_backup.sh`).
 
+## Contents
+
+- [Directory Structure](#directory-structure)
+- [First Bring-up: OpenClaw Onboarding](#first-bring-up-openclaw-onboarding)
+- [OpenClaw Runtime Structure (`~/.openclaw`)](#openclaw-runtime-structure-openclaw)
+
 ## Directory Structure
 
 - **`/workspace`**: This is the agent's "mind." It contains foundational files like `AGENTS.md` and `SOUL.md` that define the agent's behavior. The files included in the repository serve as a powerful starting template, but users are encouraged to tune and customize them to fit their own needs and strategies.

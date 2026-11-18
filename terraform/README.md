@@ -13,6 +13,16 @@ env/
 Requires Terraform >= 1.10 (S3 native state locking, no DynamoDB lock table).
 Credentials are used through `aws-vault exec <profile> -- ...` in the examples.
 
+## Contents
+
+- [Deployment order](#deployment-order)
+  - [0. State bucket (once)](#0-state-bucket-once)
+  - [1. DynamoDB, 2. IAM, 3. EC2](#1-dynamodb-2-iam-3-ec2)
+- [Cost notes](#cost-notes)
+- [First bring-up of the instance](#first-bring-up-of-the-instance)
+- [Checks (same as CI)](#checks-same-as-ci)
+- [Destroy](#destroy)
+
 ## Deployment order
 
 ### 0. State bucket (once)
