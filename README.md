@@ -2,6 +2,17 @@
 
 This project is a low-risk automated agent for spot trading cryptocurrencies. It aims to achieve slow but consistent capital growth by making informed trades based on data from CoinMarketCap and the latest news.
 
+## Contents
+
+- [Architecture Diagram](#architecture-diagram)
+  - [Agent Mindset](#agent-mindset)
+  - [Agent Context & Knowledge Sharing](#agent-context--knowledge-sharing)
+- [Getting Started](#getting-started)
+  - [1. Prerequisites](#1-prerequisites)
+  - [2. Configuration: Managing Secrets](#2-configuration-managing-secrets)
+  - [2b. The `sentinel` command line](#2b-the-sentinel-command-line)
+  - [3. Deployment](#3-deployment)
+
 ## Architecture Diagram
 
 You chat with the agent on Telegram. The agent (OpenClaw on an EC2 instance) never calls APIs or holds keys itself: it runs `sentinel` commands, which fetch the data, compute the signals and return a short summary for the agent to reason over. You place trades yourself.

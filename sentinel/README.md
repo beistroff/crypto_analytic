@@ -18,6 +18,24 @@ funding +0.0041%/8h, OI +3.2% 7d, L/S 2.1; FOMC 09 Dec (in 30 d)
 
 (Example numbers.)
 
+## Contents
+
+- [How it thinks](#how-it-thinks)
+- [Install](#install)
+- [What it needs](#what-it-needs)
+  - [Optional settings](#optional-settings)
+- [Try it](#try-it)
+- [Commands](#commands)
+  - [Market](#market)
+  - [News](#news)
+  - [Watches](#watches)
+  - [Trade journal](#trade-journal)
+  - [Predictions](#predictions)
+  - [Model comparison and Naive Bayes](#model-comparison-and-naive-bayes)
+  - [Housekeeping](#housekeeping)
+- [Output and errors](#output-and-errors)
+- [Layout](#layout)
+
 ## How it thinks
 
 - **Code computes, the model judges.** Fetching, indicators and levels are done in code, so every number is exact and repeatable. A language model only reads the result.
