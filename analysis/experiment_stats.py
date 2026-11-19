@@ -38,6 +38,8 @@ EXACT_BELOW = 25  # discordant pairs: under this McNemar's test uses the exact b
 BOOTSTRAP_ROUNDS = 10_000
 RUN_MINUTES = 65  # a run starts at 5 past its slot's hour and takes up to an hour
 COCHRAN_ARMS = ("L0", "L1", "L1G")
+ACTIONS = ("BUY", "SELL", "HOLD")
+ENDINGS = ("target", "stop", "neither")  # what a BUY or SELL hit first
 PAIRS = (
     ("L0", "L1"),
     ("L1", "L1G"),
@@ -226,8 +228,14 @@ def _p(value: float) -> str:
     return "<0.0001" if value < 0.0001 else f"{value:.4f}"
 
 
-def _table(title: str, head: Sequence[str], rows: Sequence[Sequence[object]]) -> str:
-    lines = [f"## {title}", "", "| " + " | ".join(head) + " |", "|" + " --- |" * len(head)]
+def _table(title: str, head: str, rows: Sequence[Sequence[object]]) -> str:
+    """A markdown table; ``head`` is the column names joined by ``|``."""
+    lines = [
+        f"## {title}",
+        "",
+        f"| {head.replace('|', ' | ')} |",
+        "|" + " --- |" * (head.count("|") + 1),
+    ]
     lines += ["| " + " | ".join(str(cell) for cell in row) + " |" for row in rows]
     return "\n".join(lines)
 
@@ -250,7 +258,7 @@ def report(all_calls: Sequence[Call]) -> str:
         arms.setdefault(c.arm, []).append(c)
     graded = {arm: [c for c in group if c.hit is not None] for arm, group in arms.items()}
     runs = len({(c.day, c.slot) for c in calls})
-    sample = {arm.name: arm.sample or len(experiment.coins) for arm in experiment.arms}
+    expected = {arm.name: runs * (arm.sample or len(experiment.coins)) for arm in experiment.arms}
     parts = [
         f"# Experiment statistics\n\n{runs} runs, {len(calls)} calls, "
         f"{sum(c.hit is not None for c in calls)} graded. Pairs are compared on shared graded "
@@ -261,46 +269,21 @@ def report(all_calls: Sequence[Call]) -> str:
     if late:
         made = ", ".join(f"{c.arm} {c.symbol} {c.day} {c.slot} at {c.at}" for c in late)
         parts.append(f"Left out, made outside their run: {made}.")
-    parts.append(
-        _table(
-            "Coverage",
-            ("Arm", "Expected", "Stored", "Failed", "Graded", "Invalid"),
-            [
-                (
-                    arm,
-                    runs * sample.get(arm, 0),
-                    len(group),
-                    runs * sample.get(arm, 0) - len(group),
-                    len(graded[arm]),
-                    sum(not c.valid for c in group),
-                )
-                for arm, group in arms.items()
-            ],
-        )
-    )
+    coverage = []
+    for arm, group in arms.items():
+        want, invalid = expected.get(arm, 0), sum(not c.valid for c in group)
+        coverage.append((arm, want, len(group), want - len(group), len(graded[arm]), invalid))
+    parts.append(_table("Coverage", "Arm|Expected|Stored|Failed|Graded|Invalid", coverage))
+
     hit_rows = []
     for arm, group in graded.items():
         k, n = _hits(group)
+        by_action = [_share(*_hits(group, action)) for action in ACTIONS]
         waits = sum(c.ret is not None and c.ret <= MIN_GAIN_PCT for c in group)
-        hit_rows.append(
-            (
-                arm,
-                n,
-                _share(*_hits(group, "BUY")),
-                _share(*_hits(group, "SELL")),
-                _share(*_hits(group, "HOLD")),
-                _share(k, n),
-                _wilson(k, n),
-                _share(waits, n),
-            )
-        )
-    parts.append(
-        _table(
-            "Hit rates",
-            ("Arm", "N", "BUY", "SELL", "HOLD", "All", "All, 95 % Wilson", "Always waiting"),
-            hit_rows,
-        )
-    )
+        hit_rows.append((arm, n, *by_action, _share(k, n), _wilson(k, n), _share(waits, n)))
+    head = "Arm|N|BUY|SELL|HOLD|All|All, 95 % Wilson|Always waiting"
+    parts.append(_table("Hit rates", head, hit_rows))
+
     direction_rows = []
     for arm, group in graded.items():
         for action in ("BUY", "SELL"):
@@ -308,41 +291,23 @@ def report(all_calls: Sequence[Call]) -> str:
             k, n = _hits(chosen)
             if not n:
                 continue
-            ended = [sum(c.first == side for c in chosen) for side in ("target", "stop", "neither")]
-            direction_rows.append(
-                (
-                    arm,
-                    action,
-                    _share(k, n),
-                    _wilson(k, n),
-                    _p(float(binomtest(k, n, 0.5).pvalue)),
-                    " / ".join(map(str, ended)),
-                )
-            )
-    parts.append(
-        _table(
-            "BUY and SELL against 50 %",
-            ("Arm", "Call", "Hits", "95 % Wilson", "p (binomial)", "Target / stop / neither"),
-            direction_rows,
-        )
-    )
-    shared = [(a, b, paired(graded.get(a, []), graded.get(b, []))) for a, b in PAIRS]
+            ended = " / ".join(str(sum(c.first == s for c in chosen)) for s in ENDINGS)
+            p = _p(float(binomtest(k, n, 0.5).pvalue))
+            direction_rows.append((arm, action, _share(k, n), _wilson(k, n), p, ended))
+    head = "Arm|Call|Hits|95 % Wilson|p (binomial)|Target / stop / neither"
+    parts.append(_table("BUY and SELL against 50 %", head, direction_rows))
+
+    shared = [(f"{a} - {b}", paired(graded.get(a, []), graded.get(b, []))) for a, b in PAIRS]
     tests = []
-    for a, b, pairs in shared:
-        only_a = sum(bool(x.hit) and not y.hit for x, y in pairs)
-        only_b = sum(bool(y.hit) and not x.hit for x, y in pairs)
-        tests.append((a, b, only_a, only_b, len(pairs), mcnemar(only_a, only_b)))
-    adjusted = holm([t[5] for t in tests])
-    parts.append(
-        _table(
-            "McNemar (Holm over all pairs)",
-            ("Pair", "Only first right", "Only second right", "Shared N", "p", "p (Holm)"),
-            [
-                (f"{a} - {b}", x, y, n, _p(p), _p(q))
-                for (a, b, x, y, n, p), q in zip(tests, adjusted, strict=True)
-            ],
-        )
-    )
+    for pair, matched in shared:
+        only_a = sum(bool(x.hit) and not y.hit for x, y in matched)
+        only_b = sum(bool(y.hit) and not x.hit for x, y in matched)
+        tests.append((pair, only_a, only_b, len(matched), mcnemar(only_a, only_b)))
+    adjusted = holm([t[-1] for t in tests])
+    rows = [(*t[:-1], _p(t[-1]), _p(q)) for t, q in zip(tests, adjusted, strict=True)]
+    head = "Pair|Only first right|Only second right|Shared N|p|p (Holm)"
+    parts.append(_table("McNemar (Holm over all pairs)", head, rows))
+
     keyed = [{c.key: int(bool(c.hit)) for c in graded.get(arm, [])} for arm in COCHRAN_ARMS]
     common = set.intersection(*(set(k) for k in keyed))
     if common:
@@ -355,120 +320,70 @@ def report(all_calls: Sequence[Call]) -> str:
     for arm, group in graded.items():
         if not group:
             continue
-        score, reliability, resolution, uncertainty, bins = brier_parts(group)
-        scores.append(
-            (arm, f"{score:.4f}", f"{reliability:.4f}", f"{resolution:.4f}", f"{uncertainty:.4f}")
-        )
+        *brier, bins = brier_parts(group)
+        scores.append((arm, *(f"{x:.4f}" for x in brier)))
         bin_rows += [(arm, n, f"{f:.2f}", f"{o:.1%}") for n, f, o in bins]
-    parts.append(_table("Brier score", ("Arm", "Brier", "REL", "RES", "UNC"), scores))
-    parts.append(_table("Reliability", ("Arm", "Calls", "Mean confidence", "Hit rate"), bin_rows))
+    parts.append(_table("Brier score", "Arm|Brier|REL|RES|UNC", scores))
+    parts.append(_table("Reliability", "Arm|Calls|Mean confidence|Hit rate", bin_rows))
+
     return_rows = []
     for arm, group in graded.items():
         trades = [simulated(c) for c in group if c.action != "HOLD"]
-        return_rows.append(
-            (arm, len(trades), _mean(trades), _share(sum(t > 0 for t in trades), len(trades)))
-        )
-    parts.append(
-        _table(
-            "Simulated returns, BUY and SELL",
-            ("Arm", "Trades", "Mean net, %", "Net winners"),
-            return_rows,
-        )
-    )
+        wins = _share(sum(t > 0 for t in trades), len(trades))
+        return_rows.append((arm, len(trades), _mean(trades), wins))
+    head = "Arm|Trades|Mean net, %|Net winners"
+    parts.append(_table("Simulated returns, BUY and SELL", head, return_rows))
+
     diff_rows = []
-    for a, b, pairs in shared:
-        if not pairs:
+    for pair, matched in shared:
+        if not matched:
             continue
-        diffs = [simulated(x) - simulated(y) for x, y in pairs]
-        moved = [d for d in diffs if d]
+        diffs = [simulated(x) - simulated(y) for x, y in matched]
         by_day: dict[str, list[float]] = defaultdict(list)
-        for (x, _), d in zip(pairs, diffs, strict=True):
+        for (x, _), d in zip(matched, diffs, strict=True):
             by_day[x.day].append(d)
         low, high = day_block_ci(by_day)
-        diff_rows.append(
-            (
-                f"{a} - {b}",
-                len(diffs),
-                _mean(diffs),
-                f"{low:.2f} to {high:.2f}",
-                _p(float(wilcoxon(moved).pvalue)) if moved else "-",
-            )
-        )
-    parts.append(
-        _table(
-            "Simulated returns, pairs (HOLD counts as 0)",
-            ("Pair", "Shared N", "Mean difference, %", "95 % day-block bootstrap", "p (Wilcoxon)"),
-            diff_rows,
-        )
-    )
+        moved = [d for d in diffs if d]
+        p = _p(float(wilcoxon(moved).pvalue)) if moved else "-"
+        diff_rows.append((pair, len(diffs), _mean(diffs), f"{low:.2f} to {high:.2f}", p))
+    head = "Pair|Shared N|Mean difference, %|95 % day-block bootstrap|p (Wilcoxon)"
+    parts.append(_table("Simulated returns, pairs (HOLD counts as 0)", head, diff_rows))
+
     first = {c.key: c for c in graded.get("L1", [])}
-    confident = sum(
-        c.action != "HOLD" and c.confidence >= gate.CONFIDENCE for c in arms.get("L1", [])
-    )
-    gated = arms.get("L1G", [])
+    l1, gated = arms.get("L1", []), arms.get("L1G", [])
+    confident = sum(c.action != "HOLD" and c.confidence >= gate.CONFIDENCE for c in l1)
     changed = [c for c in graded.get("L1G", []) if c.revised and c.key in first]
-    parts.append(
-        _table(
-            "Naive Bayes gate (L1G)",
-            ("Measure", "Value"),
-            [
-                (f"L1 BUY or SELL with confidence {gate.CONFIDENCE} or more", confident),
-                ("Gate triggered", sum(bool(c.gate_triggered) for c in gated)),
-                ("Call changed", sum(bool(c.revised) for c in gated)),
-                ("Changed calls right before", _share(*_hits([first[c.key] for c in changed]))),
-                ("Changed calls right after", _share(*_hits(changed))),
-            ],
-        )
-    )
+    gate_rows = [
+        (f"L1 BUY or SELL with confidence {gate.CONFIDENCE} or more", confident),
+        ("Gate triggered", sum(bool(c.gate_triggered) for c in gated)),
+        ("Call changed", sum(bool(c.revised) for c in gated)),
+        ("Changed calls right before", _share(*_hits([first[c.key] for c in changed]))),
+        ("Changed calls right after", _share(*_hits(changed))),
+    ]
+    parts.append(_table("Naive Bayes gate (L1G)", "Measure|Value", gate_rows))
+
     cost_rows = []
     for arm, group in arms.items():
         total = sum(c.cost_usd or 0.0 for c in group)
-        cost_rows.append(
-            (
-                arm,
-                _mean([c.tokens_in for c in group if c.tokens_in is not None]),
-                _mean([c.tokens_out for c in group if c.tokens_out is not None]),
-                f"{total / len(group):.6f}" if group else "-",
-                _mean([c.latency_ms / 1000 for c in group if c.latency_ms is not None]),
-                f"{total:.4f}",
-                f"{total / runs:.4f}" if runs else "-",
-            )
-        )
-    parts.append(
-        _table(
-            "Cost",
-            (
-                "Arm",
-                "Tokens in",
-                "Tokens out",
-                "USD a call",
-                "Latency, s",
-                "USD total",
-                "USD a run",
-            ),
-            cost_rows,
-        )
-    )
+        tokens_in = _mean([c.tokens_in for c in group if c.tokens_in is not None])
+        tokens_out = _mean([c.tokens_out for c in group if c.tokens_out is not None])
+        latency = _mean([c.latency_ms / 1000 for c in group if c.latency_ms is not None])
+        per_call = f"{total / len(group):.6f}" if group else "-"
+        per_run = f"{total / runs:.4f}" if runs else "-"
+        cost_rows.append((arm, tokens_in, tokens_out, per_call, latency, f"{total:.4f}", per_run))
+    head = "Arm|Tokens in|Tokens out|USD a call|Latency, s|USD total|USD a run"
+    parts.append(_table("Cost", head, cost_rows))
+
     regimes = ("risk_on", "neutral", "risk_off")
-    parts.append(
-        _table(
-            "BUY / SELL / HOLD by BTC regime",
-            ("Arm", *regimes),
-            [
-                (
-                    arm,
-                    *(
-                        " / ".join(
-                            str(sum(c.regime == r and c.action == a for c in group))
-                            for a in ("BUY", "SELL", "HOLD")
-                        )
-                        for r in regimes
-                    ),
-                )
-                for arm, group in arms.items()
-            ],
-        )
-    )
+    regime_rows = []
+    for arm, group in arms.items():
+        cells = []
+        for regime in regimes:
+            made = [c.action for c in group if c.regime == regime]
+            cells.append(" / ".join(str(made.count(action)) for action in ACTIONS))
+        regime_rows.append((arm, *cells))
+    head = "Arm|" + "|".join(regimes)
+    parts.append(_table("BUY / SELL / HOLD by BTC regime", head, regime_rows))
     return "\n\n".join(parts)
 
 
