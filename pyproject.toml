@@ -65,6 +65,7 @@ select = ["E", "W", "F", "I", "B", "UP", "SIM", "RUF"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]  # tests import the research scripts in analysis/
 addopts = "-ra --strict-markers -m 'not live'"
 markers = [
     "live: smoke test against a real external API (opt-in: pytest -m live)",
